@@ -9,6 +9,7 @@ const { iniciarTelegram } = require('./adapters/telegram');
 const { iniciarAutoCierre } = require('./services/autoClose.service');
 
 // Rutas
+const authRoutes = require('./routes/auth.routes');
 const agenteRoutes = require('./routes/agente.routes');
 const conversacionesRoutes = require('./routes/conversaciones.routes');
 const configuracionRoutes = require('./routes/configuracion.routes');
@@ -40,6 +41,7 @@ io.on('connection', (socket) => {
 /* ========================
    ROUTES
 ======================== */
+app.use('/auth', authRoutes);
 app.use('/agente', agenteRoutes);
 app.use('/conversaciones', conversacionesRoutes);
 app.use('/configuracion', configuracionRoutes);

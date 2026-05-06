@@ -48,7 +48,14 @@ const ChatList = ({
             <div className="avatar"><User size={20} color="#fff" /></div>
             <div className="conv-info">
               <div className="conv-header">
-                <span className="client-name">{c.nombre || c.username}</span>
+                <div className="name-and-badge">
+                  <span className="client-name">{c.nombre || c.username}</span>
+                  {c.departamento && (
+                    <span className={`badge-depto ${c.departamento.toLowerCase().includes('soporte') ? 'soporte' : c.departamento.toLowerCase()}`}>
+                      {c.departamento}
+                    </span>
+                  )}
+                </div>
                 <span className="time">
                   {c.updated_at ? new Date(c.updated_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : ''}
                 </span>

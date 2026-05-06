@@ -1,30 +1,36 @@
 const express = require('express');
 const router = express.Router();
-const pool = require('../config/db');
+const db = require('../config/db');
 
-// Obtener todas las configuraciones
+// Obtener configuraciones de una empresa
 router.get('/', async (req, res) => {
+  const { empresa_id } = req.query;
   try {
-    const result = await pool.query('SELECT * FROM configuraciones');
-    const config = {};
+    const result = await db.query('SELECT * FROM configuraciones WHERE empresa_id = $1', [empresa_id || 'fibratec']);
+    const configObj = {};
     result.rows.forEach(row => {
-      config[row.clave] = row.valor;
+      configObj[row.clave] = row.valor;
     });
-    res.json(config);
+    res.json(configObj);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
-// Actualizar una configuración
+// Guardar o actualizar configuración por empresa
 router.post('/', async (req, res) => {
-  const { clave, valor } = req.body;
+  const { clave, valor, empresa_id } = req.body;
   try {
-    await pool.query(
-      'INSERT INTO configuraciones (clave, valor) VALUES ($1, $2) ON CONFLICT (clave) DO UPDATE SET valor = $2',
-      [clave, valor]
-    );
-    res.json({ success: true });
+    // Usar ON CONFLICT para insertar o actualizar
+    const query = `
+      INSERT INTO configuraciones (clave, valor, empresa_id) 
+      VALUES ($1, $2, $3)
+      ON CONFLICT (clave, empresa_id) 
+      DO UPDATE SET valor = EXCLUDED.valor;
+    `;
+    // Nota: Para que ON CONFLICT funcione, necesitamos un índice único compuesto (clave, empresa_id)
+    await db.query(query, [clave, valor, empresa_id || 'fibratec']);
+    res.json({ ok: true });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

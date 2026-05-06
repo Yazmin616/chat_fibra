@@ -7,6 +7,7 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../config/db');
+const bcrypt = require('bcryptjs');
 const { enviarMensajeTelegram } = require('../adapters/telegram');
 
 /* ========================
@@ -97,17 +98,62 @@ router.post('/liberar', async (req, res) => {
   }
 });
 
+// 1. Obtener lista de todos los agentes (Solo para Admins)
+router.get('/', async (req, res) => {
+  try {
+    const result = await db.query('SELECT id, nombre, email, rol, area, esta_online, created_at FROM agentes ORDER BY created_at DESC');
+    res.json(result.rows);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 2. Crear un nuevo agente
+router.post('/', async (req, res) => {
+  const { nombre, email, password, rol, area } = req.body;
+  try {
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const result = await db.query(
+      'INSERT INTO agentes (nombre, email, password, rol, area) VALUES ($1, $2, $3, $4, $5) RETURNING id, nombre, email',
+      [nombre, email, hashedPassword, rol, area]
+    );
+    res.status(201).json(result.rows[0]);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 3. Eliminar un agente
+router.delete('/:id', async (req, res) => {
+  const { id } = req.params;
+  try {
+    // Primero desvincular chats (poner agente_id en null)
+    await db.query('UPDATE conversaciones SET agente_id = NULL WHERE agente_id = $1', [id]);
+    await db.query('DELETE FROM agentes WHERE id = $1', [id]);
+    res.json({ ok: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 /* ========================
    ELIMINAR CHAT (Solo Pruebas)
 ======================== */
 router.delete('/conversacion/:id', async (req, res) => {
   const { id } = req.params;
   try {
-    // Eliminar mensajes primero por clave foránea
+    // 1. Eliminar mensajes asociados
     await db.query('DELETE FROM mensajes WHERE conversacion_id = $1', [id]);
+    
+    // 2. Eliminar calificaciones asociadas (esto era lo que causaba el error 500)
+    await db.query('DELETE FROM calificaciones WHERE conversacion_id = $1', [id]);
+    
+    // 3. Finalmente eliminar la conversación
     await db.query('DELETE FROM conversaciones WHERE id = $1', [id]);
+    
     res.json({ ok: true });
   } catch (error) {
+    console.error("Error al eliminar conversación:", error);
     res.status(500).json({ error: error.message });
   }
 });

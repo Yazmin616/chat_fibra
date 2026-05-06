@@ -1,29 +1,33 @@
-/**
- * APLICACIÓN PRINCIPAL (DASHBOARD)
- * Este archivo orquesta el estado global de la aplicación, la conexión de Sockets
- * y la renderización de las diferentes vistas (Chat, Configuración, etc.)
- */
-
 import { useEffect, useState, useRef } from "react";
 import { io } from "socket.io-client";
 import { apiService } from "./services/api";
 
-// Componentes Modularizados
+// Componentes
 import Sidebar from "./components/Layout/Sidebar";
 import TopBar from "./components/Layout/TopBar";
 import ChatList from "./components/Chat/ChatList";
 import ChatWindow from "./components/Chat/ChatWindow";
 import SettingsView from "./components/Settings/SettingsView";
+import AgentManagementView from "./components/Settings/AgentManagementView";
+import Login from "./components/Auth/Login";
 
-// Conexión única de Socket.io
 const socket = io(`http://${window.location.hostname}:3009`);
 
 function App() {
   /* ========================
+     ESTADO DE AUTENTICACIÓN
+  ======================== */
+  const [user, setUser] = useState(() => {
+    const saved = localStorage.getItem('agente_user');
+    return saved ? JSON.parse(saved) : null;
+  });
+
+  /* ========================
      ESTADOS DE LA UI
   ======================== */
   const [sidebarVisible, setSidebarVisible] = useState(true);
-  const [currentView, setCurrentView] = useState('chat'); // 'chat' | 'config' | 'dashboard'
+  const [currentView, setCurrentView] = useState('chat');
+  const [empresaId, setEmpresaId] = useState('fibratec');
   const [config, setConfig] = useState({ tiempo_inactividad: 10 });
   
   /* ========================
@@ -37,98 +41,117 @@ function App() {
   const [busqueda, setBusqueda] = useState("");
   const messagesEndRef = useRef(null);
 
-  // Carga inicial de datos
+  // Cargar datos cuando cambia empresa o usuario
   useEffect(() => {
-    fetchInitialData();
-  }, []);
+    if (user) {
+      fetchInitialData();
+      setConversacionActiva(null);
+      setMensajes([]);
+    }
+  }, [empresaId, user]);
 
-  /**
-   * Obtiene la lista de chats y la configuración global al arrancar.
-   */
   const fetchInitialData = async () => {
     try {
       const [convs, confs] = await Promise.all([
-        apiService.getConversaciones(),
-        apiService.getConfigs()
+        apiService.getConversaciones(empresaId),
+        apiService.getConfigs(empresaId)
       ]);
       setConversaciones(convs);
       setConfig(confs);
-    } catch (error) {
-      console.error("Error cargando datos iniciales:", error);
-    }
-  };
-
-  /**
-   * Carga el historial de mensajes de un cliente específico.
-   */
-  const cargarMensajes = async (usuarioId) => {
-    if (!usuarioId) return;
-    try {
-      const msgs = await apiService.getMensajes(usuarioId);
-      setMensajes(msgs);
-    } catch (error) {
-      console.error("Error cargando mensajes:", error);
-    }
-  };
-
-  /**
-   * Envía un mensaje manual al cliente seleccionado.
-   */
-  const enviarMensaje = async () => {
-    if (!texto || !conversacionActiva) return;
-    const currentText = texto;
-    setTexto(""); // Limpiar input inmediatamente (UI optimista)
-    try {
-      await apiService.responder(conversacionActiva.id, conversacionActiva.external_id, currentText);
     } catch (error) { console.error(error); }
   };
 
-  /**
-   * LÓGICA DE SOCKET.IO
-   * Escucha eventos de 'nuevo_mensaje' para actualizar el chat en tiempo real.
-   */
+  const cargarMensajes = async (usuarioId) => {
+    if (!usuarioId) return;
+    const msgs = await apiService.getMensajes(usuarioId);
+    setMensajes(msgs);
+  };
+
+  const enviarMensaje = async () => {
+    if (!texto || !conversacionActiva) return;
+    const currentText = texto;
+    setTexto("");
+    await apiService.responder(conversacionActiva.id, conversacionActiva.external_id, currentText);
+  };
+
+  const handleLoginSuccess = (data) => {
+    setUser(data.agente);
+    localStorage.setItem('agente_user', JSON.stringify(data.agente));
+    localStorage.setItem('agente_token', data.token);
+  };
+
+  const handleLogout = async () => {
+    if (user) {
+      await apiService.logout(user.id);
+    }
+    setUser(null);
+    localStorage.removeItem('agente_user');
+    localStorage.removeItem('agente_token');
+  };
+
   useEffect(() => {
     const handleNuevoMensaje = (data) => {
-      // Si el mensaje pertenece al chat que tengo abierto actualmente, lo añado a la lista
       if (conversacionActiva && Number(data.conversacion_id) === Number(conversacionActiva.id)) {
-        setMensajes(prev => [...prev, { 
-          remitente: data.remitente, 
-          texto: data.mensaje, 
-          created_at: new Date() 
-        }]);
+        setMensajes(prev => [...prev, { remitente: data.remitente, texto: data.mensaje, created_at: new Date() }]);
       }
-      // Siempre refrescar la lista de conversaciones (por el último mensaje y orden)
-      apiService.getConversaciones().then(setConversaciones);
+      apiService.getConversaciones(empresaId).then(setConversaciones);
     };
-
     socket.on('nuevo_mensaje', handleNuevoMensaje);
     return () => socket.off('nuevo_mensaje');
-  }, [conversacionActiva]);
+  }, [conversacionActiva, empresaId]);
 
-  // Scroll automático al final cuando llegan mensajes nuevos
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [mensajes]);
 
-  /* ========================
-     FILTRADO DE CHATS
-  ======================== */
+  // FILTRADO POR ROL Y AREA
   const conversacionesFiltradas = conversaciones.filter(c => {
     const search = busqueda.toLowerCase();
     const matchBusqueda = (c.nombre || "").toLowerCase().includes(search) || (c.username || "").toLowerCase().includes(search);
-    if (filtro === "Todos los chats") return matchBusqueda;
-    if (filtro === "Abiertos") return matchBusqueda && c.estado !== 'cerrada';
-    if (filtro === "Mis Asignados") return matchBusqueda && c.es_humano && c.estado !== 'cerrada';
+    
+    // Si el filtro es "Todos los chats", aplicamos las reglas de visibilidad por Rol y Área
+    if (filtro === "Todos los chats") {
+      if (user?.rol === 'admin') {
+        // El ADMIN ve: Sin asignar OR Cerrados OR En Encuesta (para supervisar)
+        const esVisibleParaAdmin = c.agente_id === null || c.estado === 'cerrada' || c.estado.startsWith('ENCUESTA');
+        return matchBusqueda && esVisibleParaAdmin;
+      } else {
+        // El ASESOR ve: Sin asignar OR Cerrados, pero SOLO de su Área
+        const esVisibleParaAsesor = c.agente_id === null || c.estado === 'cerrada';
+        const esDeSuArea = c.departamento === user?.area;
+        return matchBusqueda && esVisibleParaAsesor && esDeSuArea;
+      }
+    }
+
+    // Si el filtro es "Abiertos", mostrar todo lo que no esté cerrado (Vista de Supervisor)
+    if (filtro === "Abiertos") {
+      return matchBusqueda && c.estado !== 'cerrada';
+    }
+
+    // Si el filtro es "Mis Asignados", mostrar solo lo del usuario actual
+    if (filtro === "Mis Asignados") {
+      return matchBusqueda && Number(c.agente_id) === Number(user?.id) && c.estado !== 'cerrada';
+    }
+
     return matchBusqueda;
   });
 
+  // SI NO HAY USUARIO, MOSTRAR LOGIN
+  if (!user) {
+    return <Login onLoginSuccess={handleLoginSuccess} />;
+  }
+
   return (
     <div className="app-container">
-      <Sidebar visible={sidebarVisible} currentView={currentView} setView={setCurrentView} />
-      
+      <Sidebar visible={sidebarVisible} currentView={currentView} setView={setCurrentView} user={user} onLogout={handleLogout} />
       <div className="main-wrapper">
-        <TopBar sidebarVisible={sidebarVisible} setSidebarVisible={setSidebarVisible} />
-        
+        <TopBar 
+          sidebarVisible={sidebarVisible} 
+          setSidebarVisible={setSidebarVisible} 
+          empresaId={empresaId} 
+          setEmpresaId={setEmpresaId}
+          user={user}
+        />
         <div className="main-content">
           {currentView === 'chat' ? (
             <>
@@ -148,7 +171,7 @@ function App() {
                 cerrarConversacion={async (id) => {
                    const motivo = window.prompt("Motivo del cierre:", "cliente solucionado");
                    if (motivo) {
-                     await apiService.cerrarChat(id, motivo, "Agente Fibratec");
+                     await apiService.cerrarChat(id, motivo, user.nombre);
                      fetchInitialData();
                    }
                 }} 
@@ -168,10 +191,12 @@ function App() {
               config={config} 
               setConfig={setConfig} 
               onSave={async (clave, valor) => {
-                await apiService.updateConfig(clave, valor);
-                alert("Configuración guardada");
+                await apiService.updateConfig(clave, valor, empresaId);
+                alert(`Configuración guardada para ${empresaId}`);
               }} 
             />
+          ) : currentView === 'agents' ? (
+            <AgentManagementView />
           ) : (
             <div className="empty-chat"><div className="empty-content"><h2>Próximamente</h2></div></div>
           )}

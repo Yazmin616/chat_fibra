@@ -1,23 +1,40 @@
 const API_URL = `http://${window.location.hostname}:3009`;
 
 export const apiService = {
-  // Configuraciones
-  async getConfigs() {
-    const res = await fetch(`${API_URL}/configuracion`);
-    return res.json();
-  },
-  async updateConfig(clave, valor) {
-    const res = await fetch(`${API_URL}/configuracion`, {
+  async login(email, password) {
+    const res = await fetch(`${API_URL}/auth/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ clave, valor })
+      body: JSON.stringify({ email, password })
+    });
+    return res.json();
+  },
+  async logout(agente_id) {
+    const res = await fetch(`${API_URL}/auth/logout`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ agente_id })
     });
     return res.json();
   },
 
-  // Conversaciones
-  async getConversaciones() {
-    const res = await fetch(`${API_URL}/conversaciones`);
+  // Configuraciones (Filtradas por empresa)
+  async getConfigs(empresa_id) {
+    const res = await fetch(`${API_URL}/configuracion?empresa_id=${empresa_id}`);
+    return res.json();
+  },
+  async updateConfig(clave, valor, empresa_id) {
+    const res = await fetch(`${API_URL}/configuracion`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ clave, valor, empresa_id })
+    });
+    return res.json();
+  },
+
+  // Conversaciones (Filtradas por empresa)
+  async getConversaciones(empresa_id) {
+    const res = await fetch(`${API_URL}/conversaciones?empresa_id=${empresa_id}`);
     return res.json();
   },
   async getMensajes(usuarioId) {
@@ -25,7 +42,7 @@ export const apiService = {
     return res.json();
   },
 
-  // Acciones de Agente
+  // Acciones de Agente (La conversacion_id ya es única, no necesita empresa_id extra aquí)
   async responder(conversacion_id, user_id, mensaje) {
     const res = await fetch(`${API_URL}/agente/responder`, {
       method: "POST",

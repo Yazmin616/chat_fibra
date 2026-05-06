@@ -3,22 +3,21 @@ const router = express.Router();
 const db = require('../config/db');
 
 router.get('/', async (req, res) => {
-  const result = await db.query(`
-    SELECT 
-      c.id, 
-      c.usuario_id,
-      c.estado, 
-      c.es_humano, 
-      u.external_id,
-      u.nombre,
-      u.username,
-      u.canal,
-      (SELECT texto FROM mensajes WHERE conversacion_id = c.id ORDER BY id DESC LIMIT 1) as ultimo_mensaje,
-      (SELECT created_at FROM mensajes WHERE conversacion_id = c.id ORDER BY id DESC LIMIT 1) as updated_at
-    FROM conversaciones c
-    JOIN usuarios u ON c.usuario_id = u.id
-    ORDER BY updated_at DESC NULLS LAST, c.id DESC
-  `);
+  const { empresa_id } = req.query;
+  const query = `
+      SELECT * FROM (
+        SELECT DISTINCT ON (c.usuario_id) 
+          c.*, u.nombre, u.username, u.external_id,
+          (SELECT texto FROM mensajes WHERE conversacion_id = c.id ORDER BY created_at DESC LIMIT 1) as ultimo_mensaje,
+          (SELECT created_at FROM mensajes WHERE conversacion_id = c.id ORDER BY created_at DESC LIMIT 1) as ultimo_mensaje_fecha
+        FROM conversaciones c
+        JOIN usuarios u ON c.usuario_id = u.id
+        WHERE c.empresa_id = $1
+        ORDER BY c.usuario_id, c.created_at DESC
+      ) t
+      ORDER BY ultimo_mensaje_fecha DESC NULLS LAST, created_at DESC
+    `;
+  const result = await db.query(query, [empresa_id || 'fibratec']);
 
   res.json(result.rows);
 });
