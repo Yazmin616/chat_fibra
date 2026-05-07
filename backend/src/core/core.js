@@ -60,40 +60,48 @@ async function coreProcesar(input) {
       else if (mensaje.includes('3')) depto = "Soporte Técnico";
 
       if (depto) {
-        await db.query('UPDATE conversaciones SET departamento = $1 WHERE id = $2', [depto, conversacion.id]);
-        
-        // ASIGNACIÓN INMEDIATA (Saltamos el paso de pedir datos)
-        const agenteRes = await db.query(
-          'SELECT id, nombre FROM agentes WHERE area = $1 AND esta_online = true LIMIT 1',
-          [depto]
-        );
-
-        let agenteId = null;
-        let agenteNombre = "un asesor";
-
-        if (agenteRes.rows.length > 0) {
-          agenteId = agenteRes.rows[0].id;
-          agenteNombre = agenteRes.rows[0].nombre;
-        }
-
-        respuesta = `Entendido. Te estamos comunicando con el área de ${depto}. En un momento te atenderá ${agenteNombre}.`;
-        
+        // 1. CERRAR la conversación de menú INMEDIATAMENTE (garantizado)
         await db.query(
-          'UPDATE conversaciones SET es_humano = true, estado = $1, agente_id = $2 WHERE id = $3', 
-          ['ESPERANDO_AGENTE', agenteId, conversacion.id]
+          `UPDATE conversaciones SET estado = 'cerrada', updated_at = NOW() WHERE id = $1`,
+          [conversacion.id]
         );
 
-        const infoMsg = agenteId 
-          ? `Chat ASIGNADO AUTOMÁTICAMENTE a: ${agenteNombre} (${depto})`
-          : `Atención solicitada en ${depto}. No hay asesores online, el chat queda en espera general.`;
-          
-        await db.query('INSERT INTO mensajes (conversacion_id, texto, remitente) VALUES ($1, $2, $3)', 
-          [conversacion.id, infoMsg, 'sistema_info']);
+        // 2. CREAR conversación limpia para el área elegida
+        const nuevaConvRes = await db.query(
+          `INSERT INTO conversaciones (usuario_id, empresa_id, departamento, estado, es_humano, updated_at)
+           VALUES ($1, $2, $3, 'ESPERANDO_AGENTE', true, NOW()) RETURNING id`,
+          [conversacion.usuario_id, conversacion.empresa_id, depto]
+        );
+        const nuevaConvId = nuevaConvRes.rows[0].id;
 
+        // 3. Banner informativo en la NUEVA conversación
+        await db.query(
+          `INSERT INTO mensajes (conversacion_id, texto, remitente) VALUES ($1, $2, $3)`,
+          [nuevaConvId, `CLIENTE EN ESPERA DE ASESOR (${depto})`, 'sistema_info']
+        );
+
+        respuesta = `Entendido. Te estamos comunicando con el área de ${depto}. Un asesor te atenderá en breve.`;
+        // Guardamos la respuesta en la nueva conversación, no en la de menú
+        await db.query(
+          `INSERT INTO mensajes (conversacion_id, texto, remitente) VALUES ($1, $2, $3)`,
+          [nuevaConvId, respuesta, 'bot']
+        );
+
+        // Actualizamos el estado de la nueva conversación (ya está bien, pero por si acaso)
         nuevoEstado = 'ESPERANDO_AGENTE';
+        // IMPORTANTE: evitamos que actualizarEstado se corra sobre la conv de menú al final
+        return { texto: null, conversacion_id: nuevaConvId };
       } else {
         respuesta = 'Por favor, elija una opción válida:\n1. Ventas\n2. Cobranza\n3. Soporte';
       }
+    }
+
+    /* ========================
+       ESTADO: ESPERANDO AGENTE
+       (El cliente escribe mientras espera — no crear nueva conv)
+       ======================== */
+    else if (conversacion.estado === 'ESPERANDO_AGENTE') {
+      respuesta = `Ya estás en la fila de espera. Un asesor de ${conversacion.departamento || 'nuestro equipo'} te atenderá en breve. Por favor, ten paciencia. 🙏`;
     }
 
     /* ========================
@@ -107,6 +115,16 @@ async function coreProcesar(input) {
       else if (mensaje.includes('3')) puntuacion = 'Bien';
       
       await db.query('INSERT INTO calificaciones (conversacion_id, puntuacion, sugerencia, tipo) VALUES ($1, $2, $3, $4)', [conversacion.id, puntuacion, mensaje, tipo]);
+      
+      // Notificar al dashboard en tiempo real
+      if (global.io) {
+        global.io.emit('nueva_calificacion', {
+          conversacion_id: conversacion.id,
+          empresa_id: conversacion.empresa_id,
+          puntuacion
+        });
+      }
+
       respuesta = `Gracias por tu calificación. Que tengas un buen día.`;
       nuevoEstado = 'cerrada';
     }

@@ -13,6 +13,7 @@ const authRoutes = require('./routes/auth.routes');
 const agenteRoutes = require('./routes/agente.routes');
 const conversacionesRoutes = require('./routes/conversaciones.routes');
 const configuracionRoutes = require('./routes/configuracion.routes');
+const contactosRoutes = require('./routes/contactos.routes');
 
 const app = express();
 
@@ -45,6 +46,7 @@ app.use('/auth', authRoutes);
 app.use('/agente', agenteRoutes);
 app.use('/conversaciones', conversacionesRoutes);
 app.use('/configuracion', configuracionRoutes);
+app.use('/contactos', contactosRoutes);
 
 app.get('/', (req, res) => res.send('API funcionando'));
 app.get('/health', (req, res) => res.json({ status: 'ok' }));

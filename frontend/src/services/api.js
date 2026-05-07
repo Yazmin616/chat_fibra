@@ -33,21 +33,23 @@ export const apiService = {
   },
 
   // Conversaciones (Filtradas por empresa)
-  async getConversaciones(empresa_id) {
-    const res = await fetch(`${API_URL}/conversaciones?empresa_id=${empresa_id}`);
+  async getConversaciones(empresa_id, agente_id) {
+    const res = await fetch(`${API_URL}/conversaciones?empresa_id=${empresa_id}&agente_id=${agente_id || ''}`);
     return res.json();
   },
-  async getMensajes(usuarioId) {
-    const res = await fetch(`${API_URL}/conversaciones/por-usuario/${usuarioId}`);
+  async getMensajes(usuarioId, agente_id, conversacion_id) {
+    const params = new URLSearchParams({ agente_id: agente_id || '' });
+    if (conversacion_id) params.append('conversacion_id', conversacion_id);
+    const res = await fetch(`${API_URL}/conversaciones/por-usuario/${usuarioId}?${params.toString()}`);
     return res.json();
   },
 
   // Acciones de Agente (La conversacion_id ya es única, no necesita empresa_id extra aquí)
-  async responder(conversacion_id, user_id, mensaje) {
+  async responder(conversacion_id, user_id, mensaje, agente_id) {
     const res = await fetch(`${API_URL}/agente/responder`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ conversacion_id, user_id, mensaje })
+      body: JSON.stringify({ conversacion_id, user_id, mensaje, agente_id })
     });
     return res.json();
   },
@@ -61,6 +63,24 @@ export const apiService = {
   },
   async eliminarChat(id) {
     const res = await fetch(`${API_URL}/agente/conversacion/${id}`, { method: "DELETE" });
+    return res.json();
+  },
+  async marcarLeido(id) {
+    const res = await fetch(`${API_URL}/conversaciones/marcar-leido/${id}`, { method: "POST" });
+    return res.json();
+  },
+
+  // Contactos
+  async getContactos() {
+    const res = await fetch(`${API_URL}/contactos`);
+    return res.json();
+  },
+  async updateContacto(id, data) {
+    const res = await fetch(`${API_URL}/contactos/${id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data)
+    });
     return res.json();
   }
 };

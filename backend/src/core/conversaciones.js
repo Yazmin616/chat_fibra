@@ -1,6 +1,6 @@
 const db = require('../config/db');
 
-async function obtenerOcrearUsuario(canal, external_id, nombre = "", username = "") {
+async function obtenerOcrearUsuario(canal, external_id, nombre = "", username = "", telefono = null) {
   const res = await db.query(
     'SELECT * FROM usuarios WHERE canal=$1 AND external_id=$2',
     [canal, external_id]
@@ -9,16 +9,16 @@ async function obtenerOcrearUsuario(canal, external_id, nombre = "", username = 
   if (res.rows.length > 0) {
     // actualizar datos si cambiaron
     await db.query(
-      'UPDATE usuarios SET nombre=$1, username=$2 WHERE id=$3',
-      [nombre, username, res.rows[0].id]
+      'UPDATE usuarios SET nombre=$1, username=$2, telefono=COALESCE($3, telefono) WHERE id=$4',
+      [nombre, username, telefono, res.rows[0].id]
     );
 
     return res.rows[0];
   }
 
   const nuevo = await db.query(
-    'INSERT INTO usuarios (canal, external_id, nombre, username) VALUES ($1, $2, $3, $4) RETURNING *',
-    [canal, external_id, nombre, username]
+    'INSERT INTO usuarios (canal, external_id, nombre, username, telefono) VALUES ($1, $2, $3, $4, $5) RETURNING *',
+    [canal, external_id, nombre, username, telefono]
   );
 
   return nuevo.rows[0];
@@ -26,7 +26,7 @@ async function obtenerOcrearUsuario(canal, external_id, nombre = "", username = 
 
 async function obtenerOcrearConversacion(usuario_id, empresa_id) {
   const res = await db.query(
-    'SELECT * FROM conversaciones WHERE usuario_id=$1 AND estado != $2',
+    'SELECT * FROM conversaciones WHERE usuario_id=$1 AND estado != $2 ORDER BY es_humano DESC, id DESC LIMIT 1',
     [usuario_id, 'cerrada']
   );
 

@@ -24,13 +24,15 @@ function iniciarTelegram() {
       };
 
       // 1. Obtener datos básicos para el Socket (Incluso si el bot no responde)
-      const usuario = await obtenerOcrearUsuario(input.canal, input.user_id, input.nombre, input.username);
+      const usuario = await obtenerOcrearUsuario(input.canal, input.user_id, input.nombre, input.username, null);
       const conversacion = await obtenerOcrearConversacion(usuario.id, input.empresa_id);
 
       // 2. NOTIFICAR AL DASHBOARD INMEDIATAMENTE
       if (global.io) {
         global.io.emit('nuevo_mensaje', {
           conversacion_id: conversacion.id,
+          usuario_id: usuario.id,
+          empresa_id: conversacion.empresa_id,
           mensaje: input.mensaje,
           remitente: 'user',
           fecha: new Date()
@@ -46,10 +48,24 @@ function iniciarTelegram() {
         
         if (global.io) {
           global.io.emit('nuevo_mensaje', {
-            conversacion_id: conversacion.id,
+            conversacion_id: respuesta.conversacion_id || conversacion.id,
+            usuario_id: usuario.id,
+            empresa_id: conversacion.empresa_id,
             mensaje: respuesta.texto,
             remitente: 'bot',
             fecha: new Date()
+          });
+        }
+      }
+
+      // 5. Si el core devolvió una conversación DIFERENTE (nueva, de área), notificar al dashboard
+      // Esto pasa cuando el cliente elige área: se crea una nueva conv y la vieja se cierra
+      if (respuesta && respuesta.conversacion_id && respuesta.conversacion_id !== conversacion.id) {
+        if (global.io) {
+          global.io.emit('conversacion_actualizada', {
+            id: respuesta.conversacion_id,
+            empresa_id: conversacion.empresa_id,
+            estado: 'ESPERANDO_AGENTE'
           });
         }
       }

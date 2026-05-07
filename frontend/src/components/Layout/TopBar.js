@@ -9,7 +9,6 @@ const TopBar = ({ sidebarVisible, setSidebarVisible, empresaId, setEmpresaId, us
           <Menu size={20} />
         </button>
         
-        {/* Selector de Empresa */}
         <div className="tenant-selector">
           <Building2 size={18} color="#00a884" />
           <select 
@@ -17,6 +16,7 @@ const TopBar = ({ sidebarVisible, setSidebarVisible, empresaId, setEmpresaId, us
             onChange={(e) => setEmpresaId(e.target.value)}
             className="company-select"
           >
+            <option value="todas">Todas las empresas</option>
             <option value="fibratec">Fibratec</option>
             <option value="compusemmm">Compusemmm de México</option>
           </select>

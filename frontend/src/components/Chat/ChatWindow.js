@@ -1,5 +1,5 @@
 import React from 'react';
-import { User, Zap, Trash2, Box, Send, MessageCircle, Activity } from 'lucide-react';
+import { User, Zap, Trash2, Box, Send, MessageCircle, Activity, ArrowLeft } from 'lucide-react';
 
 const ChatWindow = ({ 
   conversacionActiva, 
@@ -9,7 +9,8 @@ const ChatWindow = ({
   enviarMensaje, 
   cerrarConversacion, 
   eliminarConversacion, 
-  messagesEndRef 
+  messagesEndRef,
+  setConversacionActiva
 }) => {
   if (!conversacionActiva) {
     return (
@@ -29,6 +30,9 @@ const ChatWindow = ({
     <div className="chat-window-panel">
       <div className="chat-header">
         <div className="header-info">
+          <button className="back-btn" onClick={() => setConversacionActiva(null)} style={{ marginRight: '10px', background: 'transparent', border: 'none', cursor: 'pointer', color: '#54656f', display: 'flex', alignItems: 'center' }}>
+            <ArrowLeft size={22} />
+          </button>
           <div className="avatar"><User size={24} color="#fff" /></div>
           <div>
             <h3>{conversacionActiva.nombre || conversacionActiva.username}</h3>
