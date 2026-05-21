@@ -24,6 +24,9 @@ yarn-error.log*
 .vscode/
 .idea/
 
+# Claude Code (memoria y configuración local del agente IA)
+.claude/
+
 # Sistema
 Thumbs.db
 .DS_Store

@@ -23,6 +23,7 @@ const conversacionRepo = require('../repositories/conversacion.repository');
 const mensajeRepo      = require('../repositories/mensaje.repository');
 const logger           = require('../config/logger');
 const { emitToConv }   = require('../utils/rooms');
+const maintenance      = require('../maintenance');
 
 /** empresa_id → instancia de Telegraf */
 const bots = new Map();
@@ -78,14 +79,38 @@ async function enviarMensajeTelegram(external_id, texto, empresa_id) {
   const bot = bots.get(empresa_id);
   if (!bot) {
     logger.warn(`[TELEGRAM SEND] No hay bot activo para "${empresa_id}" — mensaje no enviado.`);
-    return false;
+    return { ok: false };
   }
   try {
-    await bot.telegram.sendMessage(external_id, texto);
-    return true;
+    const msg = await bot.telegram.sendMessage(external_id, texto);
+    return { ok: true, telegram_msg_id: msg.message_id };
   } catch (err) {
     logger.error(`[TELEGRAM SEND ERROR] empresa=${empresa_id}:`, { error: err.message });
-    return false;
+    return { ok: false };
+  }
+}
+
+/**
+ * Envía o elimina una reacción emoji a un mensaje específico.
+ * @param {string} external_id     - Chat ID del usuario.
+ * @param {number} telegram_msg_id - ID del mensaje en Telegram.
+ * @param {string|null} emoji      - Emoji a poner, o null para limpiar.
+ * @param {string} empresa_id
+ */
+async function enviarReaccionTelegram(external_id, telegram_msg_id, emoji, empresa_id) {
+  const bot = bots.get(empresa_id);
+  if (!bot) return { ok: false };
+  try {
+    await bot.telegram.callApi('setMessageReaction', {
+      chat_id:    external_id,
+      message_id: telegram_msg_id,
+      reaction:   emoji ? [{ type: 'emoji', emoji }] : [],
+      is_big:     false,
+    });
+    return { ok: true };
+  } catch (err) {
+    logger.warn(`[TELEGRAM REACCION] empresa=${empresa_id}:`, { error: err.message });
+    return { ok: false };
   }
 }
 
@@ -102,6 +127,58 @@ async function enviarAccionEscribiendo(external_id, empresa_id) {
     await bot.telegram.sendChatAction(external_id, 'typing');
   } catch (err) {
     logger.warn(`[TELEGRAM TYPING] empresa=${empresa_id}:`, { error: err.message });
+  }
+}
+
+/**
+ * Envía una foto al cliente vía Telegram desde un Buffer en memoria.
+ * @param {string} external_id
+ * @param {Buffer} buffer       - Bytes de la imagen.
+ * @param {string} caption      - Pie de foto (puede ser vacío).
+ * @param {string} empresa_id
+ * @returns {Promise<{ok: boolean, file_id: string|null}>}
+ */
+async function enviarFotoTelegram(external_id, buffer, caption, empresa_id) {
+  const bot = bots.get(empresa_id);
+  if (!bot) {
+    logger.warn(`[TELEGRAM PHOTO] No hay bot activo para "${empresa_id}"`);
+    return { ok: false, file_id: null };
+  }
+  try {
+    const msg = await bot.telegram.sendPhoto(
+      external_id,
+      { source: buffer },
+      caption ? { caption } : {}
+    );
+    const photos  = msg.photo;
+    const file_id = photos[photos.length - 1].file_id;
+    return { ok: true, file_id };
+  } catch (err) {
+    logger.error(`[TELEGRAM PHOTO ERROR] empresa=${empresa_id}:`, { error: err.message });
+    return { ok: false, file_id: null };
+  }
+}
+
+/**
+ * Envía un mensaje de voz al cliente vía Telegram desde un Buffer en memoria.
+ * @param {string} external_id
+ * @param {Buffer} buffer      - Bytes del audio (webm/ogg/mp4).
+ * @param {string} empresa_id
+ * @returns {Promise<{ok: boolean, file_id: string|null}>}
+ */
+async function enviarVozTelegram(external_id, buffer, empresa_id) {
+  const bot = bots.get(empresa_id);
+  if (!bot) {
+    logger.warn(`[TELEGRAM VOICE] No hay bot activo para "${empresa_id}"`);
+    return { ok: false, file_id: null };
+  }
+  try {
+    const msg     = await bot.telegram.sendVoice(external_id, { source: buffer });
+    const file_id = msg.voice.file_id;
+    return { ok: true, file_id };
+  } catch (err) {
+    logger.error(`[TELEGRAM VOICE ERROR] empresa=${empresa_id}:`, { error: err.message });
+    return { ok: false, file_id: null };
   }
 }
 
@@ -126,13 +203,16 @@ function _iniciarBot(empresa_id, token, io, retries) {
   bot.on('sticker',  (ctx) => _procesarMensaje(ctx, 'sticker',  io, empresa_id));
   bot.on('location', (ctx) => _procesarMensaje(ctx, 'location', io, empresa_id));
   bot.on('photo',    (ctx) => _procesarMensaje(ctx, 'photo',    io, empresa_id));
+  bot.on('voice',    (ctx) => _procesarMensaje(ctx, 'voice',    io, empresa_id));
+  bot.on('audio',    (ctx) => _procesarMensaje(ctx, 'audio',    io, empresa_id));
+  bot.on('message_reaction', (ctx) => _procesarReaccion(ctx, io, empresa_id));
 
   // Errores no capturados dentro de los handlers (evita crash del proceso)
   bot.catch((err) => {
     logger.error(`[TELEGRAM ${empresa_id.toUpperCase()}] Error no manejado:`, { error: err.message });
   });
 
-  bot.launch()
+  bot.launch({ allowedUpdates: ['message', 'message_reaction', 'edited_message', 'callback_query'] })
     .catch((err) => {
       const delay = Math.min(1000 * Math.pow(2, retries), 60_000);
       logger.error(
@@ -161,6 +241,12 @@ function _iniciarBot(empresa_id, token, io, retries) {
  */
 async function _procesarMensaje(ctx, type, io, empresa_id) {
   try {
+    // Durante mantenimiento: informar al cliente y no procesar
+    if (maintenance.isActive()) {
+      await ctx.reply('⚙️ El sistema se encuentra en mantenimiento temporalmente. Por favor intenta más tarde.');
+      return;
+    }
+
     let mensajeTexto = '';
     let tipo         = 'text';
     let urlMedia     = null;
@@ -200,18 +286,30 @@ async function _procesarMensaje(ctx, type, io, empresa_id) {
       mensajeTexto  = ctx.message.caption || '🖼 Imagen';
       tipo          = 'photo';
       urlMedia      = `tg://${empresa_id}/${largest.file_id}`;
+
+    } else if (type === 'voice') {
+      mensajeTexto = '🎤 Nota de voz';
+      tipo         = 'voice';
+      urlMedia     = `tg://${empresa_id}/${ctx.message.voice.file_id}`;
+
+    } else if (type === 'audio') {
+      const audio  = ctx.message.audio;
+      mensajeTexto = audio.title || audio.file_name || '🎵 Audio';
+      tipo         = 'voice';
+      urlMedia     = `tg://${empresa_id}/${audio.file_id}`;
     }
 
     const input = {
       user_id:                ctx.from.id.toString(),
       canal:                  'telegram',
-      empresa_id,                                        // viene del bot, no del cliente
-      empresa_preconfigurada: true,                      // la empresa ya está definida
+      empresa_id,
+      empresa_preconfigurada: true,
       mensaje:                mensajeTexto,
       tipo,
       url_media:              urlMedia,
       nombre:                 `${ctx.from.first_name || ''} ${ctx.from.last_name || ''}`.trim(),
       username:               ctx.from.username || '',
+      telegram_msg_id:        ctx.message.message_id,
     };
 
     // Notificar mensaje entrante al dashboard antes de procesar (mejor UX)
@@ -281,6 +379,43 @@ async function _procesarMensaje(ctx, type, io, empresa_id) {
 }
 
 /**
+ * Procesa un evento de reacción recibido de Telegram.
+ * Actualiza el campo reacciones del mensaje en BD y notifica al CRM en tiempo real.
+ * @private
+ */
+async function _procesarReaccion(ctx, io, empresa_id) {
+  try {
+    const reaction = ctx.update?.message_reaction;
+    if (!reaction) return;
+
+    const telegram_msg_id = reaction.message_id;
+    const external_id     = reaction.chat?.id?.toString() || reaction.user?.id?.toString();
+    if (!telegram_msg_id || !external_id) return;
+
+    // El emoji activo es el primero de new_reaction; si está vacío el usuario quitó la reacción
+    const nuevoEmoji = reaction.new_reaction?.[0]?.emoji || null;
+
+    const { rows } = await mensajeRepo.findByTelegramMsgId(telegram_msg_id, empresa_id, external_id);
+    if (!rows.length) return;
+
+    const { id: mensaje_id, conversacion_id, departamento } = rows[0];
+    const reaccionesActuales = rows[0].reacciones || [];
+
+    // Mantener máximo 1 reacción de usuario por mensaje (igual que Telegram)
+    const filtradas = reaccionesActuales.filter(r => r.external_id !== external_id);
+    const nuevas    = nuevoEmoji ? [...filtradas, { emoji: nuevoEmoji, remitente: 'user', external_id }] : filtradas;
+
+    await mensajeRepo.updateReacciones(mensaje_id, nuevas);
+
+    if (io) {
+      emitToConv(io, departamento, 'mensaje_reaccion', { mensaje_id, conversacion_id, reacciones: nuevas });
+    }
+  } catch (err) {
+    logger.error(`[TELEGRAM REACCION ERROR] empresa=${empresa_id}:`, { error: err.message });
+  }
+}
+
+/**
  * Resuelve un file_id de Telegram a una URL de descarga fresca.
  * Las URLs de Telegram expiran en ~1 hora; este método siempre genera una nueva.
  * @param {string} file_id   - file_id de Telegram (permanente).
@@ -298,4 +433,4 @@ async function resolveFileLink(file_id, empresa_id) {
 process.once('SIGINT',  () => bots.forEach(bot => bot.stop('SIGINT')));
 process.once('SIGTERM', () => bots.forEach(bot => bot.stop('SIGTERM')));
 
-module.exports = { iniciarTelegram, enviarMensajeTelegram, enviarAccionEscribiendo, resolveFileLink };
+module.exports = { iniciarTelegram, enviarMensajeTelegram, enviarAccionEscribiendo, resolveFileLink, enviarFotoTelegram, enviarVozTelegram, enviarReaccionTelegram };

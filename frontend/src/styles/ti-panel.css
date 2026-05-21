@@ -1,0 +1,500 @@
+/* =========================================================
+   Panel TI — ISP Chatbot (diseño claro, acorde al CRM)
+   ========================================================= */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+.ti-root {
+  height: 100vh;
+  background: #f0f2f5;
+  color: #111b21;
+  font-family: 'Inter', 'Segoe UI', sans-serif;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+
+/* ── Header ──────────────────────────────────────────────── */
+.ti-header {
+  background: #fff;
+  border-bottom: 1px solid #d1d7db;
+  padding: 0 28px;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+}
+
+.ti-header-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.ti-logo {
+  width: 34px;
+  height: 34px;
+  background: linear-gradient(135deg, #DC1E1E 0%, #ff4444 100%);
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 6px rgba(220,30,30,0.3);
+}
+
+.ti-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: #111b21;
+  letter-spacing: -0.2px;
+}
+
+.ti-subtitle {
+  font-size: 11px;
+  color: #8696a0;
+  background: #f0f2f5;
+  padding: 2px 8px;
+  border-radius: 10px;
+  margin-left: 2px;
+}
+
+.ti-header-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.ti-user-badge {
+  font-size: 13px;
+  font-weight: 600;
+  color: #54656f;
+}
+
+.ti-logout-btn {
+  background: none;
+  border: 1.5px solid #d1d7db;
+  color: #54656f;
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: 'Inter', sans-serif;
+}
+.ti-logout-btn:hover {
+  border-color: #DC1E1E;
+  color: #DC1E1E;
+  background: #fff5f5;
+}
+
+/* ── Main layout ─────────────────────────────────────────── */
+.ti-main {
+  flex: 1;
+  padding: 24px 28px;
+  max-width: 1000px;
+  margin: 0 auto;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* ── Banner de bienvenida con Fibri ─────────────────────── */
+.ti-welcome {
+  background: linear-gradient(135deg, #DC1E1E 0%, #ff4444 100%);
+  border-radius: 16px;
+  padding: 20px 28px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  overflow: hidden;
+  position: relative;
+  box-shadow: 0 4px 16px rgba(220,30,30,0.25);
+}
+.ti-welcome::before {
+  content: '';
+  position: absolute;
+  top: -40px; right: 140px;
+  width: 140px; height: 140px;
+  border: 28px solid rgba(255,255,255,0.08);
+  border-radius: 50%;
+  pointer-events: none;
+}
+.ti-welcome-text h2 {
+  font-size: 18px;
+  font-weight: 700;
+  color: #fff;
+  margin-bottom: 4px;
+}
+.ti-welcome-text p {
+  font-size: 13px;
+  color: rgba(255,255,255,0.8);
+}
+.ti-fibri {
+  height: 80px;
+  object-fit: contain;
+  flex-shrink: 0;
+  margin-left: 16px;
+  filter: drop-shadow(0 4px 8px rgba(0,0,0,0.2));
+}
+
+/* ── Status cards ────────────────────────────────────────── */
+.ti-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 12px;
+}
+
+.ti-card {
+  background: #fff;
+  border: 1px solid #e9edef;
+  border-radius: 12px;
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+  transition: box-shadow 0.15s;
+}
+.ti-card:hover { box-shadow: 0 3px 10px rgba(0,0,0,0.08); }
+
+.ti-card-value {
+  font-size: 24px;
+  font-weight: 700;
+  color: #111b21;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.ti-card-label {
+  font-size: 11px;
+  color: #8696a0;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-weight: 500;
+}
+
+/* ── Sections ────────────────────────────────────────────── */
+.ti-section {
+  background: #fff;
+  border: 1px solid #e9edef;
+  border-radius: 14px;
+  overflow: hidden;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+}
+
+.ti-section-header {
+  padding: 14px 20px;
+  border-bottom: 1px solid #f0f2f5;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #fafafa;
+}
+
+.ti-section-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #54656f;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ti-section-body {
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* ── Maintenance ─────────────────────────────────────────── */
+.ti-mnt-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #111b21;
+}
+
+.ti-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.ti-dot-green { background: #22c55e; box-shadow: 0 0 6px #22c55e88; }
+.ti-dot-red   { background: #DC1E1E; box-shadow: 0 0 6px #DC1E1E88; animation: mnt-pulse 1.2s infinite; }
+@keyframes mnt-pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.45; } }
+
+.ti-mnt-desc {
+  font-size: 12.5px;
+  color: #8696a0;
+  line-height: 1.5;
+}
+
+/* ── Buttons ─────────────────────────────────────────────── */
+.ti-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 18px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+  border: none;
+  white-space: nowrap;
+  font-family: 'Inter', sans-serif;
+}
+.ti-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.ti-btn-danger {
+  background: linear-gradient(90deg, #DC1E1E 0%, #ff4444 100%);
+  color: #fff;
+  box-shadow: 0 2px 6px rgba(220,30,30,0.25);
+}
+.ti-btn-danger:hover:not(:disabled) { opacity: 0.88; }
+
+.ti-btn-success {
+  background: linear-gradient(90deg, #16a34a 0%, #22c55e 100%);
+  color: #fff;
+  box-shadow: 0 2px 6px rgba(22,163,74,0.25);
+}
+.ti-btn-success:hover:not(:disabled) { opacity: 0.88; }
+
+.ti-btn-outline {
+  background: transparent;
+  color: #54656f;
+  border: 1.5px solid #d1d7db;
+}
+.ti-btn-outline:hover:not(:disabled) {
+  border-color: #DC1E1E;
+  color: #DC1E1E;
+  background: #fff5f5;
+}
+
+.ti-btn-primary {
+  background: linear-gradient(90deg, #2563eb 0%, #3b82f6 100%);
+  color: #fff;
+  box-shadow: 0 2px 6px rgba(37,99,235,0.25);
+}
+.ti-btn-primary:hover:not(:disabled) { opacity: 0.88; }
+
+/* ── Backup row ──────────────────────────────────────────── */
+.ti-backup-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.ti-backup-info {
+  font-size: 12px;
+  color: #8696a0;
+}
+
+/* ── Purge ───────────────────────────────────────────────── */
+.ti-purge-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.ti-purge-count {
+  font-size: 26px;
+  font-weight: 700;
+  color: #DC1E1E;
+  font-variant-numeric: tabular-nums;
+}
+
+.ti-purge-label {
+  font-size: 12px;
+  color: #8696a0;
+}
+
+.ti-meses-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.ti-meses-label {
+  font-size: 12px;
+  color: #54656f;
+  white-space: nowrap;
+}
+
+.ti-meses-select {
+  background: #fff;
+  color: #111b21;
+  border: 1.5px solid #d1d7db;
+  border-radius: 20px;
+  padding: 6px 12px;
+  font-size: 13px;
+  outline: none;
+  font-family: 'Inter', sans-serif;
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+.ti-meses-select:focus { border-color: #DC1E1E; }
+
+/* ── Confirm overlay ─────────────────────────────────────── */
+.ti-confirm-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  backdrop-filter: blur(2px);
+}
+
+.ti-confirm-box {
+  background: #fff;
+  border-radius: 18px;
+  padding: 28px 32px;
+  max-width: 420px;
+  width: 90%;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.18), 0 4px 16px rgba(0,0,0,0.1);
+  border-top: 4px solid #DC1E1E;
+}
+
+.ti-confirm-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: #DC1E1E;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ti-confirm-text {
+  font-size: 13px;
+  color: #54656f;
+  line-height: 1.6;
+}
+
+.ti-confirm-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+/* ── Result banner ───────────────────────────────────────── */
+.ti-result {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.ti-result-ok    { background: #f0fdf4; color: #15803d; border: 1px solid #bbf7d0; }
+.ti-result-error { background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; }
+
+/* ── Logs ────────────────────────────────────────────────── */
+.ti-logs-box {
+  background: #111b21;
+  border-radius: 10px;
+  padding: 14px;
+  max-height: 280px;
+  overflow-y: auto;
+  font-family: 'Fira Code', 'Consolas', monospace;
+  font-size: 11.5px;
+  line-height: 1.7;
+  border: 1px solid #e9edef;
+}
+
+.ti-log-line { display: flex; gap: 10px; }
+.ti-log-ts   { color: #475569; flex-shrink: 0; }
+.ti-log-lvl-info  { color: #38bdf8; flex-shrink: 0; width: 36px; }
+.ti-log-lvl-warn  { color: #fbbf24; flex-shrink: 0; width: 36px; }
+.ti-log-lvl-error { color: #f87171; flex-shrink: 0; width: 36px; }
+.ti-log-msg { color: #94a3b8; word-break: break-all; }
+
+.ti-logs-empty { color: #8696a0; text-align: center; padding: 20px; font-size: 12px; }
+
+/* ── Spinner ─────────────────────────────────────────────── */
+.ti-spinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(255,255,255,0.35);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: ti-spin 0.7s linear infinite;
+}
+@keyframes ti-spin { to { transform: rotate(360deg); } }
+
+/* ── Mantenimiento — pantalla bloqueada para agentes ────── */
+.mnt-screen {
+  min-height: 100vh;
+  background: linear-gradient(135deg, #f0f2f5 0%, #fff 100%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  color: #54656f;
+  font-family: 'Inter', 'Segoe UI', sans-serif;
+}
+
+.mnt-fibri {
+  height: 110px;
+  object-fit: contain;
+  animation: mnt-float 3s ease-in-out infinite;
+}
+@keyframes mnt-float {
+  0%,100% { transform: translateY(0); }
+  50%      { transform: translateY(-8px); }
+}
+
+.mnt-icon {
+  font-size: 48px;
+  animation: mnt-pulse 2s ease-in-out infinite;
+}
+
+.mnt-title {
+  font-size: 22px;
+  font-weight: 700;
+  color: #111b21;
+}
+
+.mnt-text {
+  font-size: 14px;
+  color: #8696a0;
+  text-align: center;
+  max-width: 340px;
+  line-height: 1.6;
+}
+
+/* ── Responsive ──────────────────────────────────────────── */
+@media (max-width: 640px) {
+  .ti-header { padding: 0 16px; }
+  .ti-main   { padding: 16px; }
+  .ti-welcome { padding: 16px 20px; }
+  .ti-welcome-text h2 { font-size: 16px; }
+  .ti-fibri { height: 60px; }
+  .ti-cards { grid-template-columns: repeat(2, 1fr); }
+}

@@ -27,6 +27,7 @@ const { iniciarTelegram }  = require('./adapters/telegram');
 const { iniciarMeta }      = require('./adapters/meta');
 const { iniciarAutoCierre } = require('./services/autoClose.service');
 const errorHandler         = require('./middleware/errorHandler.middleware');
+const maintenance          = require('./maintenance');
 
 // Rutas
 const authRoutes           = require('./routes/auth.routes');
@@ -34,6 +35,7 @@ const agenteRoutes         = require('./routes/agente.routes');
 const conversacionesRoutes = require('./routes/conversaciones.routes');
 const configuracionRoutes  = require('./routes/configuracion.routes');
 const contactosRoutes      = require('./routes/contactos.routes');
+const tiRoutes             = require('./routes/ti.routes');
 
 const app    = express();
 const server = http.createServer(app);
@@ -71,6 +73,18 @@ app.use(express.json());
 // Compartir io con todos los controllers via req.app.get('io')
 app.set('io', io);
 
+// Middleware global de modo mantenimiento.
+// Bloquea todas las rutas operativas excepto: login, health y panel TI.
+app.use((req, res, next) => {
+  if (!maintenance.isActive()) return next();
+  const libre = req.path === '/auth/login'
+             || req.path === '/'
+             || req.path === '/health'
+             || req.path.startsWith('/ti/');
+  if (libre) return next();
+  res.status(503).json({ error: 'Sistema en mantenimiento. Por favor espere.', mantenimiento: true });
+});
+
 // Eventos de conexión Socket.io
 io.on('connection', (socket) => {
   logger.info('Cliente conectado', { socketId: socket.id });
@@ -90,6 +104,7 @@ io.on('connection', (socket) => {
 
 // Rutas de la API
 app.use('/auth',           authRoutes);
+app.use('/ti',             tiRoutes);
 app.use('/agente',         agenteRoutes);
 app.use('/conversaciones', conversacionesRoutes);
 app.use('/configuracion',  configuracionRoutes);
@@ -123,6 +138,21 @@ async function initDb() {
   await db.query(`ALTER TABLE infracciones ADD COLUMN IF NOT EXISTS agente_id     INT REFERENCES agentes(id) ON DELETE SET NULL`);
   await db.query(`ALTER TABLE infracciones ADD COLUMN IF NOT EXISTS agente_nombre VARCHAR`);
   logger.info('DB: tabla infracciones verificada.');
+
+  await db.query(`ALTER TABLE mensajes ADD COLUMN IF NOT EXISTS telegram_msg_id BIGINT`);
+  await db.query(`ALTER TABLE mensajes ADD COLUMN IF NOT EXISTS reacciones JSONB DEFAULT '[]'`);
+  logger.info('DB: columnas telegram_msg_id y reacciones verificadas.');
+
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS respuestas_rapidas (
+      id         SERIAL PRIMARY KEY,
+      agente_id  INT NOT NULL REFERENCES agentes(id) ON DELETE CASCADE,
+      titulo     VARCHAR(100) NOT NULL,
+      contenido  TEXT NOT NULL,
+      created_at TIMESTAMP DEFAULT NOW()
+    )
+  `);
+  logger.info('DB: tabla respuestas_rapidas verificada.');
 }
 
 // Arrancar servidor

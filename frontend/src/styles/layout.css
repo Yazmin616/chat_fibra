@@ -31,19 +31,6 @@
   align-items: center;
 }
 
-/* Botón "Manual de usuario" */
-.manual-btn {
-  background: white;
-  border: 1px solid #d1d7db;
-  padding: 4px 12px;
-  border-radius: 15px;
-  font-size: 12px;
-  display: flex;
-  align-items: center;
-  cursor: pointer;
-  color: #54656f;
-}
-
 /* Perfil del agente en el TopBar */
 .user-profile {
   display: flex;

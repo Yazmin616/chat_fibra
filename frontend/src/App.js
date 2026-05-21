@@ -47,6 +47,8 @@ import ContactsView        from './components/Contacts/ContactsView';
 import InfraccionesView    from './components/Infracciones/InfraccionesView';
 import CerrarChatModal     from './components/Chat/CerrarChatModal';
 import Login               from './components/Auth/Login';
+import TIPanel             from './components/TI/TIPanel';
+import './styles/ti-panel.css';
 
 /** Conexión Socket.io (singleton): se crea una vez al cargar la app. */
 // En producción nginx proxea Socket.io por el mismo puerto que el frontend.
@@ -65,6 +67,30 @@ const ESTADOS_PURO_BOT = ['abierta', 'MENU_PRINCIPAL', 'SELECCION_EMPRESA', 'SEL
 function App() {
   const { user, login, logout, actualizarUsuario } = useAuth();
   const { notify }                = useNotifications();
+  const [mantenimiento, setMantenimiento] = useState(false);
+
+  // Escuchar evento de mantenimiento:
+  //   1. DOM: disparado por api.js cuando el backend retorna 503 (fallback para peticiones HTTP)
+  //   2. Socket: disparado en tiempo real por TI al activar/desactivar mantenimiento
+  useEffect(() => {
+    const domHandler = () => setMantenimiento(true);
+    window.addEventListener('sistema:mantenimiento', domHandler);
+
+    const socketHandler = ({ activo }) => {
+      if (activo) {
+        setMantenimiento(true);
+      } else {
+        // Al reactivar: recargar la página para restaurar el estado completo del CRM
+        window.location.reload();
+      }
+    };
+    socket.on('sistema:mantenimiento', socketHandler);
+
+    return () => {
+      window.removeEventListener('sistema:mantenimiento', domHandler);
+      socket.off('sistema:mantenimiento', socketHandler);
+    };
+  }, []);
 
   // Estado de UI persistido en localStorage
   // En móvil el sidebar arranca oculto para no tapar el contenido
@@ -92,6 +118,7 @@ function App() {
     cargar,
     cargarMensajes,
     enviarMensaje,
+    enviarMedia,
     cerrarChat,
     eliminarChat
   } = useConversaciones(user, empresaId);
@@ -223,7 +250,19 @@ function App() {
   // ─────────────────────────────────────────────
   // Render
   // ─────────────────────────────────────────────
-  if (!user) return <Login onLoginSuccess={login} />;
+  if (!user)             return <Login onLoginSuccess={login} />;
+  if (user.rol === 'ti') return <TIPanel user={user} logout={logout} />;
+
+  // Pantalla de mantenimiento para admin/asesor mientras TI trabaja
+  if (mantenimiento) {
+    return (
+      <div className="mnt-screen">
+        <img src="/fibri.png" alt="Fibri" className="mnt-fibri" />
+        <div className="mnt-title">Sistema en mantenimiento</div>
+        <p className="mnt-text">El equipo de TI está realizando tareas de mantenimiento. El sistema estará disponible en breve.</p>
+      </div>
+    );
+  }
 
   return (
     <div className="app-container">
@@ -266,10 +305,12 @@ function App() {
                 mensajes={mensajes}
                 texto={texto}                         setTexto={setTexto}
                 enviarMensaje={handleEnviarMensaje}
+                enviarMedia={enviarMedia}
                 cerrarConversacion={handleCerrarChat}
                 eliminarConversacion={handleEliminarChat}
                 setConversacionActiva={setConversacionActiva}
                 clienteEscribiendo={clienteEscribiendo}
+                user={user}
               />
             </>
           )}

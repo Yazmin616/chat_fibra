@@ -6,7 +6,6 @@
  *   - Botón para colapsar/expandir el sidebar.
  *   - Selector de empresa activa (multi-tenant).
  *   - Perfil del agente autenticado (nombre y rol).
- *   - Acceso al manual de usuario.
  *
  * Uso:
  *   <TopBar
@@ -19,7 +18,7 @@
  */
 
 import React from 'react';
-import { Menu, User, BookOpen, ChevronDown, Building2 } from 'lucide-react';
+import { Menu, User, ChevronDown, Building2 } from 'lucide-react';
 
 /**
  * @param {object}   props
@@ -52,10 +51,6 @@ const TopBar = ({ sidebarVisible, setSidebarVisible, empresaId, setEmpresaId, us
       </div>
 
       <div className="top-right">
-        <button className="manual-btn">
-          <BookOpen size={16} style={{ marginRight: '5px' }} />
-          Manual de usuario
-        </button>
         <div className="user-profile">
           <div className="user-avatar" style={{ backgroundColor: '#dc2626' }}>
             <User size={18} color="#fff" />

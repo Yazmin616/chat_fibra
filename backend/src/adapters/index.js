@@ -14,8 +14,8 @@
  *   instagram → adapters/meta.js
  */
 
-const { enviarMensajeTelegram, enviarAccionEscribiendo: telegramEscribiendo } = require('./telegram');
-const { enviarMensajeMeta, enviarAccionEscribiendoMeta }                       = require('./meta');
+const { enviarMensajeTelegram, enviarAccionEscribiendo: telegramEscribiendo, enviarFotoTelegram, enviarVozTelegram, enviarReaccionTelegram } = require('./telegram');
+const { enviarMensajeMeta, enviarAccionEscribiendoMeta } = require('./meta');
 const logger = require('../config/logger');
 
 /**
@@ -62,4 +62,28 @@ async function enviarEscribiendo(canal, external_id, empresa_id) {
   }
 }
 
-module.exports = { enviarMensaje, enviarEscribiendo };
+/**
+ * Envía una foto o nota de voz al cliente por el canal correspondiente.
+ * @param {string} canal
+ * @param {string} external_id
+ * @param {Buffer} buffer
+ * @param {'photo'|'voice'} tipo
+ * @param {string} caption
+ * @param {string} empresa_id
+ * @returns {Promise<{ok: boolean, file_id: string|null}>}
+ */
+async function enviarMedia(canal, external_id, buffer, tipo, caption, empresa_id) {
+  if (canal === 'telegram') {
+    if (tipo === 'photo') return enviarFotoTelegram(external_id, buffer, caption, empresa_id);
+    if (tipo === 'voice') return enviarVozTelegram(external_id, buffer, empresa_id);
+  }
+  logger.warn(`[ADAPTER] enviarMedia no soportado para canal="${canal}" tipo="${tipo}"`);
+  return { ok: false, file_id: null };
+}
+
+async function enviarReaccion(canal, external_id, telegram_msg_id, emoji, empresa_id) {
+  if (canal === 'telegram') return enviarReaccionTelegram(external_id, telegram_msg_id, emoji, empresa_id);
+  return { ok: false };
+}
+
+module.exports = { enviarMensaje, enviarEscribiendo, enviarMedia, enviarReaccion };

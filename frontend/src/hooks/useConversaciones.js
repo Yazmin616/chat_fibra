@@ -124,6 +124,17 @@ export function useConversaciones(user, empresaId) {
     );
   }, [conversacionActiva, user]);
 
+  const enviarMedia = useCallback(async (tipo, archivo, caption) => {
+    if (!conversacionActiva || !archivo) return;
+    await apiService.enviarMedia(
+      conversacionActiva.id,
+      user.id,
+      tipo,
+      archivo,
+      caption
+    );
+  }, [conversacionActiva, user]);
+
   /**
    * Cierra el chat del agente: llama a liberar() en el backend y recarga la lista.
    * @param {number} id     - PK de la conversación.
@@ -154,6 +165,7 @@ export function useConversaciones(user, empresaId) {
     cargar,
     cargarMensajes,
     enviarMensaje,
+    enviarMedia,
     cerrarChat,
     eliminarChat
   };

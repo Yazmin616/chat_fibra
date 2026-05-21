@@ -33,7 +33,7 @@ const findByEmail = (email) =>
  */
 const findAll = () =>
   db.query(
-    'SELECT id, nombre, email, rol, area, esta_online, last_seen, created_at FROM agentes ORDER BY created_at DESC'
+    "SELECT id, nombre, email, rol, area, esta_online, last_seen, created_at FROM agentes WHERE rol != 'ti' ORDER BY created_at DESC"
   );
 
 /**

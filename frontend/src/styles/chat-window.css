@@ -259,17 +259,16 @@
 
 /* Área de input */
 .chat-input-area {
-  min-height: 56px;
   background: #f0f2f5;
   padding: 6px 12px;
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   gap: 6px;
   flex-shrink: 0;
   position: relative;
 }
 
-.chat-input-area input {
+.chat-input-area textarea {
   flex: 1;
   background: white;
   border: none;
@@ -277,11 +276,22 @@
   border-radius: 21px;
   outline: none;
   font-size: 14px;
-  line-height: 1.4;
+  line-height: 1.5;
   color: #111b21;
+  resize: none;
+  overflow-y: hidden;
+  min-height: 40px;
+  max-height: 180px;
+  font-family: 'Segoe UI', Helvetica, Arial, sans-serif;
+  display: block;
+  overflow-wrap: break-word;
 }
 
-.chat-input-area input::placeholder {
+.chat-input-area textarea.has-overflow {
+  overflow-y: auto;
+}
+
+.chat-input-area textarea::placeholder {
   color: #8696a0;
 }
 
@@ -337,14 +347,77 @@
   max-width: 120px;
 }
 
+/* Burbuja foto: sin padding, imagen borde a borde */
+.msg-bubble-photo {
+  padding: 0 !important;
+  overflow: hidden;
+  line-height: 0;
+  max-width: 260px;
+  min-width: 140px;
+}
+
+.msg-photo-wrap {
+  position: relative;
+  line-height: 0;
+}
+
 .msg-photo {
-  max-width: 220px;
+  display: block;
+  width: 100%;
+  max-width: 260px;
+  min-width: 140px;
+  min-height: 80px;
+  object-fit: cover;
   cursor: pointer;
   transition: opacity 0.15s;
 }
 
-.msg-photo:hover {
-  opacity: 0.88;
+.msg-photo:hover { opacity: 0.9; }
+
+.msg-photo-caption {
+  padding: 5px 9px 2px;
+  font-size: 13.5px;
+  color: #111b21;
+  line-height: 1.45;
+  margin: 0;
+  background: inherit;
+  word-break: break-word;
+}
+
+/* Tiempo superpuesto sobre la foto */
+.msg-time-overlay {
+  position: absolute;
+  bottom: 5px;
+  right: 7px;
+  background: rgba(0, 0, 0, 0.38);
+  color: #fff !important;
+  border-radius: 10px;
+  padding: 2px 6px;
+  font-size: 10px;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  line-height: 1.2;
+  pointer-events: none;
+}
+.msg-time-overlay .msg-tick { color: #fff !important; }
+.msg-time-overlay .msg-tick.leido { color: #fff !important; }
+
+/* Links dentro de burbujas de texto */
+.msg-link {
+  color: #1d6fa5;
+  text-decoration: underline;
+  text-decoration-color: rgba(29,111,165,0.45);
+  word-break: break-all;
+  cursor: pointer;
+}
+.msg-link:hover {
+  color: #1558a0;
+  text-decoration-color: #1558a0;
+}
+/* En burbuja enviada (verde) el link va un poco más oscuro para contrastar */
+.sent .msg-link {
+  color: #1558a0;
 }
 
 .msg-location {

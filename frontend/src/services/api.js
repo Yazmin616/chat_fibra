@@ -44,6 +44,11 @@ const _authHeaders = (extra = {}) => ({
   ...extra,
 });
 
+/** Headers solo con auth (sin Content-Type) — para FormData con multer. */
+const _authHeadersMultipart = () => ({
+  'Authorization': `Bearer ${localStorage.getItem('agente_token') || ''}`,
+});
+
 /**
  * Parsea la respuesta JSON y lanza un error si el servidor devolvió un status
  * de error (4xx / 5xx). Evita que un objeto {"error":"..."} llegue al estado.
@@ -56,6 +61,9 @@ async function _parseJson(res) {
   if (!res.ok) {
     if (res.status === 401) {
       window.dispatchEvent(new CustomEvent('session:expired'));
+    }
+    if (res.status === 503 && data?.mantenimiento) {
+      window.dispatchEvent(new CustomEvent('sistema:mantenimiento'));
     }
     const msg = data?.error || data?.message || `HTTP ${res.status}`;
     throw new Error(msg);
@@ -223,6 +231,29 @@ export const apiService = {
    * @param {number} agente_id       - PK del agente que envía.
    * @returns {Promise<{ok: boolean}>}
    */
+  /**
+   * Envía una imagen o nota de voz al cliente.
+   * @param {number} conversacion_id
+   * @param {number} agente_id
+   * @param {'photo'|'voice'} tipo
+   * @param {Blob|File}  archivo  - Blob comprimido (foto) o Blob de audio.
+   * @param {string}     [caption]
+   */
+  async enviarMedia(conversacion_id, agente_id, tipo, archivo, caption = '') {
+    const form = new FormData();
+    form.append('conversacion_id', conversacion_id);
+    form.append('agente_id',       agente_id);
+    form.append('tipo',            tipo);
+    form.append('caption',         caption);
+    form.append('archivo',         archivo, tipo === 'voice' ? 'voice.webm' : 'photo.jpg');
+    const res = await fetch(`${API_URL}/agente/enviar-media`, {
+      method:  'POST',
+      headers: _authHeadersMultipart(),
+      body:    form,
+    });
+    return _parseJson(res);
+  },
+
   async responder(conversacion_id, user_id, mensaje, agente_id) {
     const res = await fetch(`${API_URL}/agente/responder`, {
       method:  'POST',
@@ -401,6 +432,52 @@ export const apiService = {
 
   async getAgenteStats(id) {
     const res = await fetch(`${API_URL}/agente/dashboard/asesor/${id}`, {
+      headers: _authHeaders(),
+    });
+    return _parseJson(res);
+  },
+
+  // ─────────────────────────────────────────────
+  // RESPUESTAS RÁPIDAS
+  // ─────────────────────────────────────────────
+
+  async reaccionar(mensaje_id, emoji) {
+    const res = await fetch(`${API_URL}/agente/reaccionar`, {
+      method:  'POST',
+      headers: _authHeaders(),
+      body:    JSON.stringify({ mensaje_id, emoji: emoji || null }),
+    });
+    return _parseJson(res);
+  },
+
+  async getRespuestasRapidas() {
+    const res = await fetch(`${API_URL}/agente/respuestas-rapidas`, {
+      headers: _authHeaders(),
+    });
+    return _parseJson(res);
+  },
+
+  async crearRespuestaRapida(titulo, contenido) {
+    const res = await fetch(`${API_URL}/agente/respuestas-rapidas`, {
+      method:  'POST',
+      headers: _authHeaders(),
+      body:    JSON.stringify({ titulo, contenido }),
+    });
+    return _parseJson(res);
+  },
+
+  async actualizarRespuestaRapida(id, titulo, contenido) {
+    const res = await fetch(`${API_URL}/agente/respuestas-rapidas/${id}`, {
+      method:  'PUT',
+      headers: _authHeaders(),
+      body:    JSON.stringify({ titulo, contenido }),
+    });
+    return _parseJson(res);
+  },
+
+  async eliminarRespuestaRapida(id) {
+    const res = await fetch(`${API_URL}/agente/respuestas-rapidas/${id}`, {
+      method:  'DELETE',
       headers: _authHeaders(),
     });
     return _parseJson(res);

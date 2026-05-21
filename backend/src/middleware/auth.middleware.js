@@ -84,4 +84,15 @@ const requireAsesor = (req, res, next) => {
   next();
 };
 
-module.exports = { verifyToken, requireAdmin, requireAsesor };
+/**
+ * Verifica que el agente autenticado tenga rol "ti".
+ * Solo el rol TI accede al panel de mantenimiento.
+ */
+const requireTI = (req, res, next) => {
+  if (!req.agente || req.agente.rol !== 'ti') {
+    return res.status(403).json({ error: 'TI access required' });
+  }
+  next();
+};
+
+module.exports = { verifyToken, requireAdmin, requireAsesor, requireTI };

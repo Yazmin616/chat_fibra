@@ -23,11 +23,33 @@ const db = require('../config/db');
  * @param {string|null} [url_media]     - URL del archivo de media (para stickers/imágenes).
  * @returns {Promise<import('pg').QueryResult>}
  */
-const create = (conversacion_id, remitente, texto, tipo = 'text', url_media = null) =>
+const create = (conversacion_id, remitente, texto, tipo = 'text', url_media = null, telegram_msg_id = null) =>
   db.query(
-    `INSERT INTO mensajes (conversacion_id, remitente, texto, tipo, url_media)
-     VALUES ($1,$2,$3,$4,$5) RETURNING id, created_at`,
-    [conversacion_id, remitente, texto, tipo, url_media]
+    `INSERT INTO mensajes (conversacion_id, remitente, texto, tipo, url_media, telegram_msg_id)
+     VALUES ($1,$2,$3,$4,$5,$6) RETURNING id, created_at`,
+    [conversacion_id, remitente, texto, tipo, url_media, telegram_msg_id]
+  );
+
+/** Encuentra un mensaje por su ID de Telegram (para vincular reacciones). */
+const findByTelegramMsgId = (telegram_msg_id, empresa_id, external_id) =>
+  db.query(
+    `SELECT m.id, m.conversacion_id, m.remitente, m.reacciones, c.departamento
+     FROM mensajes m
+     JOIN conversaciones c ON c.id = m.conversacion_id
+     JOIN usuarios u ON u.id = c.usuario_id
+     WHERE m.telegram_msg_id = $1
+       AND c.empresa_id = $2
+       AND u.external_id = $3
+       AND u.canal = 'telegram'
+     LIMIT 1`,
+    [telegram_msg_id, empresa_id, external_id]
+  );
+
+/** Actualiza el campo reacciones JSONB de un mensaje. */
+const updateReacciones = (id, reacciones) =>
+  db.query(
+    'UPDATE mensajes SET reacciones=$1 WHERE id=$2',
+    [JSON.stringify(reacciones), id]
   );
 
 /**
@@ -150,6 +172,8 @@ const getByUsuarioAndArea = (usuario_id, area, empresa_id) =>
 
 module.exports = {
   create,
+  findByTelegramMsgId,
+  updateReacciones,
   updateEstado,
   marcarLeidosPorConversacion,
   deleteByConversacionIds,

@@ -116,9 +116,12 @@ export function useSocket({
 
     // ─── mensaje_estado ──────────────────────────────────────────────
     const handleMensajeEstado = (data) => {
-      setMensajes(prev => prev.map(m =>
-        m.id === data.mensaje_id ? { ...m, estado: data.estado } : m
-      ));
+      setMensajes(prev => prev.map(m => {
+        if (m.id !== data.mensaje_id) return m;
+        const update = { ...m, estado: data.estado };
+        if (data.url_media) update.url_media = data.url_media;
+        return update;
+      }));
     };
 
     // ─── mensajes_leidos ─────────────────────────────────────────────

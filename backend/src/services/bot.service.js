@@ -45,7 +45,7 @@ async function procesar(input, io) {
   const usuario     = await _upsertUsuario(input);
   const conversacion = await _upsertConversacion(usuario.id, input.empresa_id || 'fibratec');
 
-  await mensajeRepo.create(conversacion.id, 'user', input.mensaje, input.tipo || 'text', input.url_media);
+  await mensajeRepo.create(conversacion.id, 'user', input.mensaje, input.tipo || 'text', input.url_media, input.telegram_msg_id || null);
 
   if (conversacion.es_humano) return null;
 

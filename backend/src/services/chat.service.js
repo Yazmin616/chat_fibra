@@ -11,7 +11,7 @@
 const db              = require('../config/db');
 const conversacionRepo = require('../repositories/conversacion.repository');
 const mensajeRepo     = require('../repositories/mensaje.repository');
-const { enviarMensaje } = require('../adapters');
+const { enviarMensaje, enviarMedia: enviarMediaAdapter } = require('../adapters');
 const { emitToConv }  = require('../utils/rooms');
 
 /**
@@ -70,9 +70,12 @@ async function responder({ conversacion_id, mensaje, agente_id, user_id, io }) {
   }
 
   // Enviar por el canal correspondiente; si tiene éxito → actualizar a 'entregado'
-  const entregado = await enviarMensaje(canal || 'telegram', user_id, mensaje, empresa_id);
-  if (entregado) {
+  const result = await enviarMensaje(canal || 'telegram', user_id, mensaje, empresa_id);
+  if (result?.ok || result === true) {
     await mensajeRepo.updateEstado(mensaje_id);
+    if (result.telegram_msg_id) {
+      await db.query('UPDATE mensajes SET telegram_msg_id=$1 WHERE id=$2', [result.telegram_msg_id, mensaje_id]);
+    }
     if (io) emitToConv(io, departamento, 'mensaje_estado', { mensaje_id, conversacion_id, estado: 'entregado' });
   }
 }
@@ -205,4 +208,72 @@ async function eliminar({ conversacion_id, io }) {
   }
 }
 
-module.exports = { responder, liberar, eliminar };
+/**
+ * Envía una foto o nota de voz desde el agente al cliente y lo registra en DB.
+ * El archivo llega como Buffer (procesado por multer en memoria).
+ * Tras enviar a Telegram obtiene el file_id permanente y lo almacena como
+ * url_media = "tg://empresa_id/file_id", igual que los mensajes entrantes.
+ *
+ * @param {object} params
+ * @param {number} params.conversacion_id
+ * @param {number} params.agente_id
+ * @param {'photo'|'voice'} params.tipo
+ * @param {Buffer} params.buffer
+ * @param {string} params.caption          - Pie de foto (puede ser vacío).
+ * @param {import('socket.io').Server} [params.io]
+ */
+async function enviarMedia({ conversacion_id, agente_id, tipo, buffer, caption, io }) {
+  await conversacionRepo.assignAgente(conversacion_id, agente_id);
+
+  const textoMensaje = tipo === 'voice' ? '🎤 Nota de voz' : (caption || '🖼 Imagen');
+
+  // Guardar con url_media null; lo actualizamos tras confirmar Telegram
+  const { rows: [savedMsg] } = await mensajeRepo.create(
+    conversacion_id, 'agente', textoMensaje, tipo, null
+  );
+  const mensaje_id = savedMsg.id;
+
+  await conversacionRepo.touch(conversacion_id);
+
+  const { rows } = await db.query(
+    `SELECT c.empresa_id, c.usuario_id, c.departamento, c.estado, c.agente_id, u.canal
+     FROM conversaciones c JOIN usuarios u ON c.usuario_id=u.id WHERE c.id=$1`,
+    [conversacion_id]
+  );
+  const { empresa_id, usuario_id, departamento, estado, agente_id: agenteAsignado, canal } = rows[0] || {};
+
+  if (io) {
+    emitToConv(io, departamento, 'nuevo_mensaje', {
+      conversacion_id, usuario_id, empresa_id,
+      mensaje_id, mensaje: textoMensaje, tipo,
+      url_media: null,
+      remitente: 'agente', estado: 'enviado', fecha: new Date(),
+    });
+    emitToConv(io, departamento, 'conversacion_actualizada', {
+      id: conversacion_id, empresa_id, estado, agente_id: agenteAsignado,
+    });
+  }
+
+  // external_id viene del JOIN ya realizado arriba en rows[0]
+  const { rows: extRows } = await db.query(
+    `SELECT u.external_id FROM conversaciones c JOIN usuarios u ON c.usuario_id=u.id WHERE c.id=$1`,
+    [conversacion_id]
+  );
+  const external_id = extRows[0]?.external_id;
+  const r = await enviarMediaAdapter(canal || 'telegram', external_id, buffer, tipo, caption, empresa_id);
+
+  if (r.ok && r.file_id) {
+    const url_media = `tg://${empresa_id}/${r.file_id}`;
+    await db.query(
+      `UPDATE mensajes SET estado='entregado', url_media=$1 WHERE id=$2`,
+      [url_media, mensaje_id]
+    );
+    if (io) {
+      emitToConv(io, departamento, 'mensaje_estado', {
+        mensaje_id, conversacion_id, estado: 'entregado', url_media,
+      });
+    }
+  }
+}
+
+module.exports = { responder, liberar, eliminar, enviarMedia };
