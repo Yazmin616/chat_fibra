@@ -1,6 +1,34 @@
+/**
+ * @file TopBar.js
+ * @description Barra superior del CRM.
+ *
+ * Responsabilidades:
+ *   - Botón para colapsar/expandir el sidebar.
+ *   - Selector de empresa activa (multi-tenant).
+ *   - Perfil del agente autenticado (nombre y rol).
+ *   - Acceso al manual de usuario.
+ *
+ * Uso:
+ *   <TopBar
+ *     sidebarVisible={sidebarVisible}
+ *     setSidebarVisible={setSidebarVisible}
+ *     empresaId={empresaId}
+ *     setEmpresaId={setEmpresaId}
+ *     user={user}
+ *   />
+ */
+
 import React from 'react';
 import { Menu, User, BookOpen, ChevronDown, Building2 } from 'lucide-react';
 
+/**
+ * @param {object}   props
+ * @param {boolean}  props.sidebarVisible    - Estado actual del sidebar.
+ * @param {Function} props.setSidebarVisible - Setter para colapsar/expandir el sidebar.
+ * @param {string}   props.empresaId         - ID de la empresa seleccionada.
+ * @param {Function} props.setEmpresaId      - Setter para cambiar la empresa activa.
+ * @param {{ nombre: string, rol: string }} props.user - Agente autenticado.
+ */
 const TopBar = ({ sidebarVisible, setSidebarVisible, empresaId, setEmpresaId, user }) => {
   return (
     <div className="top-bar">
@@ -10,7 +38,7 @@ const TopBar = ({ sidebarVisible, setSidebarVisible, empresaId, setEmpresaId, us
         </button>
         
         <div className="tenant-selector">
-          <Building2 size={18} color="#00a884" />
+          <Building2 size={18} color="#dc2626" />
           <select 
             value={empresaId} 
             onChange={(e) => setEmpresaId(e.target.value)}
@@ -29,7 +57,7 @@ const TopBar = ({ sidebarVisible, setSidebarVisible, empresaId, setEmpresaId, us
           Manual de usuario
         </button>
         <div className="user-profile">
-          <div className="user-avatar" style={{ backgroundColor: user?.rol === 'admin' ? '#00a884' : '#53bdeb' }}>
+          <div className="user-avatar" style={{ backgroundColor: '#dc2626' }}>
             <User size={18} color="#fff" />
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>

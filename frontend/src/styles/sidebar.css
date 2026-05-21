@@ -1,0 +1,131 @@
+/* =============================================================
+   SIDEBAR — Barra lateral de navegación izquierda
+   ============================================================= */
+
+.sidebar {
+  width: 240px;
+  background-color: #020617;
+  display: flex;
+  flex-direction: column;
+  transition: width 0.3s ease;
+  flex-shrink: 0;
+  z-index: 100;
+}
+
+.sidebar.closed {
+  width: 65px;
+}
+
+/* Logo / cabecera del sidebar */
+.logo-container {
+  height: 50px;
+  background-color: #0a0f1e;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px;
+}
+
+.logo-img {
+  max-width: 80%;
+  filter: brightness(0) invert(1);
+}
+
+/* Sección de ítems de menú */
+.menu-section {
+  padding-top: 10px;
+}
+
+.menu-item {
+  height: 50px;
+  display: flex;
+  align-items: center;
+  padding: 0 20px;
+  color: #94a3b8;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.sidebar.closed .menu-item {
+  padding: 0;
+  justify-content: center;
+}
+
+.menu-item:hover {
+  background-color: rgba(255, 255, 255, 0.06);
+}
+
+.menu-item.active {
+  color: #ef4444;
+  background-color: rgba(239, 68, 68, 0.1);
+  border-left: 3px solid #ef4444;
+}
+
+.menu-item span {
+  margin-left: 15px;
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+/* Ítem de cierre de sesión */
+.menu-item.logout {
+  color: #e74c3c;
+}
+
+/* Badge de no-leídos global sobre el ícono de Chat */
+.sidebar-badge {
+  position: absolute;
+  top: -6px;
+  right: -8px;
+  background-color: #dc2626;
+  color: white;
+  font-size: 9px;
+  font-weight: 800;
+  padding: 1px 5px;
+  border-radius: 10px;
+  border: 2px solid #020617;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+/* Pie del sidebar: info del agente + logout */
+.sidebar-footer {
+  margin-top: auto;
+  padding: 20px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.user-info-mini {
+  color: #94a3b8;
+  font-size: 12px;
+  margin-bottom: 15px;
+}
+
+/* ═══════════════════════════════════
+   RESPONSIVO — Sidebar como overlay en móvil
+═══════════════════════════════════ */
+@media (max-width: 768px) {
+  .sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 100%;
+    z-index: 300;
+    width: 260px !important;
+    overflow-y: auto;
+  }
+
+  /* En móvil el sidebar nunca se colapsa a 65px */
+  .sidebar.closed {
+    width: 260px !important;
+  }
+
+  .sidebar .menu-item {
+    padding: 0 20px;
+    justify-content: flex-start;
+  }
+
+  .sidebar .menu-item span {
+    display: inline;
+  }
+}

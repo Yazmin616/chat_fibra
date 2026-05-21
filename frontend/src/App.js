@@ -1,320 +1,320 @@
-import { useEffect, useState, useRef } from "react";
-import { io } from "socket.io-client";
-import { apiService } from "./services/api";
+/**
+ * @file App.js
+ * @description Componente raíz de la aplicación CRM.
+ *
+ * Responsabilidades de este archivo:
+ *   - Instanciar la conexión Socket.io (singleton por sesión de navegador).
+ *   - Componer los hooks de estado (auth, conversaciones, socket, notificaciones).
+ *   - Renderizar el layout principal (Sidebar + TopBar + vista activa).
+ *   - Filtrar las conversaciones visibles según:
+ *       1. El estado de la conversación (excluir flujo de menú puro del bot).
+ *       2. El rol del agente (admin ve todo; asesor ve su área).
+ *       3. El filtro de pestaña activo ("Todos" o "Mis Asignados").
+ *       4. El selector de empresa (filtro visual client-side — no dispara fetch).
+ *   - Delegar la lógica de negocio a los hooks; este componente no hace llamadas HTTP directas.
+ *
+ * Diseño multi-empresa:
+ *   Todas las conversaciones de todas las empresas se cargan en memoria desde el inicio.
+ *   El selector de empresa en el TopBar filtra la lista visualmente pero NO recarga datos.
+ *   Los contadores de no-leídos y notificaciones funcionan para todas las empresas
+ *   sin importar cuál esté seleccionada, para que el agente no pierda ningún chat pendiente.
+ *
+ * Vistas disponibles (controladas por `currentView`):
+ *   'chat'      → Panel de conversaciones (ChatList + ChatWindow)
+ *   'agents'    → Gestión de agentes
+ *   'config'    → Configuración del sistema
+ *   'dashboard' → KPIs y estadísticas
+ *   'contactos' → Directorio de clientes
+ */
 
-// Componentes
-import Sidebar from "./components/Layout/Sidebar";
-import TopBar from "./components/Layout/TopBar";
-import ChatList from "./components/Chat/ChatList";
-import ChatWindow from "./components/Chat/ChatWindow";
-import SettingsView from "./components/Settings/SettingsView";
-import AgentManagementView from "./components/Settings/AgentManagementView";
-import DashboardView from "./components/Settings/DashboardView";
-import ContactsView from "./components/Contacts/ContactsView";
-import Login from "./components/Auth/Login";
+import { useEffect, useState, useMemo } from 'react';
+import { io } from 'socket.io-client';
 
-const socket = io(`http://${window.location.hostname}:3009`);
+import { useAuth }           from './hooks/useAuth';
+import { useNotifications }  from './hooks/useNotifications';
+import { useConversaciones } from './hooks/useConversaciones';
+import { useSocket }         from './hooks/useSocket';
+import { apiService }        from './services/api';
+
+import Sidebar             from './components/Layout/Sidebar';
+import TopBar              from './components/Layout/TopBar';
+import ChatList            from './components/Chat/ChatList';
+import ChatWindow          from './components/Chat/ChatWindow';
+import SettingsView        from './components/Settings/SettingsView';
+import AgentManagementView from './components/Settings/AgentManagementView';
+import DashboardView       from './components/Settings/DashboardView';
+import ContactsView        from './components/Contacts/ContactsView';
+import InfraccionesView    from './components/Infracciones/InfraccionesView';
+import CerrarChatModal     from './components/Chat/CerrarChatModal';
+import Login               from './components/Auth/Login';
+
+/** Conexión Socket.io (singleton): se crea una vez al cargar la app. */
+// En producción nginx proxea Socket.io por el mismo puerto que el frontend.
+// En desarrollo apunta directamente al puerto 3009 del backend.
+const SOCKET_URL = process.env.NODE_ENV === 'production'
+  ? window.location.origin
+  : (process.env.REACT_APP_API_URL || `http://${window.location.hostname}:3009`);
+const socket = io(SOCKET_URL);
+
+/**
+ * Estados del bot que corresponden al flujo de menú puro.
+ * Estas conversaciones no se muestran en la bandeja de entrada de ningún agente.
+ */
+const ESTADOS_PURO_BOT = ['abierta', 'MENU_PRINCIPAL', 'SELECCION_EMPRESA', 'SELECCION_AREA'];
 
 function App() {
-  /* ========================
-     ESTADO DE AUTENTICACIÓN
-  ======================== */
-  const [user, setUser] = useState(() => {
-    const saved = localStorage.getItem('agente_user');
-    return saved ? JSON.parse(saved) : null;
+  const { user, login, logout, actualizarUsuario } = useAuth();
+  const { notify }                = useNotifications();
+
+  // Estado de UI persistido en localStorage
+  // En móvil el sidebar arranca oculto para no tapar el contenido
+  const [sidebarVisible, setSidebarVisible] = useState(() => window.innerWidth > 768);
+  const [currentView,       setCurrentView]       = useState(() => localStorage.getItem('app_current_view') || 'chat');
+  const [totalInfracciones, setTotalInfracciones] = useState(0);
+  const [cerrarModalId,     setCerrarModalId]     = useState(null);
+
+  // Empresa activa: usada solo como filtro visual y para configuración.
+  // 'todas' por defecto para que el agente vea todo desde el primer momento.
+  const [empresaId, setEmpresaId] = useState(() => localStorage.getItem('app_empresa_id') || 'todas');
+
+  // Estado de filtros del chat
+  const [filtro,             setFiltro]             = useState('Todos los chats');
+  const [busqueda,           setBusqueda]           = useState('');
+  const [texto,              setTexto]              = useState('');
+  const [clienteEscribiendo, setClienteEscribiendo] = useState(false);
+
+  // Estado y acciones de conversaciones (carga siempre TODAS las empresas)
+  const {
+    conversaciones,      setConversaciones,
+    conversacionActiva,  setConversacionActiva,
+    mensajes,            setMensajes,
+    config,              setConfig,
+    cargar,
+    cargarMensajes,
+    enviarMensaje,
+    cerrarChat,
+    eliminarChat
+  } = useConversaciones(user, empresaId);
+
+  // Eventos en tiempo real vía Socket.io
+  useSocket({
+    socket,
+    user,
+    empresaId,
+    conversacionActiva,
+    setConversaciones,
+    setMensajes,
+    setConversacionActiva,
+    setClienteEscribiendo,
+    notify
   });
 
-  /* ========================
-     ESTADOS DE LA UI (CON PERSISTENCIA)
-  ======================== */
-  const [sidebarVisible, setSidebarVisible] = useState(true);
-  
-  const [currentView, setCurrentView] = useState(() => {
-    return localStorage.getItem('app_current_view') || 'chat';
-  });
+  // Cargar conteo de infracciones de hoy y escuchar nuevas en tiempo real (solo admin)
+  useEffect(() => {
+    if (!user || user.rol !== 'admin') return;
+    apiService.getInfraccionesHoy(user.id, empresaId)
+      .then(data => setTotalInfracciones(data.total || 0))
+      .catch(() => {});
+  }, [user, empresaId]);
 
-  const [empresaId, setEmpresaId] = useState(() => {
-    return localStorage.getItem('app_empresa_id') || 'fibratec';
-  });
+  useEffect(() => {
+    if (!user || user.rol !== 'admin') return;
+    const handler = () => setTotalInfracciones(prev => prev + 1);
+    socket.on('nueva_infraccion', handler);
+    return () => socket.off('nueva_infraccion', handler);
+  }, [user]);
 
-  const [config, setConfig] = useState({ tiempo_inactividad: 10 });
-  
-  /* ========================
-     ESTADOS DEL CHAT
-  ======================== */
-  const [conversaciones, setConversaciones] = useState([]);
-  const [conversacionActiva, setConversacionActiva] = useState(null);
-  const [mensajes, setMensajes] = useState([]);
-  const [texto, setTexto] = useState("");
-  const [filtro, setFiltro] = useState("Todos los chats"); // Por defecto a Bandeja de Entrada
-  const [busqueda, setBusqueda] = useState("");
-  const messagesEndRef = useRef(null);
+  // Unirse a la sala de Socket.io. Se re-emite también en cada reconexión
+  // para recuperar las salas que el servidor pierde al reiniciarse.
+  useEffect(() => {
+    if (!user) return;
+    const joinRoom = () => socket.emit('agente:join', { rol: user.rol, area: user.area });
+    joinRoom();
+    socket.on('connect', joinRoom);
+    return () => socket.off('connect', joinRoom);
+  }, [user]);
 
-  // Guardar persistencia en localStorage
+  // Persistir preferencias en localStorage; limpiar badge de infracciones al entrar a esa vista
   useEffect(() => {
     localStorage.setItem('app_current_view', currentView);
+    if (currentView === 'infracciones') setTotalInfracciones(0);
   }, [currentView]);
+  useEffect(() => { localStorage.setItem('app_empresa_id',   empresaId);   }, [empresaId]);
 
+  // Cerrar chat activo al presionar Escape
   useEffect(() => {
-    localStorage.setItem('app_empresa_id', empresaId);
-  }, [empresaId]);
-
-  // Cargar datos cuando cambia empresa o usuario
-  useEffect(() => {
-    if (user) {
-      fetchInitialData();
-    }
-  }, [empresaId, user]);
-
-  const fetchInitialData = async () => {
-    try {
-      const [convs, confs] = await Promise.all([
-        apiService.getConversaciones(empresaId, user?.id),
-        apiService.getConfigs(empresaId)
-      ]);
-      setConversaciones(convs);
-      setConfig(confs);
-    } catch (error) { console.error(error); }
-  };
-
-  const cargarMensajes = async (usuarioId, conversacionId) => {
-    if (!usuarioId || !user) return;
-    // Admin: sin conversacion_id → ve historial completo unificado del usuario
-    // Asesor: con conversacion_id → ve solo los mensajes de su conversación específica
-    const convIdParam = user?.rol === 'admin' ? undefined : conversacionId;
-    const msgs = await apiService.getMensajes(usuarioId, user.id, convIdParam);
-    setMensajes(msgs);
-    // Marcar como leído al entrar
-    if (conversacionId) {
-      await apiService.marcarLeido(conversacionId);
-      apiService.getConversaciones(empresaId, user?.id).then(setConversaciones);
-    }
-  };
-
-  const enviarMensaje = async () => {
-    if (!texto || !conversacionActiva) return;
-    const currentText = texto;
-    setTexto("");
-    await apiService.responder(conversacionActiva.id, conversacionActiva.external_id, currentText, user.id);
-  };
-
-  const handleLoginSuccess = (data) => {
-    setUser(data.agente);
-    localStorage.setItem('agente_user', JSON.stringify(data.agente));
-    localStorage.setItem('agente_token', data.token);
-  };
-
-  const handleLogout = async () => {
-    if (user) await apiService.logout(user.id);
-    setUser(null);
-    localStorage.clear(); // Limpiar todo al salir
-  };
-
-  useEffect(() => {
-    const handleNuevoMensaje = (data) => {
-      // 1. Si es de la empresa actual, incrementar el contador localmente (sin refetch)
-      if (data.empresa_id === empresaId) {
-        setConversaciones(prev => prev.map(c => {
-          const esAdmin = user?.rol === 'admin';
-          const match = esAdmin
-            ? Number(c.usuario_id) === Number(data.usuario_id)
-            : Number(c.id) === Number(data.conversacion_id);
-
-          if (match && data.remitente === 'user') {
-            // Si el chat está abierto, NO incrementar (se marca leído al instante)
-            const esChatActivo = conversacionActiva && (
-              esAdmin
-                ? Number(conversacionActiva.usuario_id) === Number(data.usuario_id)
-                : Number(conversacionActiva.id) === Number(data.conversacion_id)
-            );
-            if (esChatActivo) return c; // ya está abierto, no sumar
-            return { ...c, no_leidos: String(parseInt(c.no_leidos || 0) + 1) };
-          }
-          return c;
-        }));
-      }
-
-      // 2. Si el chat está abierto, añadir el mensaje a la ventana
-      const esAdmin = user?.rol === 'admin';
-      const esMismoChat = Number(data.conversacion_id) === Number(conversacionActiva?.id);
-      const esMismoUsuario = data.usuario_id && Number(data.usuario_id) === Number(conversacionActiva?.usuario_id);
-
-      if (conversacionActiva && (esAdmin ? esMismoUsuario : esMismoChat)) {
-        setMensajes(prev => [...prev, { 
-          remitente: data.remitente, 
-          texto: data.mensaje, 
-          created_at: data.fecha || new Date() 
-        }]);
-        // 3. Marcar como leído automáticamente si el chat está abierto
-        if (data.remitente === 'user') {
-          apiService.marcarLeido(conversacionActiva.id);
-        }
-      }
-    };
-
-    const handleLectura = (data) => {
-      // Actualización directa del estado local → sin refetch, instantáneo en todos los paneles
-      // Pone en 0 el contador de la conversación leída (por conversacion_id O por usuario_id para el Admin)
-      setConversaciones(prev => prev.map(c => {
-        const mismoPorId = Number(c.id) === Number(data.conversacion_id);
-        const mismoPorUsuario = data.usuario_id && Number(c.usuario_id) === Number(data.usuario_id);
-        if (mismoPorId || mismoPorUsuario) {
-          return { ...c, no_leidos: '0' };
-        }
-        return c;
-      }));
-    };
-
-    const handleActualizacion = (data) => {
-      if (data.empresa_id === empresaId) {
-        apiService.getConversaciones(empresaId, user?.id).then(setConversaciones);
-      }
-    };
-
-    const handleEliminacion = (data) => {
-      // Refresh listado
-      apiService.getConversaciones(empresaId, user?.id).then(setConversaciones);
-      
-      // Si el chat eliminado es el que tengo abierto, o pertenece al mismo usuario que borramos, cerrarlo
-      const esMismoChat = conversacionActiva && Number(data.id) === Number(conversacionActiva.id);
-      const esMismoUsuario = conversacionActiva && data.usuarioId && Number(data.usuarioId) === Number(conversacionActiva.usuario_id);
-
-      if (esMismoChat || esMismoUsuario) {
-        setConversacionActiva(null);
-        setMensajes([]);
-      }
-    };
-
-    socket.on('nuevo_mensaje', handleNuevoMensaje);
-    socket.on('conversacion_leida', handleLectura);
-    socket.on('conversacion_actualizada', handleActualizacion);
-    socket.on('conversacion_eliminada', handleEliminacion);
-
-    return () => {
-      socket.off('nuevo_mensaje');
-      socket.off('conversacion_leida');
-      socket.off('conversacion_actualizada');
-      socket.off('conversacion_eliminada');
-    };
-  }, [conversacionActiva, empresaId, user]);
-
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [mensajes]);
-
-  useEffect(() => {
-    const handleEsc = (event) => {
-      if (event.key === 'Escape') {
-        setConversacionActiva(null);
-      }
-    };
-    window.addEventListener('keydown', handleEsc);
-    return () => window.removeEventListener('keydown', handleEsc);
+    const onEsc = (e) => { if (e.key === 'Escape') setConversacionActiva(null); };
+    window.addEventListener('keydown', onEsc);
+    return () => window.removeEventListener('keydown', onEsc);
   }, [setConversacionActiva]);
 
-  // =============================================
-  // LÓGICA DE FILTRADO DEL PANEL
-  // =============================================
+  // ─────────────────────────────────────────────
+  // Total de no-leídos global (todas las empresas)
+  // Se pasa al Sidebar para mostrar el badge de alerta en el menú de Chat.
+  // ─────────────────────────────────────────────
+  const totalNoLeidos = useMemo(() =>
+    conversaciones.reduce((sum, c) => sum + parseInt(c.no_leidos || 0), 0),
+    [conversaciones]
+  );
+
+  // ─────────────────────────────────────────────
+  // Filtrado de conversaciones
+  //
+  // Orden de filtros aplicados:
+  //   1. Búsqueda por nombre / username
+  //   2. Excluir conversaciones de menú puro del bot
+  //   3. Filtro de empresa (client-side, sobre datos ya en memoria)
+  //   4. Filtro de pestaña activa (Todos / Mis Asignados)
+  // ─────────────────────────────────────────────
   const conversacionesFiltradas = conversaciones.filter(c => {
+    // 1. Búsqueda
     const search = busqueda.toLowerCase();
-    const matchBusqueda = (c.nombre || "").toLowerCase().includes(search) || 
-                          (c.username || "").toLowerCase().includes(search);
-
-    // Estados puramente del bot (el cliente aún no eligió área) — no se muestran a nadie en la bandeja
-    const estadosPuroBot = ['abierta', 'MENU_PRINCIPAL', 'SELECCION_EMPRESA', 'SELECCION_AREA'];
-    const esPuroBot = estadosPuroBot.includes(c.estado);
-
-    if (!matchBusqueda) return false;
-
-    if (filtro === "Todos los chats") {
-      if (user?.rol === 'admin') {
-        // ADMIN: Ve TODO excepto chats en selección de menú (solo bot hablando)
-        return !esPuroBot;
-      } else {
-        // ASESOR: Ve los chats de su área que están EN ESPERA (sin agente asignado) o ya cerrados
-        const sinAgente = !c.agente_id;
-        const estaCerrado = c.estado === 'cerrada' || c.estado?.startsWith('ENCUESTA');
-        return sinAgente || estaCerrado;
-      }
+    if (search) {
+      const matchNombre   = (c.nombre   || '').toLowerCase().includes(search);
+      const matchUsername = (c.username || '').toLowerCase().includes(search);
+      if (!matchNombre && !matchUsername) return false;
     }
 
-    if (filtro === "Mis Asignados") {
-      // Solo los chats que YO tengo asignados y que NO están cerrados
-      return Number(c.agente_id) === Number(user?.id) && c.estado !== 'cerrada' && !c.estado?.startsWith('ENCUESTA');
+    // 2. Excluir flujo de menú del bot
+    if (ESTADOS_PURO_BOT.includes(c.estado)) return false;
+
+    // 3. Filtro de empresa (visual, no recarga datos del servidor)
+    if (empresaId !== 'todas' && c.empresa_id !== empresaId) return false;
+
+    // 4. Filtro de pestaña
+    if (filtro === 'Todos los chats') {
+      if (user?.rol === 'admin') return true;
+      const sinAgente   = !c.agente_id;
+      const estaCerrado = c.estado === 'cerrada' || c.estado?.startsWith('ENCUESTA');
+      return sinAgente || estaCerrado;
+    }
+
+    if (filtro === 'Mis Asignados') {
+      return Number(c.agente_id) === Number(user?.id) &&
+             c.estado !== 'cerrada' &&
+             !c.estado?.startsWith('ENCUESTA');
     }
 
     return false;
   });
 
-  if (!user) return <Login onLoginSuccess={handleLoginSuccess} />;
+  // ─────────────────────────────────────────────
+  // Handlers con UX (confirm / prompt) sobre las acciones del hook
+  // ─────────────────────────────────────────────
+
+  const handleCerrarChat = (id) => setCerrarModalId(id);
+
+  const handleConfirmarCierre = async (motivo, solucion) => {
+    await cerrarChat(cerrarModalId, motivo, solucion);
+    setCerrarModalId(null);
+  };
+
+  const handleEliminarChat = async (id) => {
+    if (window.confirm('¿Eliminar permanentemente?')) await eliminarChat(id);
+  };
+
+  const handleEnviarMensaje = async () => {
+    if (!texto) return;
+    const msg = texto;
+    setTexto('');
+    await enviarMensaje(msg);
+  };
+
+  // ─────────────────────────────────────────────
+  // Render
+  // ─────────────────────────────────────────────
+  if (!user) return <Login onLoginSuccess={login} />;
 
   return (
     <div className="app-container">
-      <Sidebar visible={sidebarVisible} currentView={currentView} setView={setCurrentView} user={user} onLogout={handleLogout} />
+      {/* Backdrop para cerrar el sidebar en móvil */}
+      {sidebarVisible && (
+        <div className="sidebar-backdrop" onClick={() => setSidebarVisible(false)} />
+      )}
+      <Sidebar
+        visible={sidebarVisible}
+        currentView={currentView}
+        setView={(v) => { setCurrentView(v); setSidebarVisible(false); }}
+        user={user}
+        onLogout={logout}
+        totalNoLeidos={totalNoLeidos}
+        totalInfracciones={totalInfracciones}
+      />
       <div className="main-wrapper">
-        <TopBar 
-          sidebarVisible={sidebarVisible} 
-          setSidebarVisible={setSidebarVisible} 
-          empresaId={empresaId} 
+        <TopBar
+          sidebarVisible={sidebarVisible}
+          setSidebarVisible={setSidebarVisible}
+          empresaId={empresaId}
           setEmpresaId={setEmpresaId}
           user={user}
         />
-        <div className="main-content">
-          {currentView === 'chat' ? (
+        <div className={`main-content${conversacionActiva ? ' has-active-chat' : ''}`}>
+
+          {currentView === 'chat' && (
             <>
-              <ChatList 
-                conversaciones={conversacionesFiltradas} 
-                conversacionActiva={conversacionActiva} 
-                setConversacionActiva={setConversacionActiva} 
-                cargarMensajes={cargarMensajes} 
-                busqueda={busqueda} setBusqueda={setBusqueda} 
-                filtro={filtro} setFiltro={setFiltro} 
+              <ChatList
+                conversaciones={conversacionesFiltradas}
+                conversacionActiva={conversacionActiva}
+                setConversacionActiva={setConversacionActiva}
+                cargarMensajes={cargarMensajes}
+                busqueda={busqueda}   setBusqueda={setBusqueda}
+                filtro={filtro}       setFiltro={setFiltro}
                 user={user}
               />
-              <ChatWindow 
-                conversacionActiva={conversacionActiva} 
-                mensajes={mensajes} 
-                texto={texto} setTexto={setTexto} 
-                enviarMensaje={enviarMensaje} 
-                cerrarConversacion={async (id) => {
-                   const motivo = window.prompt("Motivo del cierre:", "cliente solucionado");
-                   if (motivo) {
-                     await apiService.cerrarChat(id, motivo, user.nombre);
-                     fetchInitialData();
-                   }
-                }} 
-                eliminarConversacion={async (id) => {
-                  if (window.confirm("¿Eliminar permanentemente?")) {
-                    await apiService.eliminarChat(id);
-                    setConversacionActiva(null);
-                    setMensajes([]);
-                    fetchInitialData();
-                  }
-                }} 
-                messagesEndRef={messagesEndRef} 
+              <ChatWindow
+                conversacionActiva={conversacionActiva}
+                mensajes={mensajes}
+                texto={texto}                         setTexto={setTexto}
+                enviarMensaje={handleEnviarMensaje}
+                cerrarConversacion={handleCerrarChat}
+                eliminarConversacion={handleEliminarChat}
                 setConversacionActiva={setConversacionActiva}
+                clienteEscribiendo={clienteEscribiendo}
               />
             </>
-          ) : currentView === 'agents' ? (
-            <AgentManagementView />
-          ) : currentView === 'config' ? (
-            <SettingsView 
-              config={config} 
-              setConfig={setConfig} 
+          )}
+
+          {currentView === 'agents' && (
+            <AgentManagementView user={user} actualizarUsuario={actualizarUsuario} />
+          )}
+
+          {currentView === 'config' && (
+            <SettingsView
+              config={config}
+              setConfig={setConfig}
               onSave={async (clave, valor) => {
                 await apiService.updateConfig(clave, valor, empresaId);
                 alert(`Configuración guardada para ${empresaId}`);
-              }} 
+                await cargar();
+              }}
             />
-          ) : currentView === 'dashboard' ? (
-            <DashboardView user={user} empresaId={empresaId} socket={socket} />
-          ) : currentView === 'contactos' ? (
-            <ContactsView />
-          ) : (
-            <div className="empty-chat"><div className="empty-content"><h2>Próximamente</h2></div></div>
           )}
+
+          {currentView === 'dashboard' && (
+            <DashboardView user={user} empresaId={empresaId} socket={socket} />
+          )}
+
+          {currentView === 'contactos' && <ContactsView />}
+
+          {currentView === 'infracciones' && (
+            <InfraccionesView user={user} empresaId={empresaId} socket={socket} />
+          )}
+
+          {!['chat','agents','config','dashboard','contactos','infracciones'].includes(currentView) && (
+            <div className="empty-chat">
+              <div className="empty-content"><h2>Próximamente</h2></div>
+            </div>
+          )}
+
         </div>
       </div>
+      {cerrarModalId && (
+        <CerrarChatModal
+          clienteNombre={conversaciones.find(c => c.id === cerrarModalId)?.nombre}
+          onConfirmar={handleConfirmarCierre}
+          onCancelar={() => setCerrarModalId(null)}
+        />
+      )}
     </div>
   );
 }

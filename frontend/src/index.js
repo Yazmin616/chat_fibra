@@ -1,3 +1,8 @@
+/**
+ * @file index.js
+ * @description Punto de entrada de la aplicación React.
+ * Monta el componente raíz <App /> en el elemento #root del DOM.
+ */
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import './index.css';

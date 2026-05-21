@@ -1,0 +1,215 @@
+
+/* =============================================================
+   CHAT LIST — Panel izquierdo de conversaciones
+   ============================================================= */
+
+.chat-list-panel {
+  width: 320px;
+  background: white;
+  border-right: 1px solid #d1d7db;
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+}
+
+/* Barra de búsqueda */
+.search-container {
+  padding: 10px;
+}
+
+.search-box {
+  background: #f0f2f5;
+  border-radius: 8px;
+  padding: 6px 12px;
+  display: flex;
+  align-items: center;
+}
+
+.search-box input {
+  background: transparent;
+  border: none;
+  flex: 1;
+  outline: none;
+  font-size: 14px;
+  padding: 0 5px;
+}
+
+/* Pestañas de filtro */
+.filter-tabs {
+  padding: 5px 10px 10px;
+  display: flex;
+  gap: 5px;
+  overflow-x: auto;
+}
+
+.tab-pill {
+  background: #f0f2f5;
+  border: none;
+  padding: 5px 12px;
+  border-radius: 15px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #54656f;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.tab-pill.active {
+  background: #dc2626;
+  color: white;
+}
+
+/* Lista de conversaciones */
+.conversations-list {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.conversation-item {
+  display: flex;
+  padding: 10px 15px;
+  gap: 12px;
+  border-bottom: 1px solid #f0f2f5;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+
+.conversation-item:hover {
+  background-color: #f5f6f6;
+}
+
+.conversation-item.active {
+  background-color: #f0f2f5;
+}
+
+/* Avatar circular del contacto */
+.avatar {
+  width: 45px;
+  height: 45px;
+  border-radius: 50%;
+  background-color: #6b7280;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  position: relative;
+}
+
+/* Burbuja de mensajes no leídos */
+.unread-badge {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  background-color: #ea4335;
+  color: white;
+  font-size: 10px;
+  font-weight: bold;
+  padding: 2px 6px;
+  border-radius: 10px;
+  border: 2px solid white;
+}
+
+/* Info de la conversación */
+.conv-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.conv-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  margin-bottom: 2px;
+}
+
+.client-name {
+  font-weight: 600;
+  font-size: 14px;
+  color: #111b21;
+}
+
+.time {
+  font-size: 11px;
+  color: #667781;
+}
+
+.last-message {
+  font-size: 12px;
+  color: #667781;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Etiquetas de área y empresa dentro de la conversación */
+.area-label {
+  font-size: 10px;
+  color: #667781;
+  text-transform: uppercase;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+
+.company-badge {
+  font-size: 9px;
+  color: var(--dash-accent, #dc2626);
+  background: var(--dash-accent-soft, rgba(0, 168, 132, 0.1));
+  padding: 1px 6px;
+  border-radius: 4px;
+  text-transform: uppercase;
+  font-weight: 800;
+  letter-spacing: 0.4px;
+}
+
+/* Badges de departamento */
+.name-and-badge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+
+.badge-depto {
+  font-size: 9px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-weight: 700;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.badge-depto.ventas {
+  background: #fff4e5;
+  color: #c47d1a;
+  border: 1px solid #c47d1a;
+}
+
+.badge-depto.cobranza {
+  background: #e3f2fd;
+  color: #1976d2;
+  border: 1px solid #1976d2;
+}
+
+.badge-depto.soporte {
+  background: #f3e5f5;
+  color: #7b1fa2;
+  border: 1px solid #7b1fa2;
+}
+
+/* ═══════════════════════════════════
+   RESPONSIVO — Chat list panel
+═══════════════════════════════════ */
+@media (max-width: 768px) {
+  .chat-list-panel {
+    width: 100%;
+    flex: 0 0 100%;
+    border-right: none;
+  }
+
+  /* Ocultar la lista cuando hay un chat activo */
+  .main-content.has-active-chat .chat-list-panel {
+    display: none;
+  }
+}

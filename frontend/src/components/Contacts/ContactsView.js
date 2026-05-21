@@ -1,7 +1,24 @@
-import React, { useState, useEffect } from 'react';
-import { apiService } from '../../services/api';
-import { Search, Phone, User, MessageSquare, Edit2, Check, X } from 'lucide-react';
+/**
+ * @file ContactsView.js
+ * @description Vista del directorio de clientes (contactos) del CRM.
+ *
+ * Responsabilidades:
+ *   - Cargar y mostrar todos los usuarios que han interactuado con el sistema.
+ *   - Búsqueda en tiempo real por nombre, username o teléfono.
+ *   - Edición inline de nombre y teléfono de cada contacto.
+ *   - Persistir los cambios a través de `apiService.updateContacto`.
+ *
+ * Uso:
+ *   <ContactsView />   (sin props — obtiene sus propios datos)
+ */
 
+import React, { useState, useEffect, useCallback } from 'react';
+import { apiService } from '../../services/api';
+import { Search, Phone, User, Edit2, Check, X } from 'lucide-react';
+
+/**
+ * Vista sin props. Gestiona su propio estado de lista, búsqueda y edición inline.
+ */
 const ContactsView = () => {
   const [contacts, setContacts] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -9,21 +26,26 @@ const ContactsView = () => {
   const [editingId, setEditingId] = useState(null);
   const [editForm, setEditForm] = useState({ nombre: "", telefono: "" });
 
-  useEffect(() => {
-    fetchContacts();
-  }, []);
-
-  const fetchContacts = async () => {
+  const fetchContacts = useCallback(async () => {
     setLoading(true);
     try {
       const data = await apiService.getContactos();
-      setContacts(data);
+      setContacts(Array.isArray(data) ? data : []);
     } catch (error) {
       console.error("Error fetching contacts:", error);
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  // Carga inicial
+  useEffect(() => { fetchContacts(); }, [fetchContacts]);
+
+  // Actualización en tiempo real: se dispara cuando llega un nuevo cliente o se elimina uno
+  useEffect(() => {
+    window.addEventListener('contactos:actualizar', fetchContacts);
+    return () => window.removeEventListener('contactos:actualizar', fetchContacts);
+  }, [fetchContacts]);
 
   const handleEdit = (contact) => {
     setEditingId(contact.id);
@@ -75,11 +97,11 @@ const ContactsView = () => {
         </div>
       </div>
 
-      <div className="contacts-table-container" style={{ 
-        background: '#fff', 
-        borderRadius: '16px', 
+      <div className="contacts-table-container" style={{
+        background: '#fff',
+        borderRadius: '16px',
         border: '1px solid #e9edef',
-        overflow: 'hidden',
+        overflow: 'auto',
         boxShadow: '0 2px 5px rgba(0,0,0,0.05)'
       }}>
         {loading ? (
@@ -103,7 +125,7 @@ const ContactsView = () => {
                         type="text" 
                         value={editForm.nombre}
                         onChange={(e) => setEditForm({...editForm, nombre: e.target.value})}
-                        style={{ padding: '6px', borderRadius: '4px', border: '1px solid #00a884', fontSize: '14px', width: '100%' }}
+                        style={{ padding: '6px', borderRadius: '4px', border: '1px solid #dc2626', fontSize: '14px', width: '100%' }}
                       />
                     ) : (
                       <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -130,7 +152,7 @@ const ContactsView = () => {
                         type="text" 
                         value={editForm.telefono}
                         onChange={(e) => setEditForm({...editForm, telefono: e.target.value})}
-                        style={{ padding: '6px', borderRadius: '4px', border: '1px solid #00a884', fontSize: '14px', width: '100%' }}
+                        style={{ padding: '6px', borderRadius: '4px', border: '1px solid #dc2626', fontSize: '14px', width: '100%' }}
                       />
                     ) : (
                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#54656f', fontSize: '14px' }}>
@@ -155,7 +177,7 @@ const ContactsView = () => {
                   <td style={{ padding: '16px' }}>
                     {editingId === contact.id ? (
                       <div style={{ display: 'flex', gap: '8px' }}>
-                        <button onClick={() => handleSave(contact.id)} style={{ border: 'none', background: '#00a884', color: '#fff', padding: '6px', borderRadius: '6px', cursor: 'pointer' }}>
+                        <button onClick={() => handleSave(contact.id)} style={{ border: 'none', background: '#dc2626', color: '#fff', padding: '6px', borderRadius: '6px', cursor: 'pointer' }}>
                           <Check size={16} />
                         </button>
                         <button onClick={() => setEditingId(null)} style={{ border: 'none', background: '#ea4335', color: '#fff', padding: '6px', borderRadius: '6px', cursor: 'pointer' }}>

@@ -1,6 +1,42 @@
-import React from 'react';
-import { Search, Filter, MessageSquare, Clock } from 'lucide-react';
+/**
+ * @file ChatList.js
+ * @description Panel izquierdo del chat: lista de conversaciones con búsqueda y filtros.
+ *
+ * Responsabilidades:
+ *   - Mostrar la lista de conversaciones filtradas (viene pre-filtrada desde App.js).
+ *   - Cuadro de búsqueda por nombre o username del cliente.
+ *   - Pestañas de filtro: "Todos los chats" y "Mis Asignados".
+ *   - Indicador de mensajes no leídos (burbuja roja).
+ *   - Al seleccionar una conversación: actualiza el estado activo y carga los mensajes.
+ *
+ * Uso:
+ *   <ChatList
+ *     conversaciones={conversacionesFiltradas}
+ *     conversacionActiva={conversacionActiva}
+ *     setConversacionActiva={setConversacionActiva}
+ *     cargarMensajes={cargarMensajes}
+ *     busqueda={busqueda}   setBusqueda={setBusqueda}
+ *     filtro={filtro}       setFiltro={setFiltro}
+ *     user={user}
+ *   />
+ */
 
+import React from 'react';
+import { Search, MessageSquare, Clock } from 'lucide-react';
+import { formatConvTime } from '../../utils/formatDate';
+
+/**
+ * @param {object}   props
+ * @param {object[]} props.conversaciones         - Lista de conversaciones ya filtradas.
+ * @param {object|null} props.conversacionActiva  - Conversación abierta actualmente.
+ * @param {Function} props.setConversacionActiva  - Setter para abrir una conversación.
+ * @param {Function} props.cargarMensajes         - Carga el historial de mensajes de la conversación seleccionada.
+ * @param {string}   props.busqueda               - Texto de búsqueda actual.
+ * @param {Function} props.setBusqueda            - Setter del texto de búsqueda.
+ * @param {string}   props.filtro                 - Filtro activo: "Todos los chats" | "Mis Asignados".
+ * @param {Function} props.setFiltro              - Setter del filtro activo.
+ * @param {{ rol: string }} props.user            - Agente autenticado.
+ */
 const ChatList = ({
   conversaciones,
   conversacionActiva,
@@ -51,7 +87,7 @@ const ChatList = ({
               cargarMensajes(conv.usuario_id, conv.id);
             }}
           >
-            <div className="avatar" style={{ position: 'relative', backgroundColor: conv.agente_id ? '#53bdeb' : '#00a884' }}>
+            <div className="avatar" style={{ position: 'relative', backgroundColor: '#6b7280' }}>
               <MessageSquare size={20} color="#fff" />
               {/* Burbuja de mensajes no leídos (Simulación por ahora) */}
               {parseInt(conv.no_leidos) > 0 && <div className="unread-badge">{conv.no_leidos}</div>}
@@ -67,7 +103,7 @@ const ChatList = ({
                   </div>
                 </div>
                 <span className="time">
-                  {conv.fecha_ultimo_mensaje ? new Date(conv.fecha_ultimo_mensaje).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
+                  {formatConvTime(conv.fecha_ultimo_mensaje)}
                 </span>
               </div>
               <div className="last-message">

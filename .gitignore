@@ -13,6 +13,7 @@ node_modules/
 .env.development.local
 .env.test.local
 .env.production.local
+.env.example
 
 # Logs
 npm-debug.log*
@@ -27,9 +28,19 @@ yarn-error.log*
 Thumbs.db
 .DS_Store
 
-# Archivos de base de datos temporales (si hubiera)
+# Scripts de base de datos temporales / ad-hoc
 *.sql
+!backend/src/config/migrations/*.sql
 migrate_*.js
 debug_*.js
 inspect_*.js
 fix_*.js
+
+# Logs de PM2 (se generan en tiempo de ejecución)
+backend/logs/
+
+guia-despliegue-produccion.pdf
+PENDIENTES.md
+
+.env.development
+.env.production

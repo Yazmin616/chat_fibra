@@ -1,0 +1,83 @@
+/* =============================================================
+   BASE — Reset global, body y contenedor raíz de la aplicación
+   ============================================================= */
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  font-family: 'Segoe UI', Helvetica, Arial, sans-serif;
+}
+
+body {
+  background-color: #f0f2f5;
+  overflow: hidden;
+}
+
+.app-container {
+  display: flex;
+  height: 100vh;
+  height: 100dvh; /* dvh se ajusta a la altura real visible, excluyendo la barra del navegador */
+  width: 100vw;
+  overflow: hidden;
+}
+
+/* Contenedor principal derecho al sidebar */
+.main-wrapper {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+/* Panel de contenido debajo del TopBar */
+.main-content {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+}
+
+/* Pantalla vacía genérica (chat sin seleccionar, vista próximamente) */
+.empty-chat {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #667781;
+  text-align: center;
+}
+
+.empty-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+/* Animación de spinner reutilizable en Login y Dashboard */
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+.spinner {
+  animation: spin 1s linear infinite;
+}
+
+/* ── Telón semitransparente detrás del sidebar en móvil ── */
+.sidebar-backdrop {
+  display: none;
+}
+
+/* ═══════════════════════════════════
+   RESPONSIVO — ajustes generales
+═══════════════════════════════════ */
+@media (max-width: 768px) {
+  .sidebar-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 200;
+  }
+}
