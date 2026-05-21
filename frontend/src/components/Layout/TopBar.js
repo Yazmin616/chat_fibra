@@ -1,45 +1,38 @@
-/**
- * @file TopBar.js
- * @description Barra superior del CRM.
- *
- * Responsabilidades:
- *   - Botón para colapsar/expandir el sidebar.
- *   - Selector de empresa activa (multi-tenant).
- *   - Perfil del agente autenticado (nombre y rol).
- *
- * Uso:
- *   <TopBar
- *     sidebarVisible={sidebarVisible}
- *     setSidebarVisible={setSidebarVisible}
- *     empresaId={empresaId}
- *     setEmpresaId={setEmpresaId}
- *     user={user}
- *   />
- */
+import React, { useRef, useState } from 'react';
+import { Menu, User, ChevronDown, Building2, Camera } from 'lucide-react';
+import { resolveAvatar, apiService } from '../../services/api';
 
-import React from 'react';
-import { Menu, User, ChevronDown, Building2 } from 'lucide-react';
-
-/**
- * @param {object}   props
- * @param {boolean}  props.sidebarVisible    - Estado actual del sidebar.
- * @param {Function} props.setSidebarVisible - Setter para colapsar/expandir el sidebar.
- * @param {string}   props.empresaId         - ID de la empresa seleccionada.
- * @param {Function} props.setEmpresaId      - Setter para cambiar la empresa activa.
- * @param {{ nombre: string, rol: string }} props.user - Agente autenticado.
- */
 const TopBar = ({ sidebarVisible, setSidebarVisible, empresaId, setEmpresaId, user }) => {
+  const [subiendo, setSubiendo] = useState(false);
+  const fotoRef = useRef(null);
+
+  const handleFotoChange = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file || !user) return;
+    setSubiendo(true);
+    try {
+      const result = await apiService.subirFotoPerfil(user.id, file);
+      window.dispatchEvent(new CustomEvent('agente:foto-actualizada', {
+        detail: { id: user.id, foto_perfil: result.foto_perfil + '?v=' + Date.now() },
+      }));
+    } catch (_) {
+    } finally {
+      setSubiendo(false);
+      e.target.value = '';
+    }
+  };
+
   return (
     <div className="top-bar">
       <div className="top-left">
         <button className="icon-btn" onClick={() => setSidebarVisible(!sidebarVisible)}>
           <Menu size={20} />
         </button>
-        
+
         <div className="tenant-selector">
           <Building2 size={18} color="#dc2626" />
-          <select 
-            value={empresaId} 
+          <select
+            value={empresaId}
             onChange={(e) => setEmpresaId(e.target.value)}
             className="company-select"
           >
@@ -52,8 +45,29 @@ const TopBar = ({ sidebarVisible, setSidebarVisible, empresaId, setEmpresaId, us
 
       <div className="top-right">
         <div className="user-profile">
-          <div className="user-avatar" style={{ backgroundColor: '#dc2626' }}>
-            <User size={18} color="#fff" />
+          <div
+            className={`user-avatar topbar-avatar${subiendo ? ' uploading' : ''}`}
+            style={{ backgroundColor: '#dc2626' }}
+            onClick={() => !subiendo && fotoRef.current?.click()}
+            title="Cambiar foto de perfil"
+          >
+            <input
+              ref={fotoRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              style={{ display: 'none' }}
+              onChange={handleFotoChange}
+            />
+            {user?.foto_perfil
+              ? <img src={resolveAvatar(user.foto_perfil)} alt={user.nombre} />
+              : <User size={18} color="#fff" />
+            }
+            <div className="topbar-avatar-overlay">
+              {subiendo
+                ? <span className="agent-photo-spinner" />
+                : <Camera size={10} color="#fff" />
+              }
+            </div>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
             <span className="user-name">{user?.nombre || 'Agente'}</span>

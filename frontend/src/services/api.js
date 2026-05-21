@@ -37,6 +37,12 @@ export const resolveMedia = (url) => {
   return url;
 };
 
+/** Convierte la ruta relativa del avatar almacenada en BD al src completo. */
+export const resolveAvatar = (url) => {
+  if (!url) return null;
+  return `${API_URL}${url}`;
+};
+
 /** Lee el token JWT del almacenamiento local y construye los headers comunes. */
 const _authHeaders = (extra = {}) => ({
   'Content-Type':  'application/json',
@@ -378,6 +384,17 @@ export const apiService = {
     const res = await fetch(`${API_URL}/agente/${id}`, {
       method:  'DELETE',
       headers: _authHeaders(),
+    });
+    return _parseJson(res);
+  },
+
+  async subirFotoPerfil(agente_id, file) {
+    const form = new FormData();
+    form.append('foto', file);
+    const res = await fetch(`${API_URL}/agente/${agente_id}/foto`, {
+      method:  'PATCH',
+      headers: _authHeadersMultipart(),
+      body:    form,
     });
     return _parseJson(res);
   },

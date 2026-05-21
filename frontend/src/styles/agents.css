@@ -311,6 +311,107 @@
   }
 }
 
+/* ── Avatar en tarjeta de agente ──────────────────────────── */
+.agent-card-avatar {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: #f0f2f5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  margin-bottom: 8px;
+  border: 2px solid #e9edef;
+}
+
+.agent-card-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.agent-card-inicial {
+  font-size: 22px;
+  font-weight: 700;
+  color: #54656f;
+  line-height: 1;
+}
+
+/* ── Carga de foto en AgentForm ───────────────────────────── */
+.agent-photo-upload {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 20px;
+  cursor: pointer;
+}
+
+.agent-photo-circle {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background: #f0f2f5;
+  border: 2px dashed #d1d7db;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  position: relative;
+  transition: border-color 0.15s;
+}
+
+.agent-photo-circle:hover {
+  border-color: #dc2626;
+}
+
+.agent-photo-circle.uploading {
+  opacity: 0.7;
+  cursor: default;
+}
+
+.agent-photo-circle img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.agent-photo-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.15s;
+  border-radius: 50%;
+}
+
+.agent-photo-circle:hover .agent-photo-overlay {
+  opacity: 1;
+}
+
+.agent-photo-spinner {
+  width: 18px;
+  height: 18px;
+  border: 2px solid rgba(255,255,255,0.4);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  display: inline-block;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.agent-photo-label {
+  font-size: 12px;
+  color: #667781;
+}
+
 /* ═══════════════════════════════════
    RESPONSIVO — Agents view
 ═══════════════════════════════════ */

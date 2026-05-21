@@ -47,6 +47,17 @@ export function useAgentes() {
     return () => window.removeEventListener('agentes:actualizar', handler);
   }, [cargar]);
 
+  // Actualiza solo la foto del agente afectado sin recargar la lista completa
+  useEffect(() => {
+    const handler = (e) => {
+      setAgentes(prev => prev.map(a =>
+        a.id === e.detail.id ? { ...a, foto_perfil: e.detail.foto_perfil } : a
+      ));
+    };
+    window.addEventListener('agente:foto-actualizada', handler);
+    return () => window.removeEventListener('agente:foto-actualizada', handler);
+  }, []);
+
   /**
    * Crea un nuevo agente y recarga la lista.
    * @param {object} formData - { nombre, email, password, rol, area }

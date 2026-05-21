@@ -1,5 +1,6 @@
 import React from 'react';
 import { Trash2, Edit2, Shield, User, Mail, Briefcase, Power, Clock } from 'lucide-react';
+import { resolveAvatar } from '../../services/api';
 
 function formatLastSeen(lastSeen) {
   if (!lastSeen) return 'Nunca conectado';
@@ -23,6 +24,8 @@ const AgentCard = ({ agente, onEditar, onEliminar }) => {
     }
   };
 
+  const inicial = agente.nombre?.charAt(0)?.toUpperCase() || '?';
+
   return (
     <div className="agent-card">
       <div className="agent-card-header">
@@ -35,6 +38,12 @@ const AgentCard = ({ agente, onEditar, onEliminar }) => {
       </div>
 
       <div className="agent-card-body">
+        <div className="agent-card-avatar">
+          {agente.foto_perfil
+            ? <img src={resolveAvatar(agente.foto_perfil)} alt={agente.nombre} />
+            : <span className="agent-card-inicial">{inicial}</span>
+          }
+        </div>
         <h3>{agente.nombre}</h3>
         <div className="agent-detail">
           <Mail size={14} />

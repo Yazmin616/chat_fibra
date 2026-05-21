@@ -1,19 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
+import { Camera, User } from 'lucide-react';
+import { apiService, resolveAvatar } from '../../services/api';
 
 const AREAS = ['Ventas', 'Cobranza', 'Soporte Técnico', 'General'];
 
-/**
- * Formulario compartido para crear y editar agentes.
- *
- * Modo creación : no pasa prop `agente` → password obligatorio.
- * Modo edición  : recibe `agente` con datos actuales → password opcional,
- *                 el modal wrapeador muestra el overlay.
- *
- * @param {object}   props
- * @param {object}   [props.agente]   - Agente a editar (undefined = crear).
- * @param {Function} props.onSubmit   - async (formData) => void
- * @param {Function} props.onClose    - Cierra el formulario.
- */
 const AgentForm = ({ agente, onSubmit, onClose }) => {
   const esEdicion = Boolean(agente);
 
@@ -24,10 +14,31 @@ const AgentForm = ({ agente, onSubmit, onClose }) => {
     rol:      agente?.rol      ?? 'asesor',
     area:     agente?.area     ?? 'Ventas',
   });
-  const [submitting, setSubmitting] = useState(false);
-  const [error,      setError]      = useState('');
+  const [submitting,   setSubmitting]   = useState(false);
+  const [error,        setError]        = useState('');
+  const [fotoPreview,  setFotoPreview]  = useState(agente?.foto_perfil ? resolveAvatar(agente.foto_perfil) : null);
+  const [subiendoFoto, setSubiendoFoto] = useState(false);
+  const fotoInputRef = useRef(null);
 
   const set = (field, value) => setFormData(prev => ({ ...prev, [field]: value }));
+
+  const handleFotoChange = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const preview = URL.createObjectURL(file);
+    setFotoPreview(preview);
+    setSubiendoFoto(true);
+    try {
+      const result = await apiService.subirFotoPerfil(agente.id, file);
+      window.dispatchEvent(new CustomEvent('agente:foto-actualizada', {
+        detail: { id: agente.id, foto_perfil: result.foto_perfil + '?v=' + Date.now() },
+      }));
+    } catch (_) {
+      setFotoPreview(agente?.foto_perfil ? resolveAvatar(agente.foto_perfil) : null);
+    } finally {
+      setSubiendoFoto(false);
+    }
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -45,8 +56,34 @@ const AgentForm = ({ agente, onSubmit, onClose }) => {
 
   return (
     <form onSubmit={handleSubmit} className="agent-form">
-      {error && (
-        <div className="agent-form-error">{error}</div>
+      {error && <div className="agent-form-error">{error}</div>}
+
+      {esEdicion && (
+        <div className="agent-photo-upload">
+          <input
+            ref={fotoInputRef}
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            style={{ display: 'none' }}
+            onChange={handleFotoChange}
+          />
+          <div
+            className={`agent-photo-circle${subiendoFoto ? ' uploading' : ''}`}
+            onClick={() => !subiendoFoto && fotoInputRef.current?.click()}
+          >
+            {fotoPreview
+              ? <img src={fotoPreview} alt="avatar" />
+              : <User size={32} color="#8696a0" />
+            }
+            <div className="agent-photo-overlay">
+              {subiendoFoto
+                ? <span className="agent-photo-spinner" />
+                : <Camera size={16} color="#fff" />
+              }
+            </div>
+          </div>
+          <span className="agent-photo-label">Foto de perfil</span>
+        </div>
       )}
 
       <div className="form-grid">

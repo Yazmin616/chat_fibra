@@ -15,6 +15,8 @@
  */
 
 require('dotenv').config();
+const path        = require('path');
+const fs          = require('fs');
 const express     = require('express');
 const cors        = require('cors');
 const helmet      = require('helmet');
@@ -64,11 +66,19 @@ app.use(helmet());
 // CORS restringido a redes locales
 app.use(cors({
   origin:      corsOrigin,
-  methods:     ['GET', 'POST', 'PUT', 'DELETE'],
+  methods:     ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
   credentials: true,
 }));
 
 app.use(express.json());
+
+// Servir archivos subidos (avatares, etc.) con CORP permisivo para que los
+// navegadores puedan cargar las imágenes desde el mismo origen o rutas de red.
+const uploadsDir = path.join(__dirname, '..', 'uploads');
+fs.mkdirSync(path.join(uploadsDir, 'avatars'), { recursive: true });
+app.use('/uploads', express.static(uploadsDir, {
+  setHeaders: (res) => res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin'),
+}));
 
 // Compartir io con todos los controllers via req.app.get('io')
 app.set('io', io);
@@ -142,6 +152,9 @@ async function initDb() {
   await db.query(`ALTER TABLE mensajes ADD COLUMN IF NOT EXISTS telegram_msg_id BIGINT`);
   await db.query(`ALTER TABLE mensajes ADD COLUMN IF NOT EXISTS reacciones JSONB DEFAULT '[]'`);
   logger.info('DB: columnas telegram_msg_id y reacciones verificadas.');
+
+  await db.query(`ALTER TABLE agentes ADD COLUMN IF NOT EXISTS foto_perfil VARCHAR(255)`);
+  logger.info('DB: columna foto_perfil en agentes verificada.');
 
   await db.query(`
     CREATE TABLE IF NOT EXISTS respuestas_rapidas (

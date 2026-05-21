@@ -36,6 +36,15 @@ const upload = multer({
   },
 });
 
+// Multer para avatares: solo imágenes, máximo 2 MB
+const avatarUpload = multer({
+  storage: multer.memoryStorage(),
+  limits:  { fileSize: 2 * 1024 * 1024 },
+  fileFilter(_req, file, cb) {
+    cb(null, ['image/jpeg', 'image/png', 'image/webp'].includes(file.mimetype));
+  },
+});
+
 // Proxy de archivos de Telegram.
 // Sin auth: los navegadores no envían headers JWT en peticiones <img>/<video>/<audio>.
 // Sirve el contenido directamente (sin redirect) para evitar ERR_BLOCKED_BY_RESPONSE.NotSameOrigin
@@ -84,6 +93,7 @@ router.post('/escribiendo',        verifyToken,              agenteController.es
 router.delete('/conversacion/:id', verifyToken, requireAdmin, agenteController.eliminarConversacion);
 router.get('/',                    verifyToken, requireAdmin, agenteController.listar);
 router.post('/',                   verifyToken, requireAdmin, agenteController.crear);
+router.patch('/:id/foto',          verifyToken, avatarUpload.single('foto'), agenteController.subirFoto);
 router.put('/:id',                 verifyToken, requireAdmin, agenteController.actualizar);
 router.delete('/:id',              verifyToken, requireAdmin, agenteController.eliminar);
 

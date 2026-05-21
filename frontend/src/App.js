@@ -175,6 +175,17 @@ function App() {
     return () => window.removeEventListener('keydown', onEsc);
   }, [setConversacionActiva]);
 
+  // Actualizar foto de perfil en sesión cuando el usuario edita su propio avatar
+  useEffect(() => {
+    const handler = (e) => {
+      if (user && e.detail.id === user.id) {
+        actualizarUsuario({ foto_perfil: e.detail.foto_perfil });
+      }
+    };
+    window.addEventListener('agente:foto-actualizada', handler);
+    return () => window.removeEventListener('agente:foto-actualizada', handler);
+  }, [user, actualizarUsuario]);
+
   // ─────────────────────────────────────────────
   // Total de no-leídos global (todas las empresas)
   // Se pasa al Sidebar para mostrar el badge de alerta en el menú de Chat.
