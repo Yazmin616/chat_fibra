@@ -22,7 +22,7 @@
  */
 
 import React from 'react';
-import { Search, MessageSquare, Clock } from 'lucide-react';
+import { Search, MessageSquare, Clock, CheckCircle, ClipboardList } from 'lucide-react';
 import { formatConvTime } from '../../utils/formatDate';
 
 /**
@@ -67,7 +67,7 @@ const ChatList = ({
           className={`tab-pill ${filtro === 'Todos los chats' ? 'active' : ''}`}
           onClick={() => setFiltro('Todos los chats')}
         >
-          Todos los chats
+          Pendientes
         </button>
         <button
           className={`tab-pill ${filtro === 'Mis Asignados' ? 'active' : ''}`}
@@ -75,52 +75,73 @@ const ChatList = ({
         >
           Mis Asignados
         </button>
+        <button
+          className={`tab-pill tab-pill--cerrados ${filtro === 'Cerrados' ? 'active' : ''}`}
+          onClick={() => setFiltro('Cerrados')}
+        >
+          Cerrados
+        </button>
       </div>
 
       <div className="conversations-list">
-        {conversaciones.map((conv) => (
-          <div
-            key={conv.id}
-            className={`conversation-item ${conversacionActiva?.id === conv.id ? 'active' : ''}`}
-            onClick={() => {
-              setConversacionActiva(conv);
-              cargarMensajes(conv.usuario_id, conv.id);
-            }}
-          >
-            <div className="avatar" style={{ position: 'relative', backgroundColor: '#6b7280' }}>
-              <MessageSquare size={20} color="#fff" />
-              {/* Burbuja de mensajes no leídos (Simulación por ahora) */}
-              {parseInt(conv.no_leidos) > 0 && <div className="unread-badge">{conv.no_leidos}</div>}
-            </div>
+        {conversaciones.map((conv) => {
+          const esCerrado  = conv.estado === 'cerrada' || conv.estado?.startsWith('ENCUESTA');
+          const esEncuesta = conv.estado?.startsWith('ENCUESTA');
 
-            <div className="conv-info">
-              <div className="conv-header">
-                <div style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
-                  <span className="client-name">{conv.nombre || conv.username || 'Cliente'}</span>
-                  <div style={{ display: 'flex', gap: '6px', marginTop: '2px' }}>
-                    <span className="area-label">{conv.departamento || 'Bot'}</span>
-                    <span className="company-badge">{conv.empresa_id}</span>
-                  </div>
-                </div>
-                <span className="time">
-                  {formatConvTime(conv.fecha_ultimo_mensaje)}
-                </span>
-              </div>
-              <div className="last-message">
-                {conv.estado === 'ESPERANDO_AGENTE' ? (
-                  <span style={{ color: '#ea4335', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                    <Clock size={12} /> EN ESPERA ({conv.departamento})
-                  </span>
-                ) : (
-                  <span>
-                    {conv.ultimo_remitente === 'agente' ? 'Tú: ' : ''}
-                    {conv.ultimo_mensaje || 'Sin mensajes'}
-                  </span>
+          return (
+            <div
+              key={conv.id}
+              className={`conversation-item${conversacionActiva?.id === conv.id ? ' active' : ''}${esCerrado ? ' cerrado' : ''}`}
+              onClick={() => {
+                setConversacionActiva(conv);
+                cargarMensajes(conv.usuario_id, conv.id);
+              }}
+            >
+              <div className="avatar" style={{ position: 'relative', backgroundColor: esCerrado ? '#9ca3af' : '#6b7280' }}>
+                {esCerrado
+                  ? <CheckCircle size={20} color="#fff" />
+                  : <MessageSquare size={20} color="#fff" />}
+                {!esCerrado && parseInt(conv.no_leidos) > 0 && (
+                  <div className="unread-badge">{conv.no_leidos}</div>
                 )}
               </div>
+
+              <div className="conv-info">
+                <div className="conv-header">
+                  <div style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
+                    <span className="client-name">{conv.nombre || conv.username || 'Cliente'}</span>
+                    <div style={{ display: 'flex', gap: '6px', marginTop: '2px' }}>
+                      <span className="area-label">{conv.departamento || 'Bot'}</span>
+                      <span className="company-badge">{conv.empresa_id}</span>
+                    </div>
+                  </div>
+                  <span className="time">{formatConvTime(conv.fecha_ultimo_mensaje)}</span>
+                </div>
+
+                <div className="last-message">
+                  {conv.estado === 'ESPERANDO_AGENTE' ? (
+                    <span style={{ color: '#ea4335', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <Clock size={12} /> EN ESPERA ({conv.departamento})
+                    </span>
+                  ) : esEncuesta ? (
+                    <span className="conv-estado-cerrado">
+                      <ClipboardList size={11} /> Encuesta pendiente
+                    </span>
+                  ) : esCerrado ? (
+                    <span className="conv-estado-cerrado">
+                      <CheckCircle size={11} /> {conv.ultimo_mensaje || 'Chat cerrado'}
+                    </span>
+                  ) : (
+                    <span>
+                      {conv.ultimo_remitente === 'agente' ? 'Tú: ' : ''}
+                      {conv.ultimo_mensaje || 'Sin mensajes'}
+                    </span>
+                  )}
+                </div>
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
 
         {conversaciones.length === 0 && (
           <div style={{ textAlign: 'center', padding: '40px', color: '#667781', fontSize: '13px' }}>

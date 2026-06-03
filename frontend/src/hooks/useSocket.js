@@ -110,12 +110,49 @@ export function useSocket({
     };
 
     // ─── conversacion_actualizada ────────────────────────────────────
-    const handleActualizacion = () => {
+    // El payload trae { id, estado, es_humano, empresa_id }.
+    // 1. Actualización inmediata en memoria (sin esperar el fetch del server)
+    //    → el badge de estado y el panel DATOS DEL FLUJO cambian al instante.
+    // 2. Refetch completo para asegurar consistencia total del servidor.
+    // 3. Después del refetch, sincronizar conversacionActiva con el estado fresco.
+    const handleActualizacion = (payload) => {
+      const convId = payload?.id ? Number(payload.id) : null;
+
+      // 1. Actualizar en memoria el estado de la conversación afectada
+      if (convId && payload?.estado) {
+        setConversaciones(prev => prev.map(c =>
+          Number(c.id) === convId
+            ? { ...c, estado: payload.estado, es_humano: payload.es_humano ?? c.es_humano }
+            : c
+        ));
+
+        // Si es la conversación abierta, actualizar también conversacionActiva
+        const convActiva = convActivaRef.current;
+        if (convActiva && Number(convActiva.id) === convId) {
+          setConversacionActiva(prev =>
+            prev ? { ...prev, estado: payload.estado, es_humano: payload.es_humano ?? prev.es_humano } : prev
+          );
+        }
+      }
+
+      // 2. Refetch completo + sincronizar conversacionActiva con datos del server
       const uid = userRef.current?.id;
       if (uid) {
         apiService.getConversaciones('todas', uid)
-          .then(data => setConversaciones(Array.isArray(data) ? data : []));
+          .then(fresh => {
+            if (!Array.isArray(fresh)) return;
+            setConversaciones(fresh);
+
+            // 3. Actualizar conversacionActiva con los datos frescos del server
+            const convActiva = convActivaRef.current;
+            if (convActiva) {
+              const fresca = fresh.find(c => Number(c.id) === Number(convActiva.id));
+              if (fresca) setConversacionActiva(fresca);
+            }
+          })
+          .catch(() => {});
       }
+
       window.dispatchEvent(new CustomEvent('contactos:actualizar'));
     };
 

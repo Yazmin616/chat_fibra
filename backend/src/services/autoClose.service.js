@@ -157,6 +157,11 @@ function iniciarAutoCierre(io) {
         try {
           const tipo = conv.estado === ESTADOS.ENCUESTA_AGENTE ? 'agente' : 'bot';
 
+          // Despedida amable al cliente antes de cerrar
+          const despedida = '¡Gracias por comunicarte con nosotros! 😊 Esperamos haber podido ayudarte. Estaremos atentos a cualquier consulta futura. ¡Hasta pronto! 👋';
+          await enviarMensaje(conv.canal || 'telegram', conv.external_id, despedida, conv.empresa_id);
+          await mensajeRepo.create(conv.id, 'bot', despedida);
+
           await calificacionRepo.create(conv.id, 'NoRespondida', '', tipo);
           await db.query(
             'UPDATE conversaciones SET estado=$1, updated_at=NOW() WHERE id=$2',
@@ -169,6 +174,13 @@ function iniciarAutoCierre(io) {
           logger.info(`[ENCUESTA TIMEOUT] Conv ${conv.id} cerrada sin evaluación (${tipo}) — ${TIMEOUT_ENCUESTA_MIN} min sin respuesta.`);
 
           if (io) {
+            emitToConv(io, conv.departamento, 'nuevo_mensaje', {
+              conversacion_id: conv.id,
+              usuario_id:      conv.usuario_id,
+              empresa_id:      conv.empresa_id,
+              mensaje:         despedida,
+              remitente:       'bot',
+            });
             emitToConv(io, conv.departamento, 'nuevo_mensaje', {
               conversacion_id: conv.id,
               usuario_id:      conv.usuario_id,

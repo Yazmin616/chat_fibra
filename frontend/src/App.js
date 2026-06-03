@@ -220,17 +220,26 @@ function App() {
     if (empresaId !== 'todas' && c.empresa_id !== empresaId) return false;
 
     // 4. Filtro de pestaña
+    const esCerrado = c.estado === 'cerrada' || c.estado?.startsWith('ENCUESTA');
+
     if (filtro === 'Todos los chats') {
+      // Los cerrados van a su propio apartado — nunca aparecen aquí
+      if (esCerrado) return false;
       if (user?.rol === 'admin') return true;
-      const sinAgente   = !c.agente_id;
-      const estaCerrado = c.estado === 'cerrada' || c.estado?.startsWith('ENCUESTA');
-      return sinAgente || estaCerrado;
+      // Asesor: conversaciones sin agente asignado (en espera de atención)
+      return !c.agente_id;
     }
 
     if (filtro === 'Mis Asignados') {
-      return Number(c.agente_id) === Number(user?.id) &&
-             c.estado !== 'cerrada' &&
-             !c.estado?.startsWith('ENCUESTA');
+      if (esCerrado) return false;
+      return Number(c.agente_id) === Number(user?.id);
+    }
+
+    if (filtro === 'Cerrados') {
+      if (!esCerrado) return false;
+      if (user?.rol === 'admin') return true;
+      // Asesor: solo los que él atendió
+      return Number(c.agente_id) === Number(user?.id);
     }
 
     return false;

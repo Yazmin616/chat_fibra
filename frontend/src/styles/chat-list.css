@@ -59,6 +59,12 @@
   color: white;
 }
 
+/* Pestaña Cerrados — color neutro para diferenciarla de las activas */
+.tab-pill--cerrados.active {
+  background: #6b7280;
+  color: white;
+}
+
 /* Lista de conversaciones */
 .conversations-list {
   flex: 1;
@@ -196,6 +202,29 @@
   background: #f3e5f5;
   color: #7b1fa2;
   border: 1px solid #7b1fa2;
+}
+
+/* Conversación cerrada — aspecto atenuado */
+.conversation-item.cerrado {
+  opacity: 0.72;
+}
+
+.conversation-item.cerrado:hover {
+  opacity: 1;
+}
+
+.conversation-item.cerrado .client-name {
+  color: #54656f;
+}
+
+/* Indicador de estado en chats cerrados */
+.conv-estado-cerrado {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: #9ca3af;
+  font-size: 12px;
+  font-style: italic;
 }
 
 /* ═══════════════════════════════════
