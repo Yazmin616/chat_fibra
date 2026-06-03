@@ -62,9 +62,10 @@ async function getKpis(agente_id, empresa_id, filtro_agente_id, filtro_area) {
     // Distribución CSAT — agente (para el donut) + bot (conversaciones sin atender)
     db.query(`
       SELECT
-        COUNT(*) FILTER (WHERE cal.tipo='agente' AND cal.puntuacion='Bien')    AS bien,
-        COUNT(*) FILTER (WHERE cal.tipo='agente' AND cal.puntuacion='Regular') AS regular,
-        COUNT(*) FILTER (WHERE cal.tipo='agente' AND cal.puntuacion='Mal')     AS mal,
+        COUNT(*) FILTER (WHERE cal.tipo='agente' AND cal.puntuacion='Bien')          AS bien,
+        COUNT(*) FILTER (WHERE cal.tipo='agente' AND cal.puntuacion='Regular')       AS regular,
+        COUNT(*) FILTER (WHERE cal.tipo='agente' AND cal.puntuacion='Mal')           AS mal,
+        COUNT(*) FILTER (WHERE cal.tipo='agente' AND cal.puntuacion='NoRespondida')  AS no_evaluada,
         COUNT(*) FILTER (WHERE cal.tipo='agente') AS total,
         COUNT(*) FILTER (WHERE cal.tipo='bot')    AS sin_atencion
       FROM calificaciones cal
@@ -109,7 +110,14 @@ async function getKpis(agente_id, empresa_id, filtro_agente_id, filtro_area) {
         COUNT(c.id) AS total_chats,
         COUNT(c.id) FILTER (WHERE (c.updated_at AT TIME ZONE 'America/Mexico_City')::date >= (NOW() AT TIME ZONE 'America/Mexico_City')::date - 6) AS esta_semana,
         COUNT(cal.id) AS total_calificaciones,
-        ROUND(COUNT(cal.id) FILTER (WHERE cal.puntuacion='Bien') * 100.0 / NULLIF(COUNT(cal.id),0), 0) AS satisfaccion_pct
+        ROUND(
+          (
+            COUNT(cal.id) FILTER (WHERE cal.puntuacion='Bien')    * 3 +
+            COUNT(cal.id) FILTER (WHERE cal.puntuacion='Regular') * 2 +
+            COUNT(cal.id) FILTER (WHERE cal.puntuacion='Mal')     * 1
+          ) * 100.0 / NULLIF(COUNT(cal.id) FILTER (WHERE cal.puntuacion IN ('Bien','Regular','Mal')) * 3, 0),
+          0
+        ) AS satisfaccion_pct
       FROM agentes a
       LEFT JOIN conversaciones c ON c.agente_id=a.id ${ef.joinWhere}
       LEFT JOIN calificaciones cal ON cal.conversacion_id=c.id AND cal.tipo='agente'
@@ -225,11 +233,19 @@ async function getAgenteStats(id) {
         COUNT(DISTINCT c.usuario_id) AS clientes_unicos,
         COUNT(c.id) FILTER (WHERE (c.updated_at AT TIME ZONE 'America/Mexico_City')::date >= (NOW() AT TIME ZONE 'America/Mexico_City')::date - 6)  AS esta_semana,
         COUNT(c.id) FILTER (WHERE (c.updated_at AT TIME ZONE 'America/Mexico_City')::date >= (NOW() AT TIME ZONE 'America/Mexico_City')::date - 29) AS este_mes,
-        COUNT(cal.id) FILTER (WHERE cal.puntuacion='Bien')    AS bien,
-        COUNT(cal.id) FILTER (WHERE cal.puntuacion='Regular') AS regular,
-        COUNT(cal.id) FILTER (WHERE cal.puntuacion='Mal')     AS mal,
-        COUNT(cal.id) AS total_calificaciones,
-        ROUND(COUNT(cal.id) FILTER (WHERE cal.puntuacion='Bien') * 100.0 / NULLIF(COUNT(cal.id),0), 0) AS satisfaccion_pct
+        COUNT(cal.id) FILTER (WHERE cal.puntuacion='Bien')          AS bien,
+        COUNT(cal.id) FILTER (WHERE cal.puntuacion='Regular')       AS regular,
+        COUNT(cal.id) FILTER (WHERE cal.puntuacion='Mal')           AS mal,
+        COUNT(cal.id) FILTER (WHERE cal.puntuacion='NoRespondida')  AS no_evaluada,
+        COUNT(cal.id) FILTER (WHERE cal.puntuacion IN ('Bien','Regular','Mal')) AS total_calificaciones,
+        ROUND(
+          (
+            COUNT(cal.id) FILTER (WHERE cal.puntuacion='Bien')    * 3 +
+            COUNT(cal.id) FILTER (WHERE cal.puntuacion='Regular') * 2 +
+            COUNT(cal.id) FILTER (WHERE cal.puntuacion='Mal')     * 1
+          ) * 100.0 / NULLIF(COUNT(cal.id) FILTER (WHERE cal.puntuacion IN ('Bien','Regular','Mal')) * 3, 0),
+          0
+        ) AS satisfaccion_pct
       FROM agentes a
       LEFT JOIN conversaciones c   ON c.agente_id=a.id
       LEFT JOIN calificaciones cal ON cal.conversacion_id=c.id AND cal.tipo='agente'
@@ -242,7 +258,14 @@ async function getAgenteStats(id) {
         c.empresa_id,
         COUNT(c.id)                  AS chats,
         COUNT(DISTINCT c.usuario_id) AS clientes,
-        ROUND(COUNT(cal.id) FILTER (WHERE cal.puntuacion='Bien') * 100.0 / NULLIF(COUNT(cal.id),0), 0) AS satisfaccion_pct
+        ROUND(
+          (
+            COUNT(cal.id) FILTER (WHERE cal.puntuacion='Bien')    * 3 +
+            COUNT(cal.id) FILTER (WHERE cal.puntuacion='Regular') * 2 +
+            COUNT(cal.id) FILTER (WHERE cal.puntuacion='Mal')     * 1
+          ) * 100.0 / NULLIF(COUNT(cal.id) FILTER (WHERE cal.puntuacion IN ('Bien','Regular','Mal')) * 3, 0),
+          0
+        ) AS satisfaccion_pct
       FROM conversaciones c
       LEFT JOIN calificaciones cal ON cal.conversacion_id=c.id AND cal.tipo='agente'
       WHERE c.agente_id=$1
@@ -254,7 +277,14 @@ async function getAgenteStats(id) {
       SELECT
         COALESCE(c.departamento, 'Sin área') AS area,
         COUNT(c.id) AS chats,
-        ROUND(COUNT(cal.id) FILTER (WHERE cal.puntuacion='Bien') * 100.0 / NULLIF(COUNT(cal.id),0), 0) AS satisfaccion_pct
+        ROUND(
+          (
+            COUNT(cal.id) FILTER (WHERE cal.puntuacion='Bien')    * 3 +
+            COUNT(cal.id) FILTER (WHERE cal.puntuacion='Regular') * 2 +
+            COUNT(cal.id) FILTER (WHERE cal.puntuacion='Mal')     * 1
+          ) * 100.0 / NULLIF(COUNT(cal.id) FILTER (WHERE cal.puntuacion IN ('Bien','Regular','Mal')) * 3, 0),
+          0
+        ) AS satisfaccion_pct
       FROM conversaciones c
       LEFT JOIN calificaciones cal ON cal.conversacion_id=c.id AND cal.tipo='agente'
       WHERE c.agente_id=$1

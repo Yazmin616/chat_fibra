@@ -81,4 +81,15 @@ const findAll = () =>
 const updateContacto = (id, nombre, telefono) =>
   db.query('UPDATE usuarios SET nombre=$1, telefono=$2 WHERE id=$3', [nombre, telefono, id]);
 
-module.exports = { findByCanal, create, update, remove, findAll, updateContacto };
+/**
+ * Guarda o actualiza los datos WISP del cliente (nombre + servicios).
+ * Se llama cuando el cliente se identifica exitosamente para que no tenga
+ * que volver a hacerlo en conversaciones futuras.
+ * @param {number} id       - PK del usuario.
+ * @param {object} wispData - Objeto { nombre, servicios } devuelto por el mock/API WISP.
+ * @returns {Promise<import('pg').QueryResult>}
+ */
+const updateWispData = (id, wispData) =>
+  db.query('UPDATE usuarios SET wisp_data=$1 WHERE id=$2', [JSON.stringify(wispData), id]);
+
+module.exports = { findByCanal, create, update, remove, findAll, updateContacto, updateWispData };

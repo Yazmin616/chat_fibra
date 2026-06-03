@@ -106,7 +106,7 @@ const TopAgentesTable = ({ agentes }) => {
         <span>#</span>
         <span>Asesor</span>
         <span>Chats</span>
-        <span>Satisfacción</span>
+        <span>Desempeño</span>
       </div>
 
       {/* Ranking general */}

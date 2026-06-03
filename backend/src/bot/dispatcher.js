@@ -5,21 +5,44 @@
  * y crear el archivo de estado correspondiente.
  */
 
-const abiertaState      = require('./states/abierta.state');
-const seleccionEmpresa  = require('./states/seleccionEmpresa.state');
-const seleccionArea     = require('./states/seleccionArea.state');
-const esperandoAgente   = require('./states/esperandoAgente.state');
-const encuestaState     = require('./states/encuesta.state');
+const abiertaState        = require('./states/abierta.state');
+const seleccionEmpresa    = require('./states/seleccionEmpresa.state');
+const menuTipoCliente     = require('./states/menuTipoCliente.state');
+const identificacionDatos = require('./states/identificacionDatos.state');
+const confirmarCuenta     = require('./states/confirmarCuenta.state');
+const seleccionServicio   = require('./states/seleccionServicio.state');
+const menuAutoservicio    = require('./states/menuAutoservicio.state');
+const otraConsulta        = require('./states/otraConsulta.state');
+const seleccionArea       = require('./states/seleccionArea.state');
+const esperandoAgente     = require('./states/esperandoAgente.state');
+const encuestaState       = require('./states/encuesta.state');
+
+const { ESTADOS } = require('./constants');
 
 /** @type {Record<string, { handle: Function }>} */
 const HANDLERS = {
-  inicio:            abiertaState,
-  abierta:           abiertaState,
-  SELECCION_EMPRESA: seleccionEmpresa,
-  SELECCION_AREA:    seleccionArea,
-  ESPERANDO_AGENTE:  esperandoAgente,
-  ENCUESTA_AGENTE:   encuestaState,
-  ENCUESTA_BOT:      encuestaState,
+  // Estados de inicio
+  [ESTADOS.INICIO]:               abiertaState,
+  [ESTADOS.ABIERTA]:              abiertaState,
+
+  // Flujo de identificación
+  [ESTADOS.SELECCION_EMPRESA]:    seleccionEmpresa,
+  [ESTADOS.MENU_TIPO_CLIENTE]:    menuTipoCliente,
+  [ESTADOS.IDENTIFICACION_DATOS]: identificacionDatos,
+  [ESTADOS.CONFIRMAR_CUENTA]:     confirmarCuenta,
+  [ESTADOS.SELECCION_SERVICIO]:   seleccionServicio,
+
+  // Autoservicio
+  [ESTADOS.MENU_AUTOSERVICIO]:    menuAutoservicio,
+  [ESTADOS.OTRA_CONSULTA]:        otraConsulta,
+
+  // Atención humana
+  [ESTADOS.SELECCION_AREA]:       seleccionArea,
+  [ESTADOS.ESPERANDO_AGENTE]:     esperandoAgente,
+
+  // Encuesta y cierre
+  [ESTADOS.ENCUESTA_AGENTE]:      encuestaState,
+  [ESTADOS.ENCUESTA_BOT]:         encuestaState,
 };
 
 /**

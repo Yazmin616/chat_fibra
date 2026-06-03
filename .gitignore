@@ -1,49 +1,60 @@
-# Dependencias
+# ── Dependencias ─────────────────────────────────────────────────────────────
 node_modules/
 .pnp
 .pnp.js
 
-# Producción / Build
+# ── Build / Producción ────────────────────────────────────────────────────────
 /frontend/build
 /backend/dist
 
-# Variables de entorno (Sensible)
+# ── Variables de entorno (NUNCA subir — contienen tokens y contraseñas) ───────
 .env
 .env.local
 .env.development.local
 .env.test.local
 .env.production.local
-.env.example
+# Env específicos de frontend (pueden contener URLs de producción)
+.env.development
+.env.production
 
-# Logs
+# ── Archivos subidos por usuarios (avatares, media, audio) ────────────────────
+backend/uploads/
+
+# ── Logs ─────────────────────────────────────────────────────────────────────
+*.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+# Logs de PM2 (se generan en tiempo de ejecución en el servidor)
+backend/logs/
 
-# IDEs
+# ── IDEs y editores ───────────────────────────────────────────────────────────
 .vscode/
 .idea/
+*.swp
+*.swo
 
-# Claude Code (memoria y configuración local del agente IA)
+# ── Claude Code (memoria y configuración local del agente IA) ────────────────
 .claude/
 
-# Sistema
+# ── Sistema operativo ─────────────────────────────────────────────────────────
 Thumbs.db
 .DS_Store
+desktop.ini
 
-# Scripts de base de datos temporales / ad-hoc
-*.sql
-!backend/src/config/migrations/*.sql
+# ── Base de datos — solo ignorar backups y scripts ad-hoc ────────────────────
+# Las migraciones en backend/src/config/migrations/ SÍ se suben
+database_backup.sql
 migrate_*.js
 debug_*.js
 inspect_*.js
 fix_*.js
 
-# Logs de PM2 (se generan en tiempo de ejecución)
-backend/logs/
-
+# ── Documentación interna / archivos de gestión ──────────────────────────────
 guia-despliegue-produccion.pdf
 PENDIENTES.md
 
-.env.development
-.env.production
+# ── Otros ────────────────────────────────────────────────────────────────────
+*.tgz
+.npm
+.eslintcache

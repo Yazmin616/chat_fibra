@@ -31,8 +31,10 @@ export const API_URL = process.env.NODE_ENV === 'production'
 export const resolveMedia = (url) => {
   if (!url) return null;
   if (url.startsWith('tg://')) {
-    const withoutScheme = url.slice(5);           // quita "tg://"
-    return `${API_URL}/agente/media/${withoutScheme}`;
+    return `${API_URL}/agente/media/${url.slice(5)}`;
+  }
+  if (url.startsWith('wa://')) {
+    return `${API_URL}/agente/wa-media/${url.slice(5)}`;
   }
   return url;
 };
@@ -110,11 +112,11 @@ export const apiService = {
    * @param {string} empresa_id  - Empresa del bot a través del cual enviar la acción.
    * @returns {Promise<{ok: boolean}>}
    */
-  async sendTyping(external_id, empresa_id, canal = 'telegram') {
+  async sendTyping(external_id, empresa_id, canal = 'telegram', conversacion_id = null) {
     const res = await fetch(`${API_URL}/agente/escribiendo`, {
       method:  'POST',
       headers: _authHeaders(),
-      body:    JSON.stringify({ external_id, empresa_id, canal }),
+      body:    JSON.stringify({ external_id, empresa_id, canal, conversacion_id }),
     });
     return _parseJson(res);
   },

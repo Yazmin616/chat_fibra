@@ -8,6 +8,7 @@
  *   GET  /ti/backup          → descargar respaldo JSON
  *   GET  /ti/purga-preview   → contar mensajes elegibles para purga
  *   POST /ti/purgar          → ejecutar purga
+ *   POST /ti/limpiar-bd      → limpiar todas las tablas de datos (TRUNCATE + RESTART IDENTITY)
  *   GET  /ti/logs            → últimos logs del servidor
  */
 
@@ -23,6 +24,7 @@ router.post('/mantenimiento', ...auth, tiController.setMantenimiento);
 router.get ('/backup',        ...auth, tiController.descargarBackup);
 router.get ('/purga-preview', ...auth, tiController.previewPurga);
 router.post('/purgar',        ...auth, tiController.purgar);
+router.post('/limpiar-bd',    ...auth, tiController.limpiarBD);
 router.get ('/logs',          ...auth, tiController.obtenerLogs);
 
 module.exports = router;

@@ -57,9 +57,10 @@ const liberarSchema = Joi.object({
 });
 
 const escribiendoSchema = Joi.object({
-  external_id: Joi.alternatives().try(Joi.string(), Joi.number()).required(),
-  empresa_id:  Joi.string().required(),
-  canal:       Joi.string().valid('telegram','whatsapp','facebook','instagram').default('telegram'),
+  external_id:      Joi.alternatives().try(Joi.string(), Joi.number()).required(),
+  empresa_id:       Joi.string().required(),
+  canal:            Joi.string().valid('telegram','whatsapp','facebook','instagram').default('telegram'),
+  conversacion_id:  Joi.number().integer().positive().optional(),
 });
 
 const enviarMediaSchema = Joi.object({
@@ -208,7 +209,7 @@ const escribiendo = async (req, res, next) => {
   try {
     const { error, value } = escribiendoSchema.validate(req.body, { abortEarly: false });
     if (error) return res.status(400).json({ error: error.details.map(d => d.message).join(', ') });
-    await enviarEscribiendo(value.canal, value.external_id, value.empresa_id);
+    await enviarEscribiendo(value.canal, value.external_id, value.empresa_id, value.conversacion_id);
     res.json({ ok: true });
   } catch (err) { next(err); }
 };

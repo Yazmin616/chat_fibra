@@ -9,6 +9,7 @@
 
 const calificacionRepo   = require('../../repositories/calificacion.repository');
 const { parsePuntuacion } = require('../parsers');
+const { ESTADOS }         = require('../constants');
 
 const RESPUESTAS = {
   Bien:       '¡Gracias por tu calificación! 😊 Nos alegra haber podido ayudarte. ¡Que tengas un excelente día!',
@@ -40,7 +41,7 @@ async function handle(mensaje, conversacion, _usuario, io) {
 
   return {
     respuesta:   RESPUESTAS[puntuacion],
-    nuevoEstado: 'cerrada',
+    nuevoEstado: ESTADOS.CERRADA,
   };
 }
 

@@ -22,9 +22,10 @@ const cors        = require('cors');
 const helmet      = require('helmet');
 const http        = require('http');
 const { Server }  = require('socket.io');
-const db          = require('./config/db');
 
+const rateLimit            = require('express-rate-limit');
 const logger               = require('./config/logger');
+const { runMigrations }    = require('./config/runMigrations');
 const { iniciarTelegram }  = require('./adapters/telegram');
 const { iniciarMeta }      = require('./adapters/meta');
 const { iniciarAutoCierre } = require('./services/autoClose.service');
@@ -42,12 +43,22 @@ const tiRoutes             = require('./routes/ti.routes');
 const app    = express();
 const server = http.createServer(app);
 
+// Confiar en el primer proxy (ngrok en dev, nginx en producción).
+// Necesario para que express-rate-limit lea X-Forwarded-For correctamente.
+app.set('trust proxy', 1);
+
 // Acepta localhost y cualquier IP de red privada (192.168.x.x, 10.x.x.x, 172.16-31.x.x)
 const LOCAL_ORIGIN = /^https?:\/\/(localhost|127\.0\.0\.1|192\.168\.\d{1,3}\.\d{1,3}|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3})(:\d+)?$/;
 
+const FRONTEND_URL = process.env.FRONTEND_URL || '';
+
 const corsOrigin = (origin, callback) => {
   // Sin origin: peticiones del mismo servidor o herramientas como curl
-  if (!origin || LOCAL_ORIGIN.test(origin)) return callback(null, true);
+  if (!origin) return callback(null, true);
+  // Redes locales siempre permitidas
+  if (LOCAL_ORIGIN.test(origin)) return callback(null, true);
+  // URL de frontend configurada en .env (producción/staging)
+  if (FRONTEND_URL && origin === FRONTEND_URL) return callback(null, true);
   callback(new Error(`Origen no permitido: ${origin}`));
 };
 
@@ -60,15 +71,44 @@ const io = new Server(server, {
   },
 });
 
+// ── Rate limiters ────────────────────────────────────────────────────────────
+// Se definen antes de cualquier app.use() para poder usarlos en el orden correcto.
+
+// API REST: protege contra brute-force y abuso general.
+const apiLimiter = rateLimit({
+  windowMs:        60 * 1000,
+  max:             200,
+  standardHeaders: true,
+  legacyHeaders:   false,
+  message:         { error: 'Demasiadas solicitudes. Intenta de nuevo en un minuto.' },
+});
+
+// Webhooks (Telegram, Meta): más permisivo porque el tráfico viene de sus servidores.
+// La validación de firma es la protección principal; este limiter es defensa adicional.
+const webhookLimiter = rateLimit({
+  windowMs:        60 * 1000,
+  max:             600,
+  standardHeaders: true,
+  legacyHeaders:   false,
+  message:         { error: 'Límite de webhook excedido.' },
+});
+
+// ── Middleware global ─────────────────────────────────────────────────────────
+
 // Helmet: cabeceras HTTP de seguridad (X-Frame-Options, X-Content-Type, HSTS, etc.)
 app.use(helmet());
 
-// CORS restringido a redes locales
+// CORS restringido a redes locales + FRONTEND_URL del .env
 app.use(cors({
   origin:      corsOrigin,
   methods:     ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
   credentials: true,
 }));
+
+// Webhook de Meta: rate limiting + raw body para validar HMAC-SHA256.
+// El raw body debe ir ANTES del json() global para tener precedencia en esa ruta.
+app.use('/meta/webhook', webhookLimiter);
+app.use('/meta/webhook', express.raw({ type: 'application/json' }));
 
 app.use(express.json());
 
@@ -112,13 +152,15 @@ io.on('connection', (socket) => {
   socket.on('disconnect', () => logger.info('Cliente desconectado', { socketId: socket.id }));
 });
 
-// Rutas de la API
-app.use('/auth',           authRoutes);
+// Rutas de la API (con rate limiting por IP)
+app.use('/auth',           apiLimiter, authRoutes);
 app.use('/ti',             tiRoutes);
-app.use('/agente',         agenteRoutes);
-app.use('/conversaciones', conversacionesRoutes);
-app.use('/configuracion',  configuracionRoutes);
-app.use('/contactos',      contactosRoutes);
+app.use('/agente',         apiLimiter, agenteRoutes);
+app.use('/conversaciones', apiLimiter, conversacionesRoutes);
+app.use('/configuracion',  apiLimiter, configuracionRoutes);
+app.use('/contactos',      apiLimiter, contactosRoutes);
+// Los webhooks de Telegram usan el webhookLimiter; Meta se registra en iniciarMeta()
+app.use('/telegram',       webhookLimiter);
 
 // Health checks
 app.get('/',       (req, res) => res.send('API funcionando'));
@@ -127,57 +169,17 @@ app.get('/health', (req, res) => res.json({ status: 'ok' }));
 // Middleware global de errores (debe ir DESPUÉS de todas las rutas)
 app.use(errorHandler);
 
-// Crear tabla de infracciones si no existe
-async function initDb() {
-  await db.query(`
-    CREATE TABLE IF NOT EXISTS infracciones (
-      id              SERIAL PRIMARY KEY,
-      conversacion_id INT REFERENCES conversaciones(id) ON DELETE CASCADE,
-      empresa_id      VARCHAR NOT NULL,
-      departamento    VARCHAR,
-      cliente_nombre  VARCHAR,
-      tiempo_espera   INT NOT NULL,
-      tipo            VARCHAR NOT NULL DEFAULT 'area',
-      agente_id       INT REFERENCES agentes(id) ON DELETE SET NULL,
-      agente_nombre   VARCHAR,
-      created_at      TIMESTAMP DEFAULT NOW()
-    )
-  `);
-  // Agregar columnas nuevas si la tabla ya existía sin ellas
-  await db.query(`ALTER TABLE infracciones ADD COLUMN IF NOT EXISTS tipo          VARCHAR NOT NULL DEFAULT 'area'`);
-  await db.query(`ALTER TABLE infracciones ADD COLUMN IF NOT EXISTS agente_id     INT REFERENCES agentes(id) ON DELETE SET NULL`);
-  await db.query(`ALTER TABLE infracciones ADD COLUMN IF NOT EXISTS agente_nombre VARCHAR`);
-  logger.info('DB: tabla infracciones verificada.');
-
-  await db.query(`ALTER TABLE mensajes ADD COLUMN IF NOT EXISTS telegram_msg_id BIGINT`);
-  await db.query(`ALTER TABLE mensajes ADD COLUMN IF NOT EXISTS reacciones JSONB DEFAULT '[]'`);
-  logger.info('DB: columnas telegram_msg_id y reacciones verificadas.');
-
-  await db.query(`ALTER TABLE agentes ADD COLUMN IF NOT EXISTS foto_perfil VARCHAR(255)`);
-  logger.info('DB: columna foto_perfil en agentes verificada.');
-
-  await db.query(`
-    CREATE TABLE IF NOT EXISTS respuestas_rapidas (
-      id         SERIAL PRIMARY KEY,
-      agente_id  INT NOT NULL REFERENCES agentes(id) ON DELETE CASCADE,
-      titulo     VARCHAR(100) NOT NULL,
-      contenido  TEXT NOT NULL,
-      created_at TIMESTAMP DEFAULT NOW()
-    )
-  `);
-  logger.info('DB: tabla respuestas_rapidas verificada.');
-}
-
-// Arrancar servidor
+// Arrancar servidor — las migraciones se aplican antes de abrir el puerto.
+// Para correr migraciones manualmente: npm run migrate
 const PORT = process.env.PORT || 3009;
-initDb()
+runMigrations()
   .then(() => server.listen(PORT, () => {
     logger.info(`Servidor corriendo en puerto ${PORT}`, { env: process.env.NODE_ENV || 'development' });
-    iniciarTelegram(io);   // Escuchar mensajes de Telegram
-    iniciarMeta(app, io);  // Registrar webhook de WhatsApp / Facebook / Instagram
-    iniciarAutoCierre(io); // Timer de cierre por inactividad
+    iniciarTelegram(io, app); // Escuchar mensajes de Telegram (polling o webhook según .env)
+    iniciarMeta(app, io);     // Registrar webhook de WhatsApp / Facebook / Instagram
+    iniciarAutoCierre(io);    // Timer de cierre por inactividad
   }))
   .catch(err => {
-    logger.error('Error al inicializar DB:', { error: err.message });
+    logger.error('Error al aplicar migraciones:', { error: err.message });
     process.exit(1);
   });

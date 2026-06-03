@@ -12,7 +12,16 @@ export function useSocket({
   setClienteEscribiendo,
   notify
 }) {
-  const typingTimerRef = useRef(null);
+  const typingTimerRef    = useRef(null);
+  const disconnectedAtRef = useRef(null);
+  const notifyRef         = useRef(notify);   // evita stale closure — notify cambia cada render
+  const userRef           = useRef(user);
+  const empresaIdRef      = useRef(empresaId);
+
+  // Mantener refs sincronizados con los props más recientes
+  useEffect(() => { notifyRef.current   = notify;    }, [notify]);
+  useEffect(() => { userRef.current     = user;      }, [user]);
+  useEffect(() => { empresaIdRef.current = empresaId; }, [empresaId]);
 
   // Ref que siempre apunta a la conversación abierta sin necesidad de recrear
   // los handlers. Esto evita el ciclo teardown/setup cada vez que el usuario
@@ -31,20 +40,42 @@ export function useSocket({
     // empresas al mismo tiempo; mezclarlas sería incorrecto.
     const handleNuevoMensaje = (data) => {
       const convActiva  = convActivaRef.current;
-      const mismoChatId = Number(data.conversacion_id) === Number(convActiva?.id);
+      const convId      = Number(data.conversacion_id);
+      const mismoChatId = convId === Number(convActiva?.id);
 
       if (data.remitente === 'user') {
-        notify('Nuevo mensaje', data.mensaje);
+        notifyRef.current('Nuevo mensaje', data.mensaje);
       }
 
-      // Actualizar contador de no-leídos solo en la conversación exacta
-      setConversaciones(prev => prev.map(c => {
-        if (Number(c.id) !== Number(data.conversacion_id)) return c;
-        if (data.remitente !== 'user') return c;
-        // Si ese chat está abierto, no incrementar el contador
-        if (mismoChatId) return c;
-        return { ...c, no_leidos: String(parseInt(c.no_leidos || 0) + 1) };
-      }));
+      // Actualizar la lista: preview, timestamp, badge de no-leídos y mover al tope.
+      // Si idx === -1 (conversación nueva) se dispara un refetch desde server
+      // para incluirla — no se devuelve prev sin más porque eso es mismo-referencia
+      // y React no re-renderiza, dejando la UI congelada.
+      setConversaciones(prev => {
+        const idx = prev.findIndex(c => Number(c.id) === convId);
+
+        if (idx === -1) {
+          // Conversación nueva: no está en la lista todavía.
+          // conversacion_actualizada (emitido desde backend) disparará el refetch completo.
+          // Devolvemos un NUEVO array vacío de diferente referencia para forzar el render
+          // y que el estado quede preparado para recibir el refetch.
+          return prev.length === 0 ? [] : prev;
+        }
+
+        const conv    = prev[idx];
+        const updated = {
+          ...conv,
+          ultimo_mensaje:       data.mensaje,
+          ultimo_remitente:     data.remitente,
+          fecha_ultimo_mensaje: data.fecha || new Date().toISOString(),
+          no_leidos: (data.remitente === 'user' && !mismoChatId)
+            ? String(parseInt(conv.no_leidos || 0) + 1)
+            : conv.no_leidos,
+        };
+
+        // Quitar de posición actual e insertar al principio
+        return [updated, ...prev.filter((_, i) => i !== idx)];
+      });
 
       // Añadir el mensaje a la ventana solo si es la conversación abierta
       if (!convActiva || !mismoChatId) return;
@@ -80,8 +111,11 @@ export function useSocket({
 
     // ─── conversacion_actualizada ────────────────────────────────────
     const handleActualizacion = () => {
-      apiService.getConversaciones('todas', user.id)
-        .then(data => setConversaciones(Array.isArray(data) ? data : []));
+      const uid = userRef.current?.id;
+      if (uid) {
+        apiService.getConversaciones('todas', uid)
+          .then(data => setConversaciones(Array.isArray(data) ? data : []));
+      }
       window.dispatchEvent(new CustomEvent('contactos:actualizar'));
     };
 
@@ -143,6 +177,34 @@ export function useSocket({
       typingTimerRef.current = setTimeout(() => setClienteEscribiendo(false), 4000);
     };
 
+    // ─── resync tras reconexión ──────────────────────────────────────
+    // Al reconectar se re-solicitan conversaciones y mensajes del chat abierto
+    // para recuperar eventos perdidos durante la desconexión.
+    // La dedup de mensajes usa mensaje_id (ya presente en el payload desde el backend).
+    const handleDisconnect = () => {
+      disconnectedAtRef.current = Date.now();
+    };
+
+    const handleConnect = () => {
+      if (!disconnectedAtRef.current) return; // conexión inicial, no una reconexión
+      disconnectedAtRef.current = null;
+
+      // Usar refs para tener siempre el valor más reciente (no stale closure)
+      const uid = userRef.current?.id;
+      if (!uid) return;
+
+      apiService.getConversaciones(empresaIdRef.current || 'todas', uid)
+        .then(data => setConversaciones(Array.isArray(data) ? data : []))
+        .catch(() => {});
+
+      const conv = convActivaRef.current;
+      if (conv) {
+        apiService.getMensajes(conv.usuario_id, uid, conv.id)
+          .then(msgs => { if (Array.isArray(msgs)) setMensajes(msgs); })
+          .catch(() => {});
+      }
+    };
+
     socket.on('nuevo_mensaje',            handleNuevoMensaje);
     socket.on('conversacion_leida',       handleLectura);
     socket.on('conversacion_actualizada', handleActualizacion);
@@ -151,6 +213,8 @@ export function useSocket({
     socket.on('mensaje_estado',           handleMensajeEstado);
     socket.on('mensajes_leidos',          handleMensajesLeidos);
     socket.on('cliente_escribiendo',      handleClienteEscribiendo);
+    socket.on('disconnect',               handleDisconnect);
+    socket.on('connect',                  handleConnect);
 
     return () => {
       socket.off('nuevo_mensaje',            handleNuevoMensaje);
@@ -161,6 +225,8 @@ export function useSocket({
       socket.off('mensaje_estado',           handleMensajeEstado);
       socket.off('mensajes_leidos',          handleMensajesLeidos);
       socket.off('cliente_escribiendo',      handleClienteEscribiendo);
+      socket.off('disconnect',               handleDisconnect);
+      socket.off('connect',                  handleConnect);
       clearTimeout(typingTimerRef.current);
     };
   // Solo se monta/desmonta cuando el socket o el usuario cambian.

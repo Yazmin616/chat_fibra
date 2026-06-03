@@ -170,11 +170,55 @@ const getByUsuarioAndArea = (usuario_id, area, empresa_id) =>
     [usuario_id, area, empresa_id]
   );
 
+/**
+ * Busca un mensaje por su WhatsApp Message ID (wamid).
+ * Hace JOIN con conversaciones para obtener el departamento (necesario para el emit de socket).
+ * @param {string} wamid
+ * @returns {Promise<import('pg').QueryResult>}
+ */
+/**
+ * Devuelve el wamid del último mensaje del cliente en una conversación.
+ * Usado para enviar read receipt cuando el agente abre el chat o empieza a escribir.
+ * @param {number} conversacion_id
+ * @returns {Promise<import('pg').QueryResult>}
+ */
+const findLastUserWamidByConversacion = (conversacion_id) =>
+  db.query(
+    `SELECT wamid FROM mensajes
+     WHERE conversacion_id=$1 AND remitente='user' AND wamid IS NOT NULL
+     ORDER BY id DESC LIMIT 1`,
+    [conversacion_id]
+  );
+
+const findByWamid = (wamid) =>
+  db.query(
+    `SELECT m.id, m.conversacion_id, c.departamento
+     FROM mensajes m
+     JOIN conversaciones c ON c.id = m.conversacion_id
+     WHERE m.wamid = $1
+     LIMIT 1`,
+    [wamid]
+  );
+
+/**
+ * Actualiza el estado de un mensaje a un valor específico.
+ * A diferencia de updateEstado() (hardcodeado a 'entregado'), acepta cualquier estado.
+ * Usado para los status webhooks de WhatsApp: 'enviado', 'entregado', 'leido'.
+ * @param {number} id     - PK del mensaje.
+ * @param {string} estado - Nuevo estado.
+ * @returns {Promise<import('pg').QueryResult>}
+ */
+const updateEstadoById = (id, estado) =>
+  db.query('UPDATE mensajes SET estado=$1 WHERE id=$2', [estado, id]);
+
 module.exports = {
   create,
   findByTelegramMsgId,
   updateReacciones,
   updateEstado,
+  updateEstadoById,
+  findByWamid,
+  findLastUserWamidByConversacion,
   marcarLeidosPorConversacion,
   deleteByConversacionIds,
   markReadByConversacion,

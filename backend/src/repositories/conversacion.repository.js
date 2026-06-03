@@ -209,14 +209,41 @@ const listByArea = (area, empresa_id) => {
   `, params);
 };
 
+/**
+ * Verifica si el usuario tiene al menos una conversación cerrada (es cliente recurrente).
+ * @param {number} usuario_id
+ * @param {string} empresa_id
+ * @returns {Promise<import('pg').QueryResult>}
+ */
+const findCerradasByUsuario = (usuario_id, empresa_id) =>
+  db.query(
+    'SELECT id FROM conversaciones WHERE usuario_id=$1 AND empresa_id=$2 AND estado=$3 LIMIT 1',
+    [usuario_id, empresa_id, 'cerrada']
+  );
+
+/**
+ * Fusiona un objeto parcial con el campo metadata de la conversación.
+ * Usa el operador || de JSONB para merge superficial en el nivel raíz.
+ * @param {number} id              - PK de la conversación.
+ * @param {object} parcialMetadata - Campos a sobrescribir/agregar.
+ * @returns {Promise<import('pg').QueryResult>}
+ */
+const updateMetadata = (id, parcialMetadata) =>
+  db.query(
+    'UPDATE conversaciones SET metadata = metadata || $1::jsonb, updated_at=NOW() WHERE id=$2',
+    [JSON.stringify(parcialMetadata), id]
+  );
+
 module.exports = {
   findById,
   findActiveByUsuario,
   findIdsByUsuario,
+  findCerradasByUsuario,
   create,
   createEsperando,
   updateEstado,
   updateEmpresa,
+  updateMetadata,
   assignAgente,
   liberar,
   deleteByIds,

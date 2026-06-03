@@ -17,9 +17,8 @@
  */
 
 const { Telegraf }     = require('telegraf');
+const crypto           = require('crypto');
 const botService       = require('../services/bot.service');
-const usuarioRepo      = require('../repositories/usuario.repository');
-const conversacionRepo = require('../repositories/conversacion.repository');
 const mensajeRepo      = require('../repositories/mensaje.repository');
 const logger           = require('../config/logger');
 const { emitToConv }   = require('../utils/rooms');
@@ -42,10 +41,20 @@ const COMPANIES = [
  * Arranca un bot de Telegraf por cada empresa que tenga token configurado.
  * Debe llamarse una sola vez al iniciar el servidor.
  *
- * @param {import('socket.io').Server} io - Instancia de Socket.io para notificar al dashboard.
+ * Modo webhook (recomendado en producción):
+ *   Definir TELEGRAM_WEBHOOK_URL en .env con la URL pública HTTPS del servidor.
+ *   El bot registra su webhook en Telegram y recibe updates vía POST.
+ *   Requiere que el servidor esté detrás de HTTPS (ngrok, dominio propio con SSL).
+ *
+ * Modo polling (desarrollo sin HTTPS):
+ *   Dejar TELEGRAM_WEBHOOK_URL vacío. El bot consulta a Telegram periódicamente.
+ *
+ * @param {import('socket.io').Server}     io  - Socket.io para notificar al dashboard.
+ * @param {import('express').Application}  app - App Express (necesaria en modo webhook).
  */
-function iniciarTelegram(io) {
+function iniciarTelegram(io, app = null) {
   let iniciados = 0;
+  const webhookBase = process.env.TELEGRAM_WEBHOOK_URL || '';
 
   for (const { empresa_id, envKey } of COMPANIES) {
     const token = process.env[envKey];
@@ -53,7 +62,17 @@ function iniciarTelegram(io) {
       logger.warn(`[TELEGRAM] ${envKey} no configurado — bot de "${empresa_id}" omitido.`);
       continue;
     }
-    _iniciarBot(empresa_id, token, io, 0);
+
+    if (webhookBase && app) {
+      _iniciarBotWebhook(empresa_id, token, io, app, webhookBase).catch(err =>
+        logger.error(`[TELEGRAM] Error iniciando webhook para "${empresa_id}":`, { error: err.message })
+      );
+    } else {
+      if (webhookBase && !app) {
+        logger.warn(`[TELEGRAM] TELEGRAM_WEBHOOK_URL definida pero "app" no fue pasada a iniciarTelegram — usando polling como fallback.`);
+      }
+      _iniciarBot(empresa_id, token, io, 0);
+    }
     iniciados++;
   }
 
@@ -75,14 +94,15 @@ function iniciarTelegram(io) {
  * Envía un mensaje de texto a un usuario de Telegram.
  * @returns {Promise<boolean>} true si el mensaje fue entregado, false si falló.
  */
-async function enviarMensajeTelegram(external_id, texto, empresa_id) {
+async function enviarMensajeTelegram(external_id, texto, empresa_id, teclado = null) {
   const bot = bots.get(empresa_id);
   if (!bot) {
     logger.warn(`[TELEGRAM SEND] No hay bot activo para "${empresa_id}" — mensaje no enviado.`);
     return { ok: false };
   }
   try {
-    const msg = await bot.telegram.sendMessage(external_id, texto);
+    const opts = teclado ? { reply_markup: teclado } : {};
+    const msg = await bot.telegram.sendMessage(external_id, texto, opts);
     return { ok: true, telegram_msg_id: msg.message_id };
   } catch (err) {
     logger.error(`[TELEGRAM SEND ERROR] empresa=${empresa_id}:`, { error: err.message });
@@ -199,12 +219,13 @@ function _iniciarBot(empresa_id, token, io, retries) {
   const bot = new Telegraf(token);
   bots.set(empresa_id, bot);
 
-  bot.on('text',     (ctx) => _procesarMensaje(ctx, 'text',     io, empresa_id));
-  bot.on('sticker',  (ctx) => _procesarMensaje(ctx, 'sticker',  io, empresa_id));
-  bot.on('location', (ctx) => _procesarMensaje(ctx, 'location', io, empresa_id));
-  bot.on('photo',    (ctx) => _procesarMensaje(ctx, 'photo',    io, empresa_id));
-  bot.on('voice',    (ctx) => _procesarMensaje(ctx, 'voice',    io, empresa_id));
-  bot.on('audio',    (ctx) => _procesarMensaje(ctx, 'audio',    io, empresa_id));
+  bot.on('text',           (ctx) => _procesarMensaje(ctx, 'text',     io, empresa_id));
+  bot.on('sticker',        (ctx) => _procesarMensaje(ctx, 'sticker',  io, empresa_id));
+  bot.on('location',       (ctx) => _procesarMensaje(ctx, 'location', io, empresa_id));
+  bot.on('photo',          (ctx) => _procesarMensaje(ctx, 'photo',    io, empresa_id));
+  bot.on('voice',          (ctx) => _procesarMensaje(ctx, 'voice',    io, empresa_id));
+  bot.on('audio',          (ctx) => _procesarMensaje(ctx, 'audio',    io, empresa_id));
+  bot.on('callback_query', (ctx) => _procesarCallback(ctx, io, empresa_id));
   bot.on('message_reaction', (ctx) => _procesarReaccion(ctx, io, empresa_id));
 
   // Errores no capturados dentro de los handlers (evita crash del proceso)
@@ -224,6 +245,64 @@ function _iniciarBot(empresa_id, token, io, retries) {
     });
 
   logger.info(`[TELEGRAM] Bot de "${empresa_id}" iniciado.`);
+}
+
+/**
+ * Crea e inicia una instancia de Telegraf en modo WEBHOOK para la empresa indicada.
+ * Registra un endpoint Express y llama a setWebhook en la API de Telegram.
+ * Los mismos handlers de _iniciarBot se reutilizan — el procesamiento del chat no cambia.
+ *
+ * @param {string} empresa_id
+ * @param {string} token
+ * @param {import('socket.io').Server} io
+ * @param {import('express').Application} app
+ * @param {string} webhookBase - URL base HTTPS, ej. "https://abc123.ngrok.io"
+ */
+async function _iniciarBotWebhook(empresa_id, token, io, app, webhookBase) {
+  const bot = new Telegraf(token);
+  bots.set(empresa_id, bot);
+
+  // Mismos handlers que en modo polling — el chat no cambia
+  bot.on('text',             (ctx) => _procesarMensaje(ctx, 'text',     io, empresa_id));
+  bot.on('sticker',          (ctx) => _procesarMensaje(ctx, 'sticker',  io, empresa_id));
+  bot.on('location',         (ctx) => _procesarMensaje(ctx, 'location', io, empresa_id));
+  bot.on('photo',            (ctx) => _procesarMensaje(ctx, 'photo',    io, empresa_id));
+  bot.on('voice',            (ctx) => _procesarMensaje(ctx, 'voice',    io, empresa_id));
+  bot.on('audio',            (ctx) => _procesarMensaje(ctx, 'audio',    io, empresa_id));
+  bot.on('callback_query',   (ctx) => _procesarCallback(ctx, io, empresa_id));
+  bot.on('message_reaction', (ctx) => _procesarReaccion(ctx, io, empresa_id));
+
+  bot.catch((err) => {
+    logger.error(`[TELEGRAM ${empresa_id.toUpperCase()}] Error no manejado:`, { error: err.message });
+  });
+
+  // Token secreto derivado del token del bot — Telegram lo devuelve en X-Telegram-Bot-Api-Secret-Token
+  // para que podamos verificar que el update proviene realmente de Telegram y no de un tercero.
+  const secretToken  = crypto.createHmac('sha256', token).update(empresa_id).digest('hex');
+  const webhookPath  = `/telegram/webhook/${empresa_id}`;
+  const webhookUrl   = `${webhookBase}${webhookPath}`;
+
+  // Endpoint Express que recibe los updates de Telegram
+  app.post(webhookPath, (req, res) => {
+    const incoming = req.headers['x-telegram-bot-api-secret-token'];
+    if (incoming !== secretToken) {
+      logger.warn(`[TELEGRAM ${empresa_id.toUpperCase()}] Secret token inválido — update rechazado.`);
+      return res.sendStatus(403);
+    }
+    res.sendStatus(200);
+    // req.body ya viene parseado por el express.json() global de index.js
+    bot.handleUpdate(req.body).catch(err =>
+      logger.error(`[TELEGRAM ${empresa_id.toUpperCase()}] Error en handleUpdate:`, { error: err.message })
+    );
+  });
+
+  // Registrar webhook en la API de Telegram
+  await bot.telegram.setWebhook(webhookUrl, {
+    secret_token:    secretToken,
+    allowed_updates: ['message', 'message_reaction', 'edited_message', 'callback_query'],
+  });
+
+  logger.info(`[TELEGRAM] Bot "${empresa_id}" en modo webhook: ${webhookUrl}`);
 }
 
 /**
@@ -312,33 +391,151 @@ async function _procesarMensaje(ctx, type, io, empresa_id) {
       telegram_msg_id:        ctx.message.message_id,
     };
 
-    // Notificar mensaje entrante al dashboard antes de procesar (mejor UX)
+    // Procesar (guarda en BD y devuelve { mensaje_id, conversacion, texto, teclado })
+    const respuesta = await botService.procesar(input, io);
+
+    // Emitir al CRM con mensaje_id real de BD (permite dedup correcto en frontend)
+    if (io && respuesta?.conversacion) {
+      const conv = respuesta.conversacion;
+      const readRes = await mensajeRepo.marcarLeidosPorConversacion(conv.id);
+      if (readRes.rowCount > 0) {
+        emitToConv(io, conv.departamento, 'mensajes_leidos', {
+          conversacion_id: conv.id,
+          ids:             readRes.rows.map(r => r.id),
+        });
+      }
+      emitToConv(io, conv.departamento, 'nuevo_mensaje', {
+        mensaje_id:      respuesta.mensaje_id,
+        conversacion_id: conv.id,
+        usuario_id:      conv.usuario_id,
+        empresa_id:      conv.empresa_id,
+        mensaje:         input.mensaje,
+        tipo:            input.tipo      || 'text',
+        url_media:       input.url_media || null,
+        remitente:       'user',
+        fecha:           new Date(),
+      });
+    }
+
+    if (respuesta?.texto) {
+      await _enviarRespuestaBot(ctx, respuesta);
+      if (io) {
+        emitToConv(io, respuesta.conversacion?.departamento, 'nuevo_mensaje', {
+          conversacion_id: respuesta.conversacion_id,
+          mensaje:         respuesta.texto,
+          tipo:            'text',
+          remitente:       'bot',
+          fecha:           new Date(),
+        });
+      }
+    }
+
+    if (respuesta?.conversacion_id && io) {
+      emitToConv(io, respuesta.conversacion?.departamento, 'conversacion_actualizada', {
+        id:     respuesta.conversacion_id,
+        estado: 'ESPERANDO_AGENTE',
+      });
+    }
+
+  } catch (err) {
+    logger.error(`[TELEGRAM ${empresa_id.toUpperCase()} ERROR] (${type}):`, { error: err.message });
+  }
+}
+
+/**
+ * Envía la respuesta del bot al cliente usando el teclado inline si la respuesta lo incluye.
+ * @private
+ */
+async function _enviarRespuestaBot(ctx, respuesta) {
+  const opts = {};
+  if (respuesta.teclado) opts.reply_markup = respuesta.teclado;
+  await ctx.reply(respuesta.texto, opts);
+}
+
+/**
+ * Extrae el texto legible del botón presionado a partir del teclado del mensaje original.
+ * @private
+ * @param {import('telegraf').Context} ctx
+ * @param {string} data - callback_data del botón presionado.
+ * @returns {string} Texto del botón o `data` como fallback.
+ */
+function _getLabelDelBoton(ctx, data) {
+  try {
+    const filas = ctx.callbackQuery?.message?.reply_markup?.inline_keyboard || [];
+    for (const fila of filas) {
+      for (const btn of fila) {
+        if (btn.callback_data === data) return btn.text;
+      }
+    }
+  } catch (_) { /* sin teclado disponible */ }
+  return data;
+}
+
+/**
+ * Procesa un callback_query: el cliente tocó un botón inline.
+ * 1. Confirma el callback (quita el estado de "cargando" del botón).
+ * 2. Elimina el teclado del mensaje original para indicar que ya fue elegido.
+ * 3. Envía un eco visible con la etiqueta del botón para que el cliente
+ *    vea su propia selección en la conversación.
+ * 4. Delega al bot.service como si el cliente hubiera escrito el valor del botón.
+ * @private
+ */
+async function _procesarCallback(ctx, io, empresa_id) {
+  try {
+    if (maintenance.isActive()) {
+      await ctx.answerCbQuery('Sistema en mantenimiento. Por favor intenta más tarde.');
+      return;
+    }
+
+    const data = ctx.callbackQuery?.data;
+    if (!data) return;
+
+    // Confirmar el callback (requerido por Telegram para quitar el indicador de carga)
+    await ctx.answerCbQuery();
+
+    // Extraer la etiqueta legible del botón antes de eliminar el teclado
+    const label = _getLabelDelBoton(ctx, data);
+
+    // Quitar el teclado del mensaje original — ya no es necesario
+    try {
+      await ctx.editMessageReplyMarkup({ inline_keyboard: [] });
+    } catch (_) { /* mensaje ya editado o eliminado */ }
+
+    // Enviar un nuevo mensaje con solo el texto de la opción elegida.
+    // Aparece en el chat como un mensaje independiente, creando la impresión
+    // de que el usuario escribió y envió su selección.
+    // Nota: en Telegram, los bots no pueden enviar mensajes que aparezcan
+    // del lado derecho (burbuja del usuario) — es una limitación de la API.
+    await ctx.reply(label);
+
+    const input = {
+      user_id:                ctx.from.id.toString(),
+      canal:                  'telegram',
+      empresa_id,
+      empresa_preconfigurada: true,
+      mensaje:                data,           // valor técnico para los parsers
+      mensaje_display:        label,          // etiqueta legible para guardar en DB
+      tipo:                   'text',
+      url_media:              null,
+      nombre:                 `${ctx.from.first_name || ''} ${ctx.from.last_name || ''}`.trim(),
+      username:               ctx.from.username || '',
+      telegram_msg_id:        null,
+    };
+
+    // Notificar al dashboard (mismo flujo que texto normal)
     if (io) {
       const userRes = await usuarioRepo.findByCanal(input.canal, input.user_id);
       if (userRes.rows.length > 0) {
         const convRes = await conversacionRepo.findActiveByUsuario(userRes.rows[0].id, empresa_id);
         if (convRes.rows.length > 0) {
           const conv = convRes.rows[0];
-
-          // 1. Palomitas azules — marcar mensajes del agente como leídos
-          // Nota: Telegram no envía eventos de escritura a bots; cliente_escribiendo
-          // se emitirá cuando integremos Meta/WhatsApp, que sí lo soporta.
-          const readRes = await mensajeRepo.marcarLeidosPorConversacion(conv.id);
-          if (readRes.rowCount > 0) {
-            emitToConv(io, conv.departamento, 'mensajes_leidos', {
-              conversacion_id: conv.id,
-              ids: readRes.rows.map(r => r.id),
-            });
-          }
-
-          // 3. Notificar el nuevo mensaje del cliente
           emitToConv(io, conv.departamento, 'nuevo_mensaje', {
             conversacion_id: conv.id,
             usuario_id:      userRes.rows[0].id,
             empresa_id:      conv.empresa_id,
-            mensaje:         input.mensaje,
-            tipo:            input.tipo,
-            url_media:       input.url_media,
+            mensaje:         label,           // etiqueta legible en el dashboard
+            tipo:            'text',
+            url_media:       null,
             remitente:       'user',
             fecha:           new Date(),
           });
@@ -346,14 +543,11 @@ async function _procesarMensaje(ctx, type, io, empresa_id) {
       }
     }
 
-    // Delegar al servicio del bot
     const respuesta = await botService.procesar(input, io);
 
     if (respuesta?.texto) {
-      await ctx.reply(respuesta.texto);
+      await _enviarRespuestaBot(ctx, respuesta);
       if (io) {
-        // Para respuestas del bot con departamento conocido (ej: tras seleccionArea)
-        // usamos emitToConv; si no hay departamento, solo llega a admin.
         emitToConv(io, respuesta.departamento, 'nuevo_mensaje', {
           conversacion_id: respuesta.conversacion_id,
           mensaje:         respuesta.texto,
@@ -364,9 +558,7 @@ async function _procesarMensaje(ctx, type, io, empresa_id) {
       }
     }
 
-    // Notificar si se creó una nueva conversación (SELECCION_AREA → ESPERANDO_AGENTE)
     if (respuesta?.conversacion_id && io) {
-      // emitToConv: si viene de seleccionArea trae departamento; si no, solo admin
       emitToConv(io, respuesta.departamento, 'conversacion_actualizada', {
         id:     respuesta.conversacion_id,
         estado: 'ESPERANDO_AGENTE',
@@ -374,7 +566,7 @@ async function _procesarMensaje(ctx, type, io, empresa_id) {
     }
 
   } catch (err) {
-    logger.error(`[TELEGRAM ${empresa_id.toUpperCase()} ERROR] (${type}):`, { error: err.message });
+    logger.error(`[TELEGRAM CALLBACK ERROR] empresa=${empresa_id}:`, { error: err.message });
   }
 }
 

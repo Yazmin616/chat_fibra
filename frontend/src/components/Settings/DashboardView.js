@@ -67,8 +67,12 @@ const DashboardView = ({ user, empresaId, socket }) => {
 
   const { kpis, calificaciones, actividadDiaria, topAgentes, ultimasCalificaciones } = data || {};
 
-  const satisfaccionPct = calificaciones?.total > 0
-    ? Math.round((parseInt(calificaciones.bien) / parseInt(calificaciones.total)) * 100)
+  const _b = parseInt(calificaciones?.bien)    || 0;
+  const _r = parseInt(calificaciones?.regular) || 0;
+  const _m = parseInt(calificaciones?.mal)     || 0;
+  const _respondidas = _b + _r + _m;
+  const satisfaccionPct = _respondidas > 0
+    ? Math.round((_b * 3 + _r * 2 + _m * 1) * 100 / (_respondidas * 3))
     : 0;
 
   // Etiqueta del filtro activo
@@ -147,7 +151,7 @@ const DashboardView = ({ user, empresaId, socket }) => {
         <KpiCard icon={MessageSquare} label="Chats Hoy"    subtitle="con agente · hoy"              value={kpis?.hoy}             color="#3b82f6" />
         <KpiCard icon={TrendingUp}    label="Esta Semana"  subtitle="con agente · últimos 7 días"    value={kpis?.semana}          color="#8b5cf6" />
         <KpiCard icon={CheckCircle}   label="Cerrados"     subtitle="últimos 7 días"                 value={kpis?.cerrados_semana} color="#22c55e" />
-        <KpiCard icon={Star}          label="Satisfacción" subtitle="solo agentes · últimos 7 días"  value={`${satisfaccionPct}%`} color={satisfaccionPct >= 70 ? '#22c55e' : '#f97316'} />
+        <KpiCard icon={Star}          label="Desempeño" subtitle="solo agentes · últimos 7 días"  value={`${satisfaccionPct}%`} color={satisfaccionPct >= 70 ? '#22c55e' : '#f97316'} />
         <KpiCard icon={Clock}         label="En Atención"  subtitle="en este momento"                value={kpis?.activos}         color="#f97316" />
       </div>
 

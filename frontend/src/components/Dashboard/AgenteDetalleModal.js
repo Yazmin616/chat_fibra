@@ -99,7 +99,7 @@ const AgenteDetalleModal = ({ agente, onClose }) => {
                 <div className="asesor-kpi-val" style={{ color: !isNaN(satN) ? satColor : undefined }}>
                   {!isNaN(satN) ? `${satN}%` : '—'}
                 </div>
-                <div className="asesor-kpi-lbl">Satisfacción</div>
+                <div className="asesor-kpi-lbl">Desempeño</div>
               </div>
             </div>
 

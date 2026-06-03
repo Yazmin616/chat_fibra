@@ -27,14 +27,14 @@ const logger = require('../config/logger');
  * @param {string} empresa_id
  * @returns {Promise<boolean>}
  */
-async function enviarMensaje(canal, external_id, texto, empresa_id) {
+async function enviarMensaje(canal, external_id, texto, empresa_id, teclado = null) {
   switch (canal) {
     case 'telegram':
-      return enviarMensajeTelegram(external_id, texto, empresa_id);
+      return enviarMensajeTelegram(external_id, texto, empresa_id, teclado);
     case 'whatsapp':
     case 'facebook':
     case 'instagram':
-      return enviarMensajeMeta(canal, external_id, texto, empresa_id);
+      return enviarMensajeMeta(canal, external_id, texto, empresa_id, teclado);
     default:
       logger.warn(`[ADAPTER] Canal desconocido: "${canal}" — mensaje no enviado.`);
       return false;
@@ -49,14 +49,14 @@ async function enviarMensaje(canal, external_id, texto, empresa_id) {
  * @param {string} external_id
  * @param {string} empresa_id
  */
-async function enviarEscribiendo(canal, external_id, empresa_id) {
+async function enviarEscribiendo(canal, external_id, empresa_id, conversacion_id = null) {
   switch (canal) {
     case 'telegram':
       return telegramEscribiendo(external_id, empresa_id);
     case 'whatsapp':
     case 'facebook':
     case 'instagram':
-      return enviarAccionEscribiendoMeta(canal, external_id, empresa_id);
+      return enviarAccionEscribiendoMeta(canal, external_id, empresa_id, conversacion_id);
     default:
       return;
   }

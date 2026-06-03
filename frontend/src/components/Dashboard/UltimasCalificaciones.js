@@ -1,5 +1,5 @@
 import React from 'react';
-import { User, AlertTriangle } from 'lucide-react';
+import { User, Bot } from 'lucide-react';
 import RatingBadge from './RatingBadge';
 
 const RATING_COLOR = {
@@ -28,8 +28,8 @@ const UltimasCalificaciones = ({ calificaciones }) => (
             <div className="rating-details">
               {esBot ? (
                 <span className="rating-no-atencion">
-                  <AlertTriangle size={11} />
-                  Sin atención · ningún asesor respondió
+                  <Bot size={11} />
+                  Autoservicio · resuelto por el bot
                 </span>
               ) : (
                 <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>

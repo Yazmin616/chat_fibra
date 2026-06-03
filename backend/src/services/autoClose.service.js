@@ -1,15 +1,20 @@
-const db               = require('../config/db');
-const conversacionRepo = require('../repositories/conversacion.repository');
-const mensajeRepo      = require('../repositories/mensaje.repository');
-const agenteRepo       = require('../repositories/agente.repository');
-const infraccionRepo   = require('../repositories/infraccion.repository');
+const db                = require('../config/db');
+const conversacionRepo  = require('../repositories/conversacion.repository');
+const mensajeRepo       = require('../repositories/mensaje.repository');
+const agenteRepo        = require('../repositories/agente.repository');
+const infraccionRepo    = require('../repositories/infraccion.repository');
+const calificacionRepo  = require('../repositories/calificacion.repository');
 const { enviarMensaje } = require('../adapters');
 const { emitToConv }   = require('../utils/rooms');
 const logger           = require('../config/logger');
+const { ESTADOS }      = require('../bot/constants');
 const { parseJornada, esDentroJornada, horasRealesDesde } = require('../utils/businessHours');
 
 /** Minutos sin heartbeat para considerar a un agente como inactivo. */
 const INACTIVIDAD_AGENTE_MIN = 15;
+
+/** Minutos en estado ENCUESTA sin respuesta antes de cerrar como "no evaluada". */
+const TIMEOUT_ENCUESTA_MIN = 20;
 
 /**
  * Horas reales que deben transcurrir desde que un cliente abre una conversación
@@ -73,7 +78,7 @@ function iniciarAutoCierre(io) {
         // abrió el chat para responder sin coste ni infracción. Pasadas esas
         // horas se levanta la infracción al área y se cierra el chat.
         // No depende de la jornada: el contador corre en tiempo real.
-        if (conv.estado === 'ESPERANDO_AGENTE') {
+        if (conv.estado === ESTADOS.ESPERANDO_AGENTE) {
           const horasTranscurridas = horasRealesDesde(conv.created_at);
           if (horasTranscurridas < VENTANA_META_HORAS) continue;
 
@@ -125,11 +130,11 @@ function iniciarAutoCierre(io) {
         if (!conv.es_humano) {
           await db.query(
             'UPDATE conversaciones SET estado=$1, updated_at=NOW() WHERE id=$2',
-            ['cerrada', conv.id]
+            [ESTADOS.CERRADA, conv.id]
           );
           if (io) {
             emitToConv(io, conv.departamento, 'conversacion_actualizada', {
-              id: conv.id, empresa_id: conv.empresa_id, estado: 'cerrada', es_humano: false,
+              id: conv.id, empresa_id: conv.empresa_id, estado: ESTADOS.CERRADA, es_humano: false,
             });
           }
           continue;
@@ -138,6 +143,51 @@ function iniciarAutoCierre(io) {
         // Sesión humana (atendiendo): enviar encuesta CSAT y marcar ENCUESTA_AGENTE.
         await _cerrarHumano(conv, io);
       }
+      // ── Encuestas sin responder: cerrar como "no evaluada" ────────────────
+      const { rows: encuestasVencidas } = await db.query(`
+        SELECT c.id, c.usuario_id, c.empresa_id, c.departamento, c.estado,
+               u.external_id, u.canal, u.nombre AS cliente_nombre
+        FROM conversaciones c
+        JOIN usuarios u ON c.usuario_id = u.id
+        WHERE c.estado IN ('ENCUESTA_AGENTE', 'ENCUESTA_BOT')
+          AND c.updated_at < NOW() - ($1 || ' minutes')::interval
+      `, [TIMEOUT_ENCUESTA_MIN]);
+
+      for (const conv of encuestasVencidas) {
+        try {
+          const tipo = conv.estado === ESTADOS.ENCUESTA_AGENTE ? 'agente' : 'bot';
+
+          await calificacionRepo.create(conv.id, 'NoRespondida', '', tipo);
+          await db.query(
+            'UPDATE conversaciones SET estado=$1, updated_at=NOW() WHERE id=$2',
+            [ESTADOS.CERRADA, conv.id]
+          );
+
+          const banner = 'Encuesta no respondida — conversación cerrada automáticamente';
+          await mensajeRepo.create(conv.id, 'sistema_info', banner);
+
+          logger.info(`[ENCUESTA TIMEOUT] Conv ${conv.id} cerrada sin evaluación (${tipo}) — ${TIMEOUT_ENCUESTA_MIN} min sin respuesta.`);
+
+          if (io) {
+            emitToConv(io, conv.departamento, 'nuevo_mensaje', {
+              conversacion_id: conv.id,
+              usuario_id:      conv.usuario_id,
+              empresa_id:      conv.empresa_id,
+              mensaje:         banner,
+              remitente:       'sistema_info',
+            });
+            emitToConv(io, conv.departamento, 'conversacion_actualizada', {
+              id:         conv.id,
+              empresa_id: conv.empresa_id,
+              estado:     ESTADOS.CERRADA,
+              es_humano:  false,
+            });
+          }
+        } catch (err) {
+          logger.error(`[ENCUESTA TIMEOUT] Error conv ${conv.id}:`, { error: err.message });
+        }
+      }
+
     } catch (err) {
       logger.error('Auto-cierre error', { error: err.message });
     }
@@ -158,7 +208,7 @@ async function _cerrarHumano(conv, io) {
 
   await db.query(
     'UPDATE conversaciones SET estado=$1, es_humano=false, updated_at=NOW() WHERE id=$2',
-    ['ENCUESTA_AGENTE', conv.id]
+    [ESTADOS.ENCUESTA_AGENTE, conv.id]
   );
   await mensajeRepo.create(conv.id, 'sistema_success', bannerMsg);
   await mensajeRepo.create(conv.id, 'bot', surveyText);
@@ -174,7 +224,7 @@ async function _cerrarHumano(conv, io) {
       empresa_id: conv.empresa_id, mensaje: surveyText, remitente: 'bot',
     });
     emitToConv(io, conv.departamento, 'conversacion_actualizada', {
-      id: conv.id, empresa_id: conv.empresa_id, estado: 'ENCUESTA_AGENTE', es_humano: false,
+      id: conv.id, empresa_id: conv.empresa_id, estado: ESTADOS.ENCUESTA_AGENTE, es_humano: false,
     });
   }
 }
@@ -186,7 +236,7 @@ async function _cerrarHumano(conv, io) {
  */
 async function _evaluarInfraccion(conv, tiempoEspera, io) {
   try {
-    if (conv.estado === 'ESPERANDO_AGENTE') {
+    if (conv.estado === ESTADOS.ESPERANDO_AGENTE) {
       // Nadie tomó el chat → infracción al ÁREA
       const yaExiste = await infraccionRepo.existsByConversacion(conv.id, 'area');
       if (yaExiste) return;
@@ -198,7 +248,7 @@ async function _evaluarInfraccion(conv, tiempoEspera, io) {
       logger.warn(`[INFRACCIÓN ÁREA] Conv ${conv.id} — ${conv.departamento} — ${tiempoEspera} min sin tomar.`);
       _emitirInfraccion(io, conv, inf, tiempoEspera, 'area', null, null);
 
-    } else if (conv.estado === 'atendiendo') {
+    } else if (conv.estado === ESTADOS.ATENDIENDO) {
       // Verificar quién envió el último mensaje
       const { rows: lastMsg } = await db.query(
         `SELECT remitente FROM mensajes WHERE conversacion_id=$1 ORDER BY id DESC LIMIT 1`,

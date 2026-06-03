@@ -50,6 +50,31 @@ const avatarUpload = multer({
 // Sirve el contenido directamente (sin redirect) para evitar ERR_BLOCKED_BY_RESPONSE.NotSameOrigin
 // que ocurre cuando el navegador sigue un 302 hacia un origen externo (api.telegram.org).
 const https = require('https');
+// Proxy de archivos de WhatsApp Business API.
+// WhatsApp requiere Bearer token para descargar — el navegador no puede añadirlo
+// en una etiqueta <audio src>, así que el backend lo añade y proxea el stream.
+router.get('/wa-media/:empresa_id/:media_id', async (req, res, next) => {
+  try {
+    const { empresa_id, media_id } = req.params;
+    const { resolveWaMediaUrl } = require('../adapters/meta');
+    const { url, access_token } = await resolveWaMediaUrl(media_id, empresa_id);
+
+    const parsedUrl = new URL(url);
+    https.get(
+      { hostname: parsedUrl.hostname, path: parsedUrl.pathname + parsedUrl.search,
+        headers: { 'Authorization': `Bearer ${access_token}`, 'User-Agent': 'node-https' } },
+      (upstream) => {
+        if (upstream.statusCode !== 200) { res.status(upstream.statusCode || 502).end(); return; }
+        res.setHeader('Content-Type',  upstream.headers['content-type']  || 'audio/ogg');
+        res.setHeader('Content-Length', upstream.headers['content-length'] || '');
+        res.setHeader('Cache-Control', 'public, max-age=3600');
+        res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+        upstream.pipe(res);
+      }
+    ).on('error', next);
+  } catch (err) { next(err); }
+});
+
 router.get('/media/:empresa_id/:file_id', async (req, res, next) => {
   try {
     const { empresa_id, file_id } = req.params;

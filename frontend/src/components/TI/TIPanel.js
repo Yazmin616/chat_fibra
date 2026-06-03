@@ -45,6 +45,11 @@ const TIPanel = ({ user, logout }) => {
   const [loadingBackup,    setLoadingBackup]    = useState(false);
   const [backupDescargado, setBackupDescargado] = useState(false);
 
+  // Limpiar BD
+  const [confirmLimpiar,    setConfirmLimpiar]    = useState(false);
+  const [loadingLimpiar,    setLoadingLimpiar]    = useState(false);
+  const [limpiarResult,     setLimpiarResult]     = useState(null);
+
   // Error general
   const [error, setError] = useState('');
 
@@ -96,6 +101,7 @@ const TIPanel = ({ user, logout }) => {
         body: JSON.stringify({ activo: nuevoEstado }),
       });
       await cargarStatus();
+      await cargarLogs();
     } catch (e) { setError(e.message); }
     finally { setLoadingMnt(false); }
   };
@@ -118,6 +124,21 @@ const TIPanel = ({ user, logout }) => {
       setBackupDescargado(true);
     } catch (e) { setError(e.message); }
     finally { setLoadingBackup(false); }
+  };
+
+  // ── Limpiar BD ─────────────────────────────────────────────────────────────
+  const ejecutarLimpiarBD = async () => {
+    setLoadingLimpiar(true);
+    setLimpiarResult(null);
+    try {
+      await apiFetch('/limpiar-bd', {
+        method: 'POST',
+        body: JSON.stringify({ confirmado: true }),
+      });
+      setLimpiarResult({ ok: true });
+      await cargarStatus();
+    } catch (e) { setLimpiarResult({ ok: false, msg: e.message }); }
+    finally { setLoadingLimpiar(false); setConfirmLimpiar(false); }
   };
 
   // ── Purga ──────────────────────────────────────────────────────────────────
@@ -262,6 +283,39 @@ const TIPanel = ({ user, logout }) => {
           </div>
         </div>
 
+        {/* Limpiar base de datos */}
+        <div className="ti-section">
+          <div className="ti-section-header">
+            <span className="ti-section-title"><Trash2 size={13} /> Limpiar base de datos</span>
+          </div>
+          <div className="ti-section-body">
+            <div className="ti-backup-row">
+              <div>
+                <div style={{ fontSize: 14, color: '#111b21', fontWeight: 500, marginBottom: 4 }}>
+                  Elimina todos los datos de prueba (conversaciones, mensajes, usuarios, calificaciones)
+                </div>
+                <div className="ti-backup-info">
+                  Los agentes y configuraciones del sistema NO se eliminan. Los contadores se reinician a 1.
+                </div>
+              </div>
+              <button
+                className="ti-btn ti-btn-danger"
+                onClick={() => { setLimpiarResult(null); setConfirmLimpiar(true); }}
+                disabled={loadingLimpiar}
+              >
+                <Trash2 size={14} /> Limpiar BD
+              </button>
+            </div>
+            {limpiarResult && (
+              <div className={`ti-result ${limpiarResult.ok ? 'ti-result-ok' : 'ti-result-error'}`}>
+                {limpiarResult.ok
+                  ? <><CheckCircle size={14} /> Base de datos limpiada correctamente. Contadores reiniciados.</>
+                  : <><AlertTriangle size={14} /> {limpiarResult.msg}</>}
+              </div>
+            )}
+          </div>
+        </div>
+
         {/* Purga */}
         <div className="ti-section">
           <div className="ti-section-header">
@@ -341,6 +395,35 @@ const TIPanel = ({ user, logout }) => {
         </div>
 
       </main>
+
+      {/* Modal de confirmación de limpiar BD */}
+      {confirmLimpiar && (
+        <div className="ti-confirm-overlay">
+          <div className="ti-confirm-box">
+            <div className="ti-confirm-title">
+              <AlertTriangle size={18} /> Confirmar limpieza
+            </div>
+            <p className="ti-confirm-text">
+              Se eliminarán <strong style={{ color: '#DC1E1E' }}>TODOS los registros</strong> de:
+              conversaciones, mensajes, usuarios de Telegram, calificaciones e infracciones.
+              <br /><br />
+              Los <strong>agentes y configuraciones</strong> del sistema permanecerán intactos.
+              Los contadores de ID se reiniciarán a 1.
+              <br /><br />
+              Esta acción <strong>no se puede deshacer</strong>.
+            </p>
+            <div className="ti-confirm-actions">
+              <button className="ti-btn ti-btn-outline" onClick={() => setConfirmLimpiar(false)}>
+                Cancelar
+              </button>
+              <button className="ti-btn ti-btn-danger" onClick={ejecutarLimpiarBD} disabled={loadingLimpiar}>
+                {loadingLimpiar ? <span className="ti-spinner" /> : <Trash2 size={14} />}
+                Sí, limpiar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modal de confirmación de purga */}
       {confirmPurga && (

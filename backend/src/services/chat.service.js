@@ -13,6 +13,8 @@ const conversacionRepo = require('../repositories/conversacion.repository');
 const mensajeRepo     = require('../repositories/mensaje.repository');
 const { enviarMensaje, enviarMedia: enviarMediaAdapter } = require('../adapters');
 const { emitToConv }  = require('../utils/rooms');
+const { ENCUESTA }    = require('../bot/keyboards');
+const { ESTADOS }     = require('../bot/constants');
 
 /**
  * Envía un mensaje de un agente al cliente por Telegram y lo registra en DB.
@@ -69,14 +71,21 @@ async function responder({ conversacion_id, mensaje, agente_id, user_id, io }) {
     });
   }
 
-  // Enviar por el canal correspondiente; si tiene éxito → actualizar a 'entregado'
+  // Enviar por el canal y actualizar estado según la respuesta del adaptador
   const result = await enviarMensaje(canal || 'telegram', user_id, mensaje, empresa_id);
   if (result?.ok || result === true) {
-    await mensajeRepo.updateEstado(mensaje_id);
-    if (result.telegram_msg_id) {
-      await db.query('UPDATE mensajes SET telegram_msg_id=$1 WHERE id=$2', [result.telegram_msg_id, mensaje_id]);
+    if (result?.wamid) {
+      // WhatsApp: guardar wamid para correlacionar con status webhooks (sent/delivered/read).
+      // El estado pasará de 'enviado' → 'entregado' → 'leido' cuando WhatsApp lo notifique.
+      await db.query('UPDATE mensajes SET wamid=$1 WHERE id=$2', [result.wamid, mensaje_id]);
+    } else {
+      // Telegram y otros sin webhook de estado: marcar entregado inmediatamente.
+      await mensajeRepo.updateEstado(mensaje_id);
+      if (result?.telegram_msg_id) {
+        await db.query('UPDATE mensajes SET telegram_msg_id=$1 WHERE id=$2', [result.telegram_msg_id, mensaje_id]);
+      }
+      if (io) emitToConv(io, departamento, 'mensaje_estado', { mensaje_id, conversacion_id, estado: 'entregado' });
     }
-    if (io) emitToConv(io, departamento, 'mensaje_estado', { mensaje_id, conversacion_id, estado: 'entregado' });
   }
 }
 
@@ -112,7 +121,7 @@ async function liberar({ conversacion_id, motivo, agente_nombre, solucion, io })
   );
 
   const bannerMsg  = `Chat finalizado por ${agente_nombre || 'Agente'} — ${motivo || 'consulta resuelta'}`;
-  const surveyText = `¿Cómo calificarías la atención de *${agente_nombre || 'nuestro asesor'}* hoy? 🌟\n\n1️⃣  Mala\n2️⃣  Regular\n3️⃣  Buena\n\nEscribe el número de tu calificación.`;
+  const surveyText = `¿Cómo calificarías la atención de ${agente_nombre || 'nuestro asesor'} hoy? 🌟`;
 
   await mensajeRepo.create(conversacion_id, 'sistema_success', bannerMsg);
 
@@ -130,12 +139,12 @@ async function liberar({ conversacion_id, motivo, agente_nombre, solucion, io })
   }
 
   await mensajeRepo.create(conversacion_id, 'bot', surveyText);
-  await enviarMensaje(canal || 'telegram', external_id, surveyText, empresa_id);
+  await enviarMensaje(canal || 'telegram', external_id, surveyText, empresa_id, ENCUESTA);
 
   if (io) {
     emitToConv(io, departamento, 'nuevo_mensaje', { conversacion_id, usuario_id, empresa_id, mensaje: bannerMsg,  remitente: 'sistema_success' });
     emitToConv(io, departamento, 'nuevo_mensaje', { conversacion_id, usuario_id, empresa_id, mensaje: surveyText, remitente: 'bot' });
-    emitToConv(io, departamento, 'conversacion_actualizada', { id: conversacion_id, empresa_id, estado: 'ENCUESTA_AGENTE', es_humano: false });
+    emitToConv(io, departamento, 'conversacion_actualizada', { id: conversacion_id, empresa_id, estado: ESTADOS.ENCUESTA_AGENTE, es_humano: false });
   }
 }
 

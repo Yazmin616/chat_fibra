@@ -173,6 +173,25 @@ const purgar = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
+// ── Limpiar base de datos ────────────────────────────────────────────────────
+
+const limpiarBD = async (req, res, next) => {
+  try {
+    const { confirmado } = req.body;
+    if (!confirmado) {
+      return res.status(400).json({ error: 'Se requiere confirmación explícita' });
+    }
+
+    await db.query(`
+      TRUNCATE TABLE mensajes, calificaciones, infracciones, conversaciones, usuarios
+      RESTART IDENTITY CASCADE
+    `);
+
+    logger.warn('[TI] Base de datos limpiada: mensajes, conversaciones, calificaciones, infracciones y usuarios eliminados');
+    res.json({ ok: true });
+  } catch (err) { next(err); }
+};
+
 // ── Logs ─────────────────────────────────────────────────────────────────────
 
 const obtenerLogs = (req, res) => {
@@ -180,4 +199,4 @@ const obtenerLogs = (req, res) => {
   res.json({ logs: getLogs(n) });
 };
 
-module.exports = { getStatus, setMantenimiento, descargarBackup, previewPurga, purgar, obtenerLogs };
+module.exports = { getStatus, setMantenimiento, descargarBackup, previewPurga, purgar, limpiarBD, obtenerLogs };

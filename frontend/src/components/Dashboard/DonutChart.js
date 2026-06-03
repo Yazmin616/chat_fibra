@@ -9,7 +9,7 @@
  */
 
 import React from 'react';
-import { AlertTriangle } from 'lucide-react';
+import { Bot } from 'lucide-react';
 
 /**
  * @param {object} props
@@ -88,11 +88,11 @@ const DonutChart = ({ bien, regular, mal, sin_atencion }) => {
 
         {parseInt(sin_atencion) > 0 && (
           <div className="legend-row legend-row--no-atencion">
-            <AlertTriangle size={11} color="#f97316" style={{ flexShrink: 0 }} />
-            <span className="legend-label" style={{ color: '#f97316' }}>Sin atención</span>
-            <span className="legend-val"   style={{ color: '#f97316' }}>{sin_atencion}</span>
+            <Bot size={11} color="#8b5cf6" style={{ flexShrink: 0 }} />
+            <span className="legend-label" style={{ color: '#8b5cf6' }}>Autoservicio</span>
+            <span className="legend-val"   style={{ color: '#8b5cf6' }}>{sin_atencion}</span>
             <span className="legend-pct"   style={{ color: '#a0aec0', fontSize: 9 }}>
-              no cuenta en CSAT
+              resuelto por el bot
             </span>
           </div>
         )}
