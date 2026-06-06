@@ -100,6 +100,7 @@ const assignAgente = (id, agente_id) =>
     `UPDATE conversaciones
      SET agente_id=COALESCE(agente_id,$1),
          estado=CASE WHEN estado='ESPERANDO_AGENTE' THEN 'atendiendo' ELSE estado END,
+         ultimo_mensaje_cliente=CASE WHEN estado='ESPERANDO_AGENTE' THEN NOW() ELSE ultimo_mensaje_cliente END,
          updated_at=NOW()
      WHERE id=$2`,
     [agente_id, id]

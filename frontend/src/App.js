@@ -323,6 +323,7 @@ function App() {
               <ChatWindow
                 conversacionActiva={conversacionActiva}
                 mensajes={mensajes}
+                setMensajes={setMensajes}
                 texto={texto}                         setTexto={setTexto}
                 enviarMensaje={handleEnviarMensaje}
                 enviarMedia={enviarMedia}
@@ -345,7 +346,6 @@ function App() {
               setConfig={setConfig}
               onSave={async (clave, valor) => {
                 await apiService.updateConfig(clave, valor, empresaId);
-                alert(`Configuración guardada para ${empresaId}`);
                 await cargar();
               }}
             />

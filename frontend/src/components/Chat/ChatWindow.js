@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { User, Zap, Trash2, Send, MessageCircle, Activity, ArrowLeft, Smile, Check, CheckCheck } from 'lucide-react';
+import { User, Zap, Trash2, Send, MessageCircle, Activity, ArrowLeft, Smile, Check, CheckCheck, Layers } from 'lucide-react';
 import Picker from '@emoji-mart/react';
 import data from '@emoji-mart/data';
 import { apiService, resolveMedia } from '../../services/api';
@@ -9,6 +9,7 @@ import VoiceRecorder from './VoiceRecorder';
 import VoicePlayer from './VoicePlayer';
 import QuickReplyPicker from './QuickReplyPicker';
 import QuickRepliesModal from './QuickRepliesModal';
+import StickerPicker from './StickerPicker';
 import '../../styles/media-upload.css';
 import '../../styles/quick-replies.css';
 
@@ -165,6 +166,7 @@ function ResumenFlujo({ conv }) {
 const ChatWindow = ({
   conversacionActiva,
   mensajes,
+  setMensajes,
   texto,
   setTexto,
   enviarMensaje,
@@ -176,6 +178,7 @@ const ChatWindow = ({
   user,
 }) => {
   const [showEmojiPicker,   setShowEmojiPicker]   = useState(false);
+  const [showStickerPicker, setShowStickerPicker] = useState(false);
   const [enviandoMedia,     setEnviandoMedia]     = useState(false);
   const [respuestasRapidas, setRespuestasRapidas] = useState([]);
   const [showQRModal,       setShowQRModal]       = useState(false);
@@ -200,9 +203,14 @@ const ChatWindow = ({
   useEffect(() => { cargarRR(); }, [cargarRR]);
 
   // Marca que el próximo lote de mensajes es una carga inicial (conversación recién abierta)
+  // y resetea estado local de stickers al cambiar de conversación
   useEffect(() => {
     if (!conversacionActiva) return;
     cargaInicialRef.current = true;
+    setSavedWaStickers(new Set());
+    setSavingSticker(null);
+    setStickerError('');
+    setShowStickerPicker(false);
   }, [conversacionActiva?.id]);
 
   // Scroll al actualizarse los mensajes
@@ -248,6 +256,69 @@ const ChatWindow = ({
     setEnviandoMedia(true);
     try { await enviarMedia('voice', blob, ''); }
     finally { setEnviandoMedia(false); }
+  };
+
+  const [stickerError,    setStickerError]    = useState('');
+  const [savedWaStickers, setSavedWaStickers] = useState(new Set());
+  const [savingSticker,   setSavingSticker]   = useState(null);
+
+  const handleEnviarSticker = async (pack, file) => {
+    if (!conversacionActiva || enviandoMedia) return;
+    if (conversacionActiva.canal !== 'whatsapp') {
+      setStickerError('Los stickers solo están disponibles en conversaciones de WhatsApp.');
+      setTimeout(() => setStickerError(''), 4000);
+      return;
+    }
+
+    // Validar formato antes de mostrar — WA solo acepta .webp
+    const ext = file.split('.').pop().toLowerCase();
+    if (ext !== 'webp') {
+      setStickerError(`WhatsApp solo admite stickers .webp. Sube "${file}" en formato WebP.`);
+      setTimeout(() => setStickerError(''), 5000);
+      return;
+    }
+
+    // Mostrar el sticker inmediatamente (display optimista)
+    const tempId = `_stk_${Date.now()}`;
+    setMensajes(prev => [...prev, {
+      id:         tempId,
+      remitente:  'agente',
+      texto:      '🎭 Sticker',
+      tipo:       'sticker',
+      url_media:  `st://${pack}/${file}`,
+      estado:     'enviado',
+      created_at: new Date(),
+    }]);
+
+    setEnviandoMedia(true);
+    try {
+      const result = await apiService.enviarSticker(conversacionActiva.id, user?.id, pack, file);
+      // Reemplazar ID temporal con el real para que el dedup del socket lo ignore
+      setMensajes(prev => prev.map(m =>
+        m.id === tempId ? { ...m, id: result.mensaje_id } : m
+      ));
+    } catch (err) {
+      // Revertir el sticker optimista si falló
+      setMensajes(prev => prev.filter(m => m.id !== tempId));
+      setStickerError(err.message || 'Error al enviar el sticker.');
+      setTimeout(() => setStickerError(''), 4000);
+    } finally {
+      setEnviandoMedia(false);
+    }
+  };
+
+  const handleSaveClientSticker = async (url_media) => {
+    if (!user?.id || savingSticker) return;
+    setSavingSticker(url_media);
+    try {
+      await apiService.saveClientSticker(user.id, url_media);
+      setSavedWaStickers(prev => new Set([...prev, url_media]));
+    } catch (err) {
+      setStickerError(err.message || 'No se pudo guardar el sticker.');
+      setTimeout(() => setStickerError(''), 4000);
+    } finally {
+      setSavingSticker(null);
+    }
   };
 
   const handleInputChange = (e) => {
@@ -430,9 +501,38 @@ const ChatWindow = ({
                 ) : (
                   <div className="message-bubble">
                     {m.tipo === 'sticker' ? (
-                      <img src={resolveMedia(m.url_media)} alt="sticker" className="msg-media msg-sticker" />
+                      <div className="msg-sticker-wrap">
+                        <img
+                          src={resolveMedia(m.url_media)}
+                          alt="sticker"
+                          className="msg-media msg-sticker"
+                          onError={e => { e.target.style.display = 'none'; }}
+                        />
+                        {m.remitente === 'user' && (m.url_media?.startsWith('wa://') || m.url_media?.startsWith('tg://')) && (
+                          <button
+                            className={`msg-sticker-save-btn${savedWaStickers.has(m.url_media) ? ' saved' : ''}`}
+                            title={savedWaStickers.has(m.url_media) ? 'Guardado en Mis stickers' : 'Guardar en Mis stickers'}
+                            onClick={() => handleSaveClientSticker(m.url_media)}
+                            disabled={savingSticker === m.url_media}
+                          >
+                            {savingSticker === m.url_media ? '…' : savedWaStickers.has(m.url_media) ? '♥' : '♡'}
+                          </button>
+                        )}
+                      </div>
                     ) : m.tipo === 'sticker_video' ? (
-                      <video src={resolveMedia(m.url_media)} className="msg-media msg-sticker" autoPlay loop muted playsInline />
+                      <div className="msg-sticker-wrap">
+                        <video src={resolveMedia(m.url_media)} className="msg-media msg-sticker" autoPlay loop muted playsInline />
+                        {m.remitente === 'user' && (m.url_media?.startsWith('wa://') || m.url_media?.startsWith('tg://')) && (
+                          <button
+                            className={`msg-sticker-save-btn${savedWaStickers.has(m.url_media) ? ' saved' : ''}`}
+                            title={savedWaStickers.has(m.url_media) ? 'Guardado en Mis stickers' : 'Guardar en Mis stickers'}
+                            onClick={() => handleSaveClientSticker(m.url_media)}
+                            disabled={savingSticker === m.url_media}
+                          >
+                            {savingSticker === m.url_media ? '…' : savedWaStickers.has(m.url_media) ? '♥' : '♡'}
+                          </button>
+                        )}
+                      </div>
                     ) : m.tipo === 'location' ? (
                       <a href={m.url_media} target="_blank" rel="noopener noreferrer" className="msg-location">
                         <span className="msg-location-pin">📍</span>
@@ -495,6 +595,14 @@ const ChatWindow = ({
           />
         )}
 
+        {showStickerPicker && (
+          <StickerPicker
+            onSelect={handleEnviarSticker}
+            onClose={() => setShowStickerPicker(false)}
+            agenteId={user?.id}
+          />
+        )}
+
         <button
           className={`icon-btn-gray${showEmojiPicker ? ' active' : ''}`}
           onClick={() => setShowEmojiPicker(s => !s)}
@@ -510,6 +618,18 @@ const ChatWindow = ({
         >
           <Zap size={20} />
         </button>
+        <button
+          className={`icon-btn-gray${showStickerPicker ? ' active' : ''}`}
+          title={conversacionActiva?.canal !== 'whatsapp' ? 'Stickers (solo WhatsApp)' : 'Stickers'}
+          onClick={() => setShowStickerPicker(s => !s)}
+          disabled={enviandoMedia || conversacionActiva?.canal !== 'whatsapp'}
+          style={conversacionActiva?.canal !== 'whatsapp' ? { opacity: 0.4, cursor: 'not-allowed' } : {}}
+        >
+          <Layers size={20} />
+        </button>
+        {stickerError && (
+          <div className="sticker-send-error">{stickerError}</div>
+        )}
         <textarea
           ref={inputRef}
           rows={1}

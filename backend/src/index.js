@@ -39,9 +39,21 @@ const conversacionesRoutes = require('./routes/conversaciones.routes');
 const configuracionRoutes  = require('./routes/configuracion.routes');
 const contactosRoutes      = require('./routes/contactos.routes');
 const tiRoutes             = require('./routes/ti.routes');
+const horariosRoutes       = require('./routes/horarios.routes');
 
 const app    = express();
 const server = http.createServer(app);
+
+// DEBUG TEMPORAL — registrado ANTES que helmet/cors para capturar cualquier petición
+// independientemente de si un middleware posterior la rechaza.
+app.use('/meta/webhook', (req, res, next) => {
+  logger.info('[META EARLIEST] method=' + req.method
+    + ' content-type=' + (req.headers['content-type'] || 'none')
+    + ' signature=' + (req.headers['x-hub-signature-256'] ? 'present' : 'ABSENT')
+    + ' origin=' + (req.headers['origin'] || 'none')
+  );
+  next();
+});
 
 // Confiar en el primer proxy (ngrok en dev, nginx en producción).
 // Necesario para que express-rate-limit lea X-Forwarded-For correctamente.
@@ -159,6 +171,7 @@ app.use('/agente',         apiLimiter, agenteRoutes);
 app.use('/conversaciones', apiLimiter, conversacionesRoutes);
 app.use('/configuracion',  apiLimiter, configuracionRoutes);
 app.use('/contactos',      apiLimiter, contactosRoutes);
+app.use('/horarios',       apiLimiter, horariosRoutes);
 // Los webhooks de Telegram usan el webhookLimiter; Meta se registra en iniciarMeta()
 app.use('/telegram',       webhookLimiter);
 

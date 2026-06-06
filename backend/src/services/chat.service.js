@@ -37,6 +37,9 @@ async function responder({ conversacion_id, mensaje, agente_id, user_id, io }) {
   const mensaje_id = savedMsg.id;
 
   await conversacionRepo.touch(conversacion_id);
+  // El agente respondió — cancelar el reloj SLA pendiente
+  db.query('UPDATE conversaciones SET sla_pendiente_desde=NULL WHERE id=$1', [conversacion_id])
+    .catch(() => {});
 
   // Obtener empresa_id, departamento, canal y estado actual (puede haber cambiado a 'atendiendo')
   const { rows } = await db.query(
@@ -243,6 +246,9 @@ async function enviarMedia({ conversacion_id, agente_id, tipo, buffer, caption, 
   const mensaje_id = savedMsg.id;
 
   await conversacionRepo.touch(conversacion_id);
+  // El agente respondió (media) — cancelar el reloj SLA pendiente
+  db.query('UPDATE conversaciones SET sla_pendiente_desde=NULL WHERE id=$1', [conversacion_id])
+    .catch(() => {});
 
   const { rows } = await db.query(
     `SELECT c.empresa_id, c.usuario_id, c.departamento, c.estado, c.agente_id, u.canal

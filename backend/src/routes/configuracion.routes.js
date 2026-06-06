@@ -22,9 +22,11 @@ const { verifyToken, requireAdmin } = require('../middleware/auth.middleware');
 router.get('/', verifyToken, requireAdmin, async (req, res, next) => {
   try {
     const { empresa_id } = req.query;
+    // 'todas' is a frontend filter sentinel, not a real empresa — fall back to 'fibratec'.
+    const eid = (empresa_id && empresa_id !== 'todas') ? empresa_id : 'fibratec';
     const { rows } = await db.query(
       'SELECT * FROM configuraciones WHERE empresa_id=$1',
-      [empresa_id || 'fibratec']
+      [eid]
     );
     const configObj = {};
     rows.forEach(row => { configObj[row.clave] = row.valor; });
@@ -40,11 +42,12 @@ router.get('/', verifyToken, requireAdmin, async (req, res, next) => {
 router.post('/', verifyToken, requireAdmin, async (req, res, next) => {
   try {
     const { clave, valor, empresa_id } = req.body;
+    const eid = (empresa_id && empresa_id !== 'todas') ? empresa_id : 'fibratec';
     await db.query(
       `INSERT INTO configuraciones (clave, valor, empresa_id)
        VALUES ($1,$2,$3)
        ON CONFLICT (clave, empresa_id) DO UPDATE SET valor=EXCLUDED.valor`,
-      [clave, valor, empresa_id || 'fibratec']
+      [clave, valor, eid]
     );
     res.json({ ok: true });
   } catch (err) { next(err); }

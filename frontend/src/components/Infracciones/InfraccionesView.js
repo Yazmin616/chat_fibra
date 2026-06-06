@@ -30,10 +30,13 @@ const InfraccionesView = ({ user, empresaId, socket }) => {
 
   useEffect(() => {
     if (!socket) return;
-    const handler = (data) => setInfracciones(prev => [data, ...prev]);
+    const handler = (data) => {
+      if (empresaId !== 'todas' && data.empresa_id !== empresaId) return;
+      setInfracciones(prev => [data, ...prev]);
+    };
     socket.on('nueva_infraccion', handler);
     return () => socket.off('nueva_infraccion', handler);
-  }, [socket]);
+  }, [socket, empresaId]);
 
   const areas = [...new Set(infracciones.map(i => i.departamento).filter(Boolean))];
 
@@ -58,7 +61,7 @@ const InfraccionesView = ({ user, empresaId, socket }) => {
             <AlertTriangle size={22} color="#ef4444" /> Infracciones
           </h1>
           <p className="inf-sub">
-            Incidencias por falta de atención — detectadas automáticamente a los 15 min
+            Incidencias por falta de atención detectadas automáticamente
           </p>
         </div>
         <button className="inf-refresh-btn" onClick={cargar}>

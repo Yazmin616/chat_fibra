@@ -1,145 +1,105 @@
-import React from 'react';
-
-const DIAS = [
-  { value: 1, label: 'Lun' },
-  { value: 2, label: 'Mar' },
-  { value: 3, label: 'Mié' },
-  { value: 4, label: 'Jue' },
-  { value: 5, label: 'Vie' },
-  { value: 6, label: 'Sáb' },
-  { value: 0, label: 'Dom' },
-];
-
 /**
- * @param {object}   props
- * @param {object}   props.config    - Configuración actual { tiempo_inactividad, jornada_inicio, jornada_fin, jornada_dias }.
- * @param {Function} props.setConfig - Setter local para actualizar antes de guardar.
- * @param {(clave: string, valor: string) => Promise<void>} props.onSave - Persiste el cambio en el backend.
+ * @file SettingsView.js
+ * @description Shell del panel de configuración.
+ *
+ * Responsabilidades:
+ *   - Renderizar el submenú lateral con todas las secciones de SECTIONS.
+ *   - Gestionar la sección activa mediante window.location.hash
+ *     (ej. #config-jornada), para que la URL refleje la sección
+ *     y el botón Atrás del navegador funcione.
+ *   - Intercepción de cambios sin guardar: pide confirmación antes
+ *     de navegar a otra sección si hay cambios pendientes.
+ *   - Pasar { config, onSave, setDirty } a la sección activa.
+ *
+ * Para agregar una sección nueva: editar ÚNICAMENTE settingsSections.js.
  */
-const SettingsView = ({ config, setConfig, onSave }) => {
-  const diasActivos = new Set(
-    (config.jornada_dias || '1,2,3,4,5').split(',').map(Number)
-  );
 
-  const toggleDia = (dia) => {
-    const nuevo = new Set(diasActivos);
-    if (nuevo.has(dia)) nuevo.delete(dia);
-    else nuevo.add(dia);
-    const str = [...nuevo].sort((a, b) => a - b).join(',');
-    setConfig({ ...config, jornada_dias: str });
-  };
+import React, { useState, useRef, useCallback, useEffect } from 'react';
+import { SECTIONS, DEFAULT_SECTION_ID } from './settingsSections';
+
+// Lee el hash de la URL y lo mapea a un ID de sección válido.
+function getSectionFromHash() {
+  const raw = window.location.hash.replace('#', '');
+  const found = SECTIONS.find(s => `config-${s.id}` === raw);
+  return found ? found.id : DEFAULT_SECTION_ID;
+}
+
+const SettingsView = ({ config, onSave }) => {
+  const [activeId, setActiveId] = useState(getSectionFromHash);
+
+  // dirtyRef: escrito por la sección activa, leído por el shell al navegar.
+  const dirtyRef = useRef(false);
+  const setDirty = useCallback((v) => { dirtyRef.current = v; }, []);
+
+  // Sincronizar estado activo con cambios de hash (botón Atrás / Adelante).
+  useEffect(() => {
+    const onHash = () => {
+      const id = getSectionFromHash();
+      if (id !== activeId) {
+        dirtyRef.current = false;
+        setActiveId(id);
+      }
+    };
+    window.addEventListener('hashchange', onHash);
+    return () => window.removeEventListener('hashchange', onHash);
+  }, [activeId]);
+
+  const navigate = useCallback((id) => {
+    if (id === activeId) return;
+    if (dirtyRef.current) {
+      if (!window.confirm('Tienes cambios sin guardar en esta sección. ¿Cambiar de sección?')) {
+        return;
+      }
+    }
+    dirtyRef.current = false;
+    window.location.hash = `config-${id}`;
+    setActiveId(id);
+  }, [activeId]);
+
+  const activeSection = SECTIONS.find(s => s.id === activeId) || SECTIONS[0];
+  const ActiveComponent = activeSection.component;
 
   return (
-    <div className="settings-view">
-      <div className="settings-header">
-        <h2>Configuración del Sistema</h2>
-        <p>Ajusta los parámetros globales del chatbot y CRM.</p>
+    <div className="settings-view cfg-shell">
+
+      {/* ── Submenú lateral ──────────────────────────────────────────────── */}
+      <nav className="cfg-sidebar">
+        <div className="cfg-sidebar-header">
+          <span className="cfg-sidebar-title">Configuración</span>
+        </div>
+
+        <ul className="cfg-nav" role="menu">
+          {SECTIONS.map(section => (
+            <li key={section.id} role="none">
+              <button
+                role="menuitem"
+                className={`cfg-nav-item${section.id === activeId ? ' cfg-nav-item--active' : ''}`}
+                onClick={() => navigate(section.id)}
+                aria-current={section.id === activeId ? 'page' : undefined}
+              >
+                <span className="cfg-nav-icon" aria-hidden="true">{section.icon}</span>
+                <span className="cfg-nav-text">
+                  <span className="cfg-nav-label">{section.label}</span>
+                  <span className="cfg-nav-desc">{section.description}</span>
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      </nav>
+
+      {/* ── Contenido de la sección activa ────────────────────────────────── */}
+      {/*  key={activeId} fuerza remount al cambiar de sección,          */}
+      {/*  inicializando el estado local desde config fresco.              */}
+      <div className="cfg-content">
+        <ActiveComponent
+          key={activeId}
+          config={config}
+          onSave={onSave}
+          setDirty={setDirty}
+        />
       </div>
 
-      <div className="settings-card">
-        <div className="setting-item">
-          <div className="setting-info">
-            <label>Tiempo de Inactividad (Minutos)</label>
-            <span>Minutos sin mensajes para cerrar automáticamente un chat en atención.</span>
-          </div>
-          <div className="setting-control">
-            <input
-              type="number"
-              min="1"
-              value={config.tiempo_inactividad || 10}
-              onChange={(e) => setConfig({ ...config, tiempo_inactividad: e.target.value })}
-            />
-            <button className="btn-save" onClick={() => onSave('tiempo_inactividad', config.tiempo_inactividad)}>
-              Guardar
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <div className="settings-card">
-        <h3 style={{ margin: '0 0 16px', fontSize: '15px', fontWeight: 600 }}>Jornada Laboral</h3>
-        <p style={{ margin: '0 0 20px', fontSize: '13px', color: 'var(--text-secondary, #888)' }}>
-          Infracciones y cierres automáticos solo se generan dentro del horario laboral.
-          Las conversaciones en espera tienen 24 h reales para ser tomadas (ventana Meta).
-        </p>
-
-        <div className="setting-item">
-          <div className="setting-info">
-            <label>Hora de inicio</label>
-            <span>Hora a partir de la cual los agentes están disponibles.</span>
-          </div>
-          <div className="setting-control">
-            <input
-              type="time"
-              value={config.jornada_inicio || '09:00'}
-              onChange={(e) => setConfig({ ...config, jornada_inicio: e.target.value })}
-            />
-            <button className="btn-save" onClick={() => onSave('jornada_inicio', config.jornada_inicio || '09:00')}>
-              Guardar
-            </button>
-          </div>
-        </div>
-
-        <div className="setting-item">
-          <div className="setting-info">
-            <label>Hora de fin</label>
-            <span>Hora a la que termina la jornada laboral.</span>
-          </div>
-          <div className="setting-control">
-            <input
-              type="time"
-              value={config.jornada_fin || '18:00'}
-              onChange={(e) => setConfig({ ...config, jornada_fin: e.target.value })}
-            />
-            <button className="btn-save" onClick={() => onSave('jornada_fin', config.jornada_fin || '18:00')}>
-              Guardar
-            </button>
-          </div>
-        </div>
-
-        <div className="setting-item">
-          <div className="setting-info">
-            <label>Días laborales</label>
-            <span>Días en que los agentes atienden clientes.</span>
-          </div>
-          <div className="setting-control" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: '12px' }}>
-            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-              {DIAS.map(({ value, label }) => (
-                <label
-                  key={value}
-                  style={{
-                    display:        'flex',
-                    alignItems:     'center',
-                    gap:            '4px',
-                    cursor:         'pointer',
-                    padding:        '4px 10px',
-                    borderRadius:   '6px',
-                    border:         '1px solid var(--border, #ddd)',
-                    background:     diasActivos.has(value) ? 'var(--primary, #2563eb)' : 'transparent',
-                    color:          diasActivos.has(value) ? '#fff' : 'inherit',
-                    fontSize:       '13px',
-                    userSelect:     'none',
-                  }}
-                >
-                  <input
-                    type="checkbox"
-                    style={{ display: 'none' }}
-                    checked={diasActivos.has(value)}
-                    onChange={() => toggleDia(value)}
-                  />
-                  {label}
-                </label>
-              ))}
-            </div>
-            <button
-              className="btn-save"
-              onClick={() => onSave('jornada_dias', config.jornada_dias || '1,2,3,4,5')}
-            >
-              Guardar días
-            </button>
-          </div>
-        </div>
-      </div>
     </div>
   );
 };

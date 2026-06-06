@@ -844,3 +844,188 @@
     max-width: 88%;
   }
 }
+
+/* ── Sticker Picker ─────────────────────────────────────────────── */
+.sticker-picker {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 0;
+  width: 280px;
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+  overflow: hidden;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  max-height: 320px;
+}
+
+.sticker-picker-tabs {
+  display: flex;
+  gap: 2px;
+  padding: 8px 8px 0;
+  border-bottom: 1px solid #f0f0f0;
+  overflow-x: auto;
+  scrollbar-width: none;
+  flex-shrink: 0;
+}
+
+.sticker-picker-tabs::-webkit-scrollbar { display: none; }
+
+.sticker-tab {
+  padding: 6px 12px;
+  border: none;
+  background: transparent;
+  border-radius: 8px 8px 0 0;
+  font-size: 12px;
+  font-weight: 500;
+  color: #667781;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s, color 0.15s;
+}
+
+.sticker-tab.active {
+  background: #e8faf0;
+  color: #25d366;
+}
+
+.sticker-picker-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+  padding: 8px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.sticker-cell {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  border: none;
+  background: transparent;
+  border-radius: 8px;
+  cursor: pointer;
+  aspect-ratio: 1;
+  transition: background 0.15s;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.sticker-cell:hover { background: #f0f0f0; }
+
+/* Botón de favorito — visible solo al hacer hover sobre la celda o si ya es favorito */
+/* Botones flotantes sobre cada sticker (favorito + eliminar) */
+.sticker-fav-btn,
+.sticker-del-btn {
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  background: rgba(255, 255, 255, 0.88);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 11px;
+  line-height: 1;
+  opacity: 0;
+  transition: opacity 0.15s, color 0.15s;
+  z-index: 2;
+}
+
+.sticker-fav-btn { top: 2px; right: 2px;  color: #bbb; }
+.sticker-del-btn { top: 2px; left:  2px;  color: #bbb; font-size: 14px; }
+
+.sticker-cell:hover .sticker-fav-btn,
+.sticker-cell:hover .sticker-del-btn { opacity: 1; }
+.sticker-fav-btn.is-fav { opacity: 1; color: #e53e3e; }
+.sticker-del-btn:hover { color: #dc2626; background: #fee2e2; }
+
+/* Error de envío de sticker (sobre el área de input) */
+.sticker-send-error {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: #fee2e2;
+  color: #dc2626;
+  border: 1px solid #fca5a5;
+  border-radius: 8px;
+  padding: 6px 14px;
+  font-size: 12px;
+  white-space: normal;
+  max-width: 280px;
+  text-align: center;
+  z-index: 200;
+  pointer-events: none;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+}
+
+
+.sticker-thumb {
+  width: 56px;
+  height: 56px;
+  object-fit: contain;
+}
+
+/* Wrapper de sticker en el chat — permite posicionar el botón de guardar */
+.msg-sticker-wrap {
+  position: relative;
+  display: inline-block;
+}
+
+/* Botón guardar sticker del cliente */
+.msg-sticker-save-btn {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 26px;
+  height: 26px;
+  background: rgba(0, 0, 0, 0.45);
+  border: none;
+  border-radius: 50%;
+  color: white;
+  font-size: 15px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s;
+  padding: 0;
+  line-height: 1;
+}
+.msg-sticker-wrap:hover .msg-sticker-save-btn {
+  opacity: 1;
+}
+.msg-sticker-save-btn.saved {
+  opacity: 1;
+  color: #ef4444;
+  background: rgba(0, 0, 0, 0.5);
+}
+.msg-sticker-save-btn:disabled {
+  cursor: default;
+}
+
+.sticker-picker-empty {
+  grid-column: 1 / -1;
+  text-align: center;
+  padding: 24px 12px;
+  color: #999;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.sticker-picker-hint {
+  font-size: 11px;
+  color: #bbb;
+  display: block;
+  margin-top: 6px;
+}

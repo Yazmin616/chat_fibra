@@ -25,6 +25,10 @@ const logger           = require('../config/logger');
 const { sanitize }     = require('../utils/logSanitizer');
 const { getHandler }   = require('../bot/dispatcher');
 const { ESTADOS }      = require('../bot/constants');
+const { detectarEscenario, formatearHorarios, proximoDiaHabil } = require('../utils/turnosHorarios');
+
+const MSG_DEFAULT_FESTIVO        = '¡Hola! 👋 Hoy es día festivo en {empresa}. El equipo de {area} retoma actividades el {proximo_dia_habil}. Disculpa el inconveniente — escríbenos entonces y te atenderemos con gusto.\n\n🕐 Horarios habituales:\n{horarios_atencion}';
+const MSG_DEFAULT_FUERA_HORARIO  = '¡Hola! 👋 Gracias por contactar a {empresa}. En este momento el equipo de {area} no está disponible.\n\n🕐 Horarios de atención:\n{horarios_atencion}\n\nTu mensaje quedó registrado y te responderemos en cuanto retomemos actividades. ¡Hasta pronto!';
 
 // ── Rate limiting por usuario ────────────────────────────────────────────────
 // Evita que un cliente genere miles de registros enviando mensajes en ráfaga.
@@ -81,8 +85,31 @@ async function procesar(input, io) {
       .catch(err => logger.warn('[BOT SERVICE] No se pudo guardar wamid_entrante:', err.message));
   }
 
+  // Reiniciar timers de inactividad y SLA del agente.
+  // Se actualiza en cada mensaje del usuario, independientemente del estado,
+  // para que cuando la conversación llegue a 'atendiendo' el anchor sea correcto.
+  // aviso_inactividad_enviado se resetea a 0 para reiniciar la escalada del cliente.
+  // sla_pendiente_desde se fija en NOW() para iniciar el reloj SLA del agente.
+  db.query(
+    `UPDATE conversaciones
+     SET ultimo_mensaje_cliente    = NOW(),
+         aviso_inactividad_enviado = 0,
+         sla_pendiente_desde       = NOW()
+     WHERE id=$1`,
+    [conversacion.id]
+  ).catch(err => logger.warn('[BOT SERVICE] No se pudo actualizar timers de actividad:', err.message));
+
   // Agente humano atiende: el bot no responde, pero devolvemos contexto para el emit de socket
   if (conversacion.es_humano) return { mensaje_id, conversacion, conversacion_id: conversacion.id };
+
+  // ── Detección de escenario A/B/C ────────────────────────────────────────────
+  // Solo cuando el cliente está esperando un agente humano (ESPERANDO_AGENTE).
+  // Las consultas al bot (menú, FAQ, etc.) se procesan 24/7 sin restricción.
+  // Si se detecta A/B, la conversación se cierra aquí y no continúa al state machine.
+  if (conversacion.estado === ESTADOS.ESPERANDO_AGENTE && conversacion.departamento) {
+    const fueraDeHorario = await _checkEscenarioHorario(conversacion, input, io);
+    if (fueraDeHorario) return { mensaje_id, conversacion, conversacion_id: conversacion.id };
+  }
 
   const resultado = await _maquinaEstados(
     input.mensaje,
@@ -132,12 +159,28 @@ async function _upsertUsuario({ canal, user_id, nombre, username }) {
 
 /**
  * Busca la conversación activa del usuario; crea una nueva en "abierta" si no hay ninguna.
+ * Si el usuario tiene historial previo (conversaciones cerradas), inserta un mensaje
+ * sistema_info para que el agente sepa que es un cliente recurrente.
  * @private
  */
 async function _upsertConversacion(usuario_id, empresa_id) {
   const { rows } = await conversacionRepo.findActiveByUsuario(usuario_id, empresa_id);
   if (rows.length > 0) return rows[0];
-  return (await conversacionRepo.create(usuario_id, empresa_id)).rows[0];
+
+  const nuevaConv = (await conversacionRepo.create(usuario_id, empresa_id)).rows[0];
+
+  const { rows: cerradas } = await conversacionRepo.findCerradasByUsuario(usuario_id, empresa_id);
+  if (cerradas.length > 0) {
+    const { rows: cnt } = await db.query(
+      "SELECT COUNT(*) AS total FROM conversaciones WHERE usuario_id=$1 AND empresa_id=$2 AND estado='cerrada'",
+      [usuario_id, empresa_id]
+    );
+    const total = parseInt(cnt[0]?.total || '1');
+    const nota = `📋 Cliente recurrente — ${total} conversación${total > 1 ? 'es previas' : ' previa'} en el historial.`;
+    await mensajeRepo.create(nuevaConv.id, 'sistema_info', nota);
+  }
+
+  return nuevaConv;
 }
 
 /**
@@ -172,6 +215,80 @@ async function _maquinaEstados(mensaje, conversacion, usuario, io, empresaPrecon
     await conversacionRepo.updateEstado(conversacion.id, ESTADOS.INICIO);
     await mensajeRepo.create(conversacion.id, 'bot', fallback);
     return { texto: fallback, conversacion_id: conversacion.id };
+  }
+}
+
+// ── Detección de escenario y aviso de horario ────────────────────────────────
+
+/**
+ * Comprueba si hay turno activo para el área de la conversación en ESPERANDO_AGENTE.
+ * Si el escenario es A o B:
+ *   1. Envía el mensaje de fuera de horario / festivo al cliente.
+ *   2. Cierra la conversación (CERRADA) para que el próximo mensaje inicie una sesión nueva.
+ *
+ * Retorna true si se detectó A/B (el llamador puede decidir saltarse la máquina de estados).
+ *
+ * Nota: con el fix en seleccionArea.state.js, las conversaciones ESPERANDO_AGENTE
+ * nunca deberían crearse fuera de horario. Esta función actúa como red de seguridad.
+ */
+async function _checkEscenarioHorario(conversacion, input, io) {
+  try {
+    const empresaId = input.empresa_id || 'fibratec';
+    const { rows: cfgRows } = await db.query(
+      'SELECT clave, valor FROM configuraciones WHERE empresa_id=$1',
+      [empresaId]
+    );
+    const configMap = {};
+    cfgRows.forEach(r => { configMap[r.clave] = r.valor; });
+
+    const { escenario, turnos } = await detectarEscenario(
+      db, new Date(), empresaId, conversacion.departamento, configMap
+    );
+    if (escenario === 'C') return false; // turno activo → flujo normal
+
+    // Construir texto del mensaje
+    const horarios = formatearHorarios(turnos);
+    const proximo  = await proximoDiaHabil(db, empresaId, conversacion.departamento, configMap);
+    const plantilla = escenario === 'A'
+      ? (configMap.msg_festivo || MSG_DEFAULT_FESTIVO)
+      : (configMap.msg_fuera_horario || MSG_DEFAULT_FUERA_HORARIO);
+
+    const texto = plantilla
+      .replace(/\{horarios_atencion\}/g, horarios)
+      .replace(/\{proximo_dia_habil\}/g, proximo)
+      .replace(/\{area\}/g,    conversacion.departamento || '')
+      .replace(/\{empresa\}/g, empresaId);
+
+    // Lazy require para romper la dependencia circular adapters ↔ bot.service
+    const { enviarMensaje } = require('../adapters');
+    await enviarMensaje(input.canal || 'telegram', input.user_id, texto, empresaId);
+    await mensajeRepo.create(conversacion.id, 'bot', texto);
+
+    // Cerrar la conversación: próximo mensaje del cliente = sesión nueva
+    await db.query(
+      "UPDATE conversaciones SET estado='cerrada', updated_at=NOW() WHERE id=$1",
+      [conversacion.id]
+    );
+
+    // Notificar al CRM para que retire la conv de la cola de espera
+    if (io) {
+      const { emitToConv } = require('../utils/rooms');
+      emitToConv(io, conversacion.departamento, 'conversacion_actualizada', {
+        id:        conversacion.id,
+        empresa_id: empresaId,
+        estado:    'cerrada',
+        es_humano: false,
+      });
+    }
+
+    logger.info(
+      `[ESCENARIO ${escenario}] Fuera de horario — Conv ${conversacion.id} cerrada — ${conversacion.departamento}`
+    );
+    return true;
+  } catch (err) {
+    // No bloqueante: un error aquí no debe interrumpir el flujo del bot
+    logger.warn('[BOT SERVICE] Error en _checkEscenarioHorario:', err.message);
+    return false;
   }
 }
 

@@ -9,10 +9,14 @@
  *   - Logs del servidor (buffer en memoria)
  */
 
+const path        = require('path');
+const fs          = require('fs');
 const db          = require('../config/db');
 const maintenance = require('../maintenance');
 const { getLogs } = require('../logBuffer');
 const logger      = require('../config/logger');
+
+const STICKERS_DIR = path.join(__dirname, '../../uploads/stickers');
 
 // ── Estado del sistema ───────────────────────────────────────────────────────
 
@@ -199,4 +203,55 @@ const obtenerLogs = (req, res) => {
   res.json({ logs: getLogs(n) });
 };
 
-module.exports = { getStatus, setMantenimiento, descargarBackup, previewPurga, purgar, limpiarBD, obtenerLogs };
+// ── Gestión de stickers ─────────────────────────────────────────────────────
+
+const listarStickers = async (req, res, next) => {
+  try {
+    let entries;
+    try { entries = await fs.promises.readdir(STICKERS_DIR, { withFileTypes: true }); }
+    catch { return res.json([]); }
+
+    // Conteo de favoritos + mapa de nombre de agente para packs personales
+    const [favRes, agentesRes] = await Promise.all([
+      db.query('SELECT pack, file, COUNT(*)::int AS count FROM sticker_favoritos GROUP BY pack, file'),
+      db.query("SELECT id, nombre FROM agentes WHERE rol != 'ti'"),
+    ]);
+    const favMap    = {};
+    for (const r of favRes.rows) favMap[`${r.pack}/${r.file}`] = r.count;
+    const agenteMap = {};
+    for (const a of agentesRes.rows) agenteMap[`agente_${a.id}`] = a.nombre;
+
+    const packs = [];
+    for (const e of entries) {
+      if (!e.isDirectory()) continue;
+      const dirPath  = path.join(STICKERS_DIR, e.name);
+      const files    = (await fs.promises.readdir(dirPath))
+        .filter(f => /\.(webp|png|gif)$/i.test(f))
+        .sort()
+        .map(f => ({ file: f, favoritos: favMap[`${e.name}/${f}`] || 0 }));
+      if (!files.length) continue;
+      const label = agenteMap[e.name] ? `👤 ${agenteMap[e.name]}` : e.name;
+      packs.push({ pack: e.name, label, files });
+    }
+    res.json(packs);
+  } catch (err) { next(err); }
+};
+
+const eliminarSticker = async (req, res, next) => {
+  try {
+    const safePack = path.basename(req.params.pack);
+    const safeFile = path.basename(req.params.file);
+    await fs.promises.unlink(path.join(STICKERS_DIR, safePack, safeFile));
+    await db.query(
+      'DELETE FROM sticker_favoritos WHERE pack=$1 AND file=$2',
+      [safePack, safeFile]
+    );
+    logger.info(`[TI STICKER] Eliminado: ${safePack}/${safeFile}`);
+    res.json({ ok: true });
+  } catch (err) {
+    if (err.code === 'ENOENT') return res.status(404).json({ error: 'Archivo no encontrado' });
+    next(err);
+  }
+};
+
+module.exports = { getStatus, setMantenimiento, descargarBackup, previewPurga, purgar, limpiarBD, obtenerLogs, listarStickers, eliminarSticker };

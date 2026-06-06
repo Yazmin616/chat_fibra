@@ -20,6 +20,8 @@ const { Telegraf }     = require('telegraf');
 const crypto           = require('crypto');
 const botService       = require('../services/bot.service');
 const mensajeRepo      = require('../repositories/mensaje.repository');
+const usuarioRepo      = require('../repositories/usuario.repository');
+const conversacionRepo = require('../repositories/conversacion.repository');
 const logger           = require('../config/logger');
 const { emitToConv }   = require('../utils/rooms');
 const maintenance      = require('../maintenance');
@@ -430,10 +432,16 @@ async function _procesarMensaje(ctx, type, io, empresa_id) {
       }
     }
 
+    // Notificar al área asignada cuando seleccionArea crea la conv ESPERANDO_AGENTE.
+    // respuesta.departamento trae el área nueva (earlyReturn); conversacion.departamento
+    // es el de la conv vieja (null), por eso se priorizaba mal antes.
     if (respuesta?.conversacion_id && io) {
-      emitToConv(io, respuesta.conversacion?.departamento, 'conversacion_actualizada', {
-        id:     respuesta.conversacion_id,
-        estado: 'ESPERANDO_AGENTE',
+      const dept = respuesta.departamento || respuesta.conversacion?.departamento;
+      emitToConv(io, dept, 'conversacion_actualizada', {
+        id:         respuesta.conversacion_id,
+        empresa_id: respuesta.conversacion?.empresa_id,
+        estado:     'ESPERANDO_AGENTE',
+        es_humano:  true,
       });
     }
 

@@ -36,6 +36,9 @@ export const resolveMedia = (url) => {
   if (url.startsWith('wa://')) {
     return `${API_URL}/agente/wa-media/${url.slice(5)}`;
   }
+  if (url.startsWith('st://')) {
+    return `${API_URL}/agente/sticker-file/${url.slice(5)}`;
+  }
   return url;
 };
 
@@ -496,6 +499,139 @@ export const apiService = {
 
   async eliminarRespuestaRapida(id) {
     const res = await fetch(`${API_URL}/agente/respuestas-rapidas/${id}`, {
+      method:  'DELETE',
+      headers: _authHeaders(),
+    });
+    return _parseJson(res);
+  },
+
+  // ─────────────────────────────────────────────
+  // STICKERS
+  // ─────────────────────────────────────────────
+
+  async getStickers() {
+    const res = await fetch(`${API_URL}/agente/stickers`, {
+      headers: _authHeaders(),
+    });
+    return _parseJson(res);
+  },
+
+  async deletePersonalSticker(agente_id, file) {
+    const res = await fetch(`${API_URL}/agente/stickers/mine/${encodeURIComponent(file)}`, {
+      method:  'DELETE',
+      headers: _authHeaders(),
+      body:    JSON.stringify({ agente_id }),
+    });
+    return _parseJson(res);
+  },
+
+  async getStickerFavoritos(agente_id) {
+    const res = await fetch(`${API_URL}/agente/stickers/favoritos?agente_id=${agente_id}`, {
+      headers: _authHeaders(),
+    });
+    return _parseJson(res);
+  },
+
+  async addStickerFavorito(agente_id, pack, file) {
+    const res = await fetch(`${API_URL}/agente/stickers/favorito`, {
+      method:  'POST',
+      headers: _authHeaders(),
+      body:    JSON.stringify({ agente_id, pack, file }),
+    });
+    return _parseJson(res);
+  },
+
+  async removeStickerFavorito(agente_id, pack, file) {
+    const res = await fetch(`${API_URL}/agente/stickers/favorito`, {
+      method:  'DELETE',
+      headers: _authHeaders(),
+      body:    JSON.stringify({ agente_id, pack, file }),
+    });
+    return _parseJson(res);
+  },
+
+  async enviarSticker(conversacion_id, agente_id, pack, file) {
+    const res = await fetch(`${API_URL}/agente/sticker`, {
+      method:  'POST',
+      headers: _authHeaders(),
+      body:    JSON.stringify({ conversacion_id, agente_id, pack, file }),
+    });
+    return _parseJson(res);
+  },
+
+  async saveClientSticker(agente_id, url_media) {
+    const res = await fetch(`${API_URL}/agente/stickers/save-from-wa`, {
+      method:  'POST',
+      headers: _authHeaders(),
+      body:    JSON.stringify({ agente_id, url_media }),
+    });
+    return _parseJson(res);
+  },
+
+  // ─────────────────────────────────────────────
+  // HORARIOS — turnos por área y festivos
+  // ─────────────────────────────────────────────
+
+  async getAreas(empresa_id) {
+    const res = await fetch(`${API_URL}/horarios/areas?empresa_id=${empresa_id}`, {
+      headers: _authHeaders(),
+    });
+    return _parseJson(res);
+  },
+
+  async getTurnos(empresa_id, area) {
+    const params = new URLSearchParams({ empresa_id });
+    if (area !== undefined) params.append('area', area);
+    const res = await fetch(`${API_URL}/horarios/turnos?${params}`, {
+      headers: _authHeaders(),
+    });
+    return _parseJson(res);
+  },
+
+  async crearTurno(data) {
+    const res = await fetch(`${API_URL}/horarios/turnos`, {
+      method:  'POST',
+      headers: _authHeaders(),
+      body:    JSON.stringify(data),
+    });
+    return _parseJson(res);
+  },
+
+  async actualizarTurno(id, data) {
+    const res = await fetch(`${API_URL}/horarios/turnos/${id}`, {
+      method:  'PUT',
+      headers: _authHeaders(),
+      body:    JSON.stringify(data),
+    });
+    return _parseJson(res);
+  },
+
+  async eliminarTurno(id) {
+    const res = await fetch(`${API_URL}/horarios/turnos/${id}`, {
+      method:  'DELETE',
+      headers: _authHeaders(),
+    });
+    return _parseJson(res);
+  },
+
+  async getFestivos(empresa_id) {
+    const res = await fetch(`${API_URL}/horarios/festivos?empresa_id=${empresa_id}`, {
+      headers: _authHeaders(),
+    });
+    return _parseJson(res);
+  },
+
+  async crearFestivo(data) {
+    const res = await fetch(`${API_URL}/horarios/festivos`, {
+      method:  'POST',
+      headers: _authHeaders(),
+      body:    JSON.stringify(data),
+    });
+    return _parseJson(res);
+  },
+
+  async eliminarFestivo(id) {
+    const res = await fetch(`${API_URL}/horarios/festivos/${id}`, {
       method:  'DELETE',
       headers: _authHeaders(),
     });

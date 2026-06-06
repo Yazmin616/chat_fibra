@@ -7,15 +7,21 @@
  * indica de qué canal proviene: 'whatsapp_business_account', 'page' o 'instagram'.
  *
  * Configuración necesaria en .env por empresa:
- *   META_FIBRATEC_ACCESS_TOKEN        — token de acceso permanente (System User)
- *   META_FIBRATEC_WHATSAPP_PHONE_ID   — ID del número de WhatsApp Business
- *   META_FIBRATEC_FACEBOOK_PAGE_ID    — ID de la Página de Facebook
- *   META_FIBRATEC_INSTAGRAM_ID        — ID de la cuenta de Instagram Business
+ *   META_FIBRATEC_ACCESS_TOKEN              — token de acceso permanente (System User, WhatsApp)
+ *   META_FIBRATEC_WHATSAPP_PHONE_ID         — ID del número de WhatsApp Business
+ *   META_FIBRATEC_FACEBOOK_PAGE_ID          — ID de la Página de Facebook
+ *   META_FIBRATEC_PAGE_ACCESS_TOKEN         — Page Access Token (Messenger)
+ *   META_FIBRATEC_INSTAGRAM_ID              — ID de la cuenta de Instagram Business
+ *   META_FIBRATEC_INSTAGRAM_ACCESS_TOKEN    — Instagram User Access Token (Instagram Login API)
+ *                                             Obtener en: tu app → Casos de uso → Instagram →
+ *                                             Configuración de la API con inicio de sesión → Generar token
  *   META_COMPUSEMMM_ACCESS_TOKEN
  *   META_COMPUSEMMM_WHATSAPP_PHONE_ID
  *   META_COMPUSEMMM_FACEBOOK_PAGE_ID
+ *   META_COMPUSEMMM_PAGE_ACCESS_TOKEN
  *   META_COMPUSEMMM_INSTAGRAM_ID
- *   META_WEBHOOK_VERIFY_TOKEN         — token personalizado para verificar el webhook en Meta
+ *   META_COMPUSEMMM_INSTAGRAM_ACCESS_TOKEN
+ *   META_WEBHOOK_VERIFY_TOKEN               — token personalizado para verificar el webhook en Meta
  *
  * Para activar:
  *   1. Crear una app en developers.facebook.com
@@ -26,6 +32,8 @@
  */
 
 const crypto           = require('crypto');
+const path             = require('path');
+const fs               = require('fs');
 const botService       = require('../services/bot.service');
 const usuarioRepo      = require('../repositories/usuario.repository');
 const conversacionRepo = require('../repositories/conversacion.repository');
@@ -33,9 +41,61 @@ const mensajeRepo      = require('../repositories/mensaje.repository');
 const logger           = require('../config/logger');
 const { emitToConv }   = require('../utils/rooms');
 
-const GRAPH_URL       = 'https://graph.facebook.com/v18.0';
-const VERIFY_TOKEN    = process.env.META_WEBHOOK_VERIFY_TOKEN || 'isp_chatbot_meta_verify';
-const META_APP_SECRET = process.env.META_APP_SECRET || '';
+// Directorio local donde se persisten los media de WhatsApp al recibir el webhook.
+// Sirve el archivo desde disco en /agente/wa-media, sin depender de que el
+// Media ID de Meta siga vivo cuando el agente abra el chat.
+const WA_MEDIA_DIR = path.join(__dirname, '../../uploads/wa-media');
+
+const MIME_TO_EXT = {
+  'image/webp':  'webp', 'image/jpeg': 'jpg',  'image/png':  'png',  'image/gif': 'gif',
+  'audio/ogg':   'ogg',  'audio/mpeg': 'mp3',  'audio/mp4':  'm4a',  'audio/wav': 'wav',
+  'video/mp4':   'mp4',  'video/3gpp': '3gp',
+  'application/pdf': 'pdf',
+};
+
+/**
+ * Descarga un media de WhatsApp y lo guarda en disco de forma idempotente.
+ * Se llama en fire-and-forget al recibir el webhook — no bloquea la respuesta a Meta.
+ * @param {string} media_id
+ * @param {string} empresa_id
+ */
+async function _descargarMedia(media_id, empresa_id) {
+  try {
+    const dir = path.join(WA_MEDIA_DIR, empresa_id);
+
+    // Idempotente: si ya existe el archivo, no volver a descargarlo
+    try {
+      const existing = await fs.promises.readdir(dir);
+      if (existing.some(f => f.startsWith(media_id + '.'))) return;
+    } catch { /* dir no existe todavía — se crea abajo */ }
+
+    const { url, access_token } = await resolveWaMediaUrl(media_id, empresa_id);
+    const res = await fetch(url, {
+      headers: { 'Authorization': `Bearer ${access_token}` },
+    });
+
+    if (!res.ok) {
+      logger.warn(`[META MEDIA] No se pudo descargar media_id=${media_id}: HTTP ${res.status}`);
+      return;
+    }
+
+    const mime = (res.headers.get('content-type') || '').split(';')[0].trim();
+    const ext  = MIME_TO_EXT[mime] || 'bin';
+
+    await fs.promises.mkdir(dir, { recursive: true });
+    const localPath = path.join(dir, `${media_id}.${ext}`);
+    const buffer    = Buffer.from(await res.arrayBuffer());
+    await fs.promises.writeFile(localPath, buffer);
+    logger.info(`[META MEDIA] Guardado: ${empresa_id}/${media_id}.${ext} (${buffer.length}B, ${mime})`);
+  } catch (err) {
+    logger.warn(`[META MEDIA] Error descargando media_id=${media_id}:`, err.message);
+  }
+}
+
+const GRAPH_URL                = 'https://graph.facebook.com/v18.0';
+const VERIFY_TOKEN             = process.env.META_WEBHOOK_VERIFY_TOKEN || 'isp_chatbot_meta_verify';
+const META_APP_SECRET          = process.env.META_APP_SECRET || '';
+const META_INSTAGRAM_APP_SECRET = process.env.META_INSTAGRAM_APP_SECRET || '';
 
 
 /**
@@ -46,20 +106,41 @@ const META_APP_SECRET = process.env.META_APP_SECRET || '';
  * @param {Buffer|string}    rawBody  - Cuerpo crudo de la solicitud (sin parsear)
  * @returns {boolean}
  */
+/**
+ * Extrae el campo "object" del raw body sin parsearlo completamente.
+ * Solo lee los primeros 120 bytes — suficiente para encontrar el campo.
+ */
+function _objetoDelPayload(rawBody) {
+  try {
+    const preview = rawBody.toString('utf8', 0, 120);
+    const m = preview.match(/"object"\s*:\s*"([^"]+)"/);
+    return m ? m[1] : null;
+  } catch { return null; }
+}
+
 function _verificarFirma(firma, rawBody) {
-  if (!META_APP_SECRET) {
-    // Sin secret configurado solo advertimos; en producción debe estar definido.
+  if (!META_APP_SECRET && !META_INSTAGRAM_APP_SECRET) {
     logger.warn('[META] META_APP_SECRET no configurado — validación de firma omitida. Defínelo en .env para producción.');
     return true;
   }
   if (!firma || !firma.startsWith('sha256=')) return false;
 
-  const expected = 'sha256=' + crypto
-    .createHmac('sha256', META_APP_SECRET)
-    .update(rawBody)
-    .digest('hex');
+  // Seleccionar el secret según el canal del evento
+  const objeto = _objetoDelPayload(rawBody);
+  const secret = (objeto === 'instagram' && META_INSTAGRAM_APP_SECRET)
+    ? META_INSTAGRAM_APP_SECRET
+    : META_APP_SECRET;
+
+  if (!secret) {
+    logger.warn(`[META] Secret no configurado para object="${objeto}" — firma omitida.`);
+    return true;
+  }
 
   try {
+    const expected = 'sha256=' + crypto
+      .createHmac('sha256', secret)
+      .update(rawBody)
+      .digest('hex');
     return crypto.timingSafeEqual(Buffer.from(firma), Buffer.from(expected));
   } catch {
     return false;
@@ -70,18 +151,20 @@ function _verificarFirma(firma, rawBody) {
 
 const META_CONFIG = {
   fibratec: {
-    access_token:       process.env.META_FIBRATEC_ACCESS_TOKEN,
-    page_access_token:  process.env.META_FIBRATEC_PAGE_ACCESS_TOKEN,  // Messenger/Instagram
-    whatsapp_phone_id:  process.env.META_FIBRATEC_WHATSAPP_PHONE_ID,
-    facebook_page_id:   process.env.META_FIBRATEC_FACEBOOK_PAGE_ID,
-    instagram_id:       process.env.META_FIBRATEC_INSTAGRAM_ID,
+    access_token:            process.env.META_FIBRATEC_ACCESS_TOKEN,
+    page_access_token:       process.env.META_FIBRATEC_PAGE_ACCESS_TOKEN,       // Messenger
+    instagram_access_token:  process.env.META_FIBRATEC_INSTAGRAM_ACCESS_TOKEN,  // Instagram Login API
+    whatsapp_phone_id:       process.env.META_FIBRATEC_WHATSAPP_PHONE_ID,
+    facebook_page_id:        process.env.META_FIBRATEC_FACEBOOK_PAGE_ID,
+    instagram_id:            process.env.META_FIBRATEC_INSTAGRAM_ID,
   },
   compusemmm: {
-    access_token:       process.env.META_COMPUSEMMM_ACCESS_TOKEN,
-    page_access_token:  process.env.META_COMPUSEMMM_PAGE_ACCESS_TOKEN,
-    whatsapp_phone_id:  process.env.META_COMPUSEMMM_WHATSAPP_PHONE_ID,
-    facebook_page_id:   process.env.META_COMPUSEMMM_FACEBOOK_PAGE_ID,
-    instagram_id:       process.env.META_COMPUSEMMM_INSTAGRAM_ID,
+    access_token:            process.env.META_COMPUSEMMM_ACCESS_TOKEN,
+    page_access_token:       process.env.META_COMPUSEMMM_PAGE_ACCESS_TOKEN,
+    instagram_access_token:  process.env.META_COMPUSEMMM_INSTAGRAM_ACCESS_TOKEN,
+    whatsapp_phone_id:       process.env.META_COMPUSEMMM_WHATSAPP_PHONE_ID,
+    facebook_page_id:        process.env.META_COMPUSEMMM_FACEBOOK_PAGE_ID,
+    instagram_id:            process.env.META_COMPUSEMMM_INSTAGRAM_ID,
   },
 };
 
@@ -123,11 +206,23 @@ function iniciarMeta(app, io) {
   // POST — eventos entrantes (mensajes de WhatsApp, Messenger e Instagram)
   // req.body llega como Buffer crudo (express.raw registrado en index.js antes del json global)
   app.post('/meta/webhook', (req, res) => {
-    // 1. Validar firma antes de hacer cualquier otra cosa
+    // DEBUG TEMPORAL — eliminar una vez confirmado el flujo de Instagram
+    logger.info('[META DEBUG RAW] ' + req.body?.toString?.('utf8'));
+
+    // 1. Validar firma HMAC-SHA256
     const firma = req.headers['x-hub-signature-256'];
     if (!_verificarFirma(firma, req.body)) {
-      logger.warn('[META] Firma inválida — webhook rechazado.');
-      return res.sendStatus(403);
+      // Instagram puede llegar firmado con el App Secret de la app de Instagram Login.
+      // Si ese secret no está configurado, dejamos pasar el evento con advertencia
+      // en lugar de rechazarlo, para no bloquear DMs reales durante el desarrollo.
+      const esInstagram = req.body?.toString('utf8').includes('"object":"instagram"')
+                       || req.body?.toString('utf8').includes('"object": "instagram"');
+      if (esInstagram && !META_INSTAGRAM_APP_SECRET) {
+        logger.warn('[META/IG] Firma no validada (META_INSTAGRAM_APP_SECRET no configurado) — evento procesado igual.');
+      } else {
+        logger.warn('[META] Firma inválida — webhook rechazado.');
+        return res.sendStatus(403);
+      }
     }
 
     // 2. Meta espera 200 inmediato
@@ -205,16 +300,20 @@ async function enviarMensajeMeta(canal, external_id, texto, empresa_id, teclado 
         body = { messaging_product: 'whatsapp', to: external_id, type: 'text', text: { body: texto } };
       }
     } else {
-      // Messenger e Instagram usan Page Access Token + Send API
-      const pageToken = cfg.page_access_token;
-      if (!pageToken) {
-        logger.warn(`[META SEND] Sin page_access_token para empresa="${empresa_id}" canal="${canal}". Agrégalo en .env`);
+      // Messenger usa page_access_token; Instagram usa instagram_access_token (Instagram Login API)
+      const token = (canal === 'instagram' && cfg.instagram_access_token)
+        ? cfg.instagram_access_token
+        : cfg.page_access_token;
+
+      if (!token) {
+        const varName = canal === 'instagram'
+          ? 'META_*_INSTAGRAM_ACCESS_TOKEN'
+          : 'META_*_PAGE_ACCESS_TOKEN';
+        logger.warn(`[META SEND] Sin token para empresa="${empresa_id}" canal="${canal}". Agrega ${varName} en .env`);
         return false;
       }
 
-      // Convertir teclado a quick replies de Messenger
       const msgMessenger = _telegramKeyboardToMessenger(teclado, texto);
-
       url  = `${GRAPH_URL}/me/messages`;
       body = {
         recipient: { id: external_id },
@@ -223,7 +322,7 @@ async function enviarMensajeMeta(canal, external_id, texto, empresa_id, teclado 
 
       const resM = await fetch(url, {
         method:  'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${pageToken}` },
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body:    JSON.stringify(body),
       });
       if (!resM.ok) {
@@ -476,6 +575,7 @@ async function _procesarWhatsapp(payload, io) {
           const mediaId = msg.audio?.id;
           if (!mediaId) continue;
           logger.info(`[WA RECV AUDIO] from=${msg.from} media_id=${mediaId}`);
+          _descargarMedia(mediaId, empresa_id).catch(() => {});
           await _enviarAlBot({
             canal:          'whatsapp',
             user_id:        msg.from,
@@ -493,6 +593,7 @@ async function _procesarWhatsapp(payload, io) {
           const mediaId = msg.image?.id;
           if (!mediaId) continue;
           logger.info(`[WA RECV IMAGE] from=${msg.from} media_id=${mediaId}`);
+          _descargarMedia(mediaId, empresa_id).catch(() => {});
           await _enviarAlBot({
             canal:          'whatsapp',
             user_id:        msg.from,
@@ -506,8 +607,64 @@ async function _procesarWhatsapp(payload, io) {
           }, io);
           continue;
 
+        } else if (msg.type === 'sticker') {
+          const mediaId = msg.sticker?.id;
+          if (!mediaId) continue;
+          const animated = msg.sticker?.animated === true;
+          logger.info(`[WA RECV STICKER] from=${msg.from} media_id=${mediaId} animated=${animated}`);
+          _descargarMedia(mediaId, empresa_id).catch(() => {});
+          await _enviarAlBot({
+            canal:          'whatsapp',
+            user_id:        msg.from,
+            nombre,
+            username:       '',
+            empresa_id,
+            mensaje:        animated ? '🎭 Sticker animado' : '🎭 Sticker',
+            tipo:           animated ? 'sticker_video' : 'sticker',
+            url_media:      `wa://${empresa_id}/${mediaId}`,
+            wamid_entrante: msg.id,
+          }, io);
+          continue;
+
+        } else if (msg.type === 'video') {
+          const mediaId = msg.video?.id;
+          if (!mediaId) continue;
+          logger.info(`[WA RECV VIDEO] from=${msg.from} media_id=${mediaId}`);
+          _descargarMedia(mediaId, empresa_id).catch(() => {});
+          await _enviarAlBot({
+            canal:          'whatsapp',
+            user_id:        msg.from,
+            nombre,
+            username:       '',
+            empresa_id,
+            mensaje:        msg.video?.caption || '🎥 Video',
+            tipo:           'video',
+            url_media:      `wa://${empresa_id}/${mediaId}`,
+            wamid_entrante: msg.id,
+          }, io);
+          continue;
+
+        } else if (msg.type === 'document') {
+          const mediaId = msg.document?.id;
+          if (!mediaId) continue;
+          logger.info(`[WA RECV DOCUMENT] from=${msg.from} media_id=${mediaId} name=${msg.document?.filename}`);
+          _descargarMedia(mediaId, empresa_id).catch(() => {});
+          await _enviarAlBot({
+            canal:          'whatsapp',
+            user_id:        msg.from,
+            nombre,
+            username:       '',
+            empresa_id,
+            mensaje:        `📎 ${msg.document?.filename || 'Documento'}`,
+            tipo:           'document',
+            url_media:      `wa://${empresa_id}/${mediaId}`,
+            wamid_entrante: msg.id,
+          }, io);
+          continue;
+
         } else {
-          // Otros tipos (document, video, sticker…) — pendiente de implementar
+          // Tipo no manejado — ignorar silenciosamente
+          logger.info(`[WA RECV] Tipo no manejado: ${msg.type} from=${msg.from}`);
           continue;
         }
 
@@ -710,7 +867,9 @@ function _esPsid(nombre) {
  * @returns {Promise<string>}
  */
 async function _fetchUserName(psid, cfg, canal = 'facebook') {
-  const token = cfg?.page_access_token || cfg?.access_token;
+  const token = canal === 'instagram'
+    ? (cfg?.instagram_access_token || cfg?.page_access_token || cfg?.access_token)
+    : (cfg?.page_access_token || cfg?.access_token);
   const fallback = canal === 'instagram' ? 'Usuario de Instagram' : 'Usuario de Facebook';
   if (!token) return fallback;
   try {
@@ -800,13 +959,26 @@ async function _enviarAlBot(input, io) {
         fecha:           new Date(),
       });
 
-      // Actualizar la lista del CRM (añade conversaciones nuevas y reordena existentes).
-      // Sin esto, conversaciones en estado 'abierta' o nuevos usuarios nunca aparecen.
+      // Actualizar la lista del CRM para la conversación actual.
       emitToConv(io, conversacion.departamento, 'conversacion_actualizada', {
         id:         conversacion.id,
         empresa_id: conversacion.empresa_id,
         estado:     conversacion.estado,
       });
+
+      // Caso earlyReturn (seleccionArea): el bot creó una NUEVA conversación
+      // ESPERANDO_AGENTE con un id y departamento distintos. Hay que notificar
+      // a la room del área asignada — conversacion.departamento es null (conv vieja).
+      const nuevaConvId   = resultado.conversacion_id;
+      const nuevaDepto    = resultado.departamento;
+      if (nuevaDepto && nuevaConvId && Number(nuevaConvId) !== Number(conversacion.id)) {
+        emitToConv(io, nuevaDepto, 'conversacion_actualizada', {
+          id:         nuevaConvId,
+          empresa_id: conversacion.empresa_id,
+          estado:     'ESPERANDO_AGENTE',
+          es_humano:  true,
+        });
+      }
     }
 
     if (texto) {
@@ -828,7 +1000,15 @@ async function resolveWaMediaUrl(media_id, empresa_id) {
   const cfg = META_CONFIG[empresa_id];
   if (!cfg?.access_token) throw new Error(`Sin credenciales para empresa="${empresa_id}"`);
 
-  const metaRes = await fetch(`${GRAPH_URL}/${media_id}?access_token=${cfg.access_token}`);
+  // phone_number_id es obligatorio para descargar media de WABA (Cloud API).
+  // El token va en el header Authorization, no en query param (?access_token=) — deprecado por Meta.
+  const qs = cfg.whatsapp_phone_id
+    ? `?phone_number_id=${cfg.whatsapp_phone_id}`
+    : '';
+
+  const metaRes = await fetch(`${GRAPH_URL}/${media_id}${qs}`, {
+    headers: { 'Authorization': `Bearer ${cfg.access_token}` },
+  });
   if (!metaRes.ok) {
     const err = await metaRes.json().catch(() => ({}));
     throw new Error(`WhatsApp media lookup ${metaRes.status}: ${err?.error?.message || ''}`);
@@ -839,4 +1019,88 @@ async function resolveWaMediaUrl(media_id, empresa_id) {
   return { url, access_token: cfg.access_token };
 }
 
-module.exports = { iniciarMeta, enviarMensajeMeta, enviarAccionEscribiendoMeta, resolveWaMediaUrl };
+// Cache en memoria: clave = `${empresa_id}/${pack}/${file}` → WA media_id subido
+// Evita volver a subir el mismo sticker a Meta si ya fue enviado antes.
+// ~60 bytes por entrada; no crece sin límite porque el catálogo de stickers es finito.
+const _waMediaIdCache = new Map();
+
+/**
+ * Envía un sticker al cliente de WhatsApp.
+ * Sube el archivo a la Media API de WA si no está en caché, luego envía el mensaje.
+ * Si Meta devuelve error 131053 (media_id expirado), limpia la caché y reintenta.
+ *
+ * @param {string} external_id - Número de teléfono del destinatario (E.164 sin +)
+ * @param {string} empresa_id
+ * @param {Buffer} fileBuffer  - Contenido del .webp
+ * @param {string} pack        - Nombre del pack (subcarpeta en uploads/stickers/)
+ * @param {string} file        - Nombre del archivo (ej. "hola.webp")
+ */
+async function enviarStickerMeta(external_id, empresa_id, fileBuffer, pack, file) {
+  const cfg = META_CONFIG[empresa_id];
+  if (!cfg?.access_token || !cfg?.whatsapp_phone_id) {
+    throw new Error(`Sin credenciales WhatsApp para empresa="${empresa_id}"`);
+  }
+
+  const cacheKey = `${empresa_id}/${pack}/${file}`;
+  const ext      = file.split('.').pop().toLowerCase();
+  const mimeType = { webp: 'image/webp', png: 'image/png', gif: 'image/gif' }[ext] || 'image/webp';
+
+  async function _uploadSticker() {
+    const form = new FormData();
+    const blob = new Blob([fileBuffer], { type: mimeType });
+    form.append('file', blob, file);
+    form.append('type', mimeType);
+    form.append('messaging_product', 'whatsapp');
+
+    const uploadRes = await fetch(`${GRAPH_URL}/${cfg.whatsapp_phone_id}/media`, {
+      method:  'POST',
+      headers: { 'Authorization': `Bearer ${cfg.access_token}` },
+      body:    form,
+    });
+    const uploadData = await uploadRes.json().catch(() => ({}));
+    if (!uploadRes.ok) {
+      throw new Error(`WA media upload ${uploadRes.status}: ${uploadData?.error?.message || ''}`);
+    }
+    if (!uploadData.id) throw new Error('WA no devolvió media_id al subir sticker');
+
+    _waMediaIdCache.set(cacheKey, uploadData.id);
+    logger.info(`[META STICKER] Subido: ${cacheKey} → media_id=${uploadData.id}`);
+    return uploadData.id;
+  }
+
+  async function _sendSticker(mediaId, isRetry = false) {
+    const sendRes = await fetch(`${GRAPH_URL}/${cfg.whatsapp_phone_id}/messages`, {
+      method:  'POST',
+      headers: {
+        'Authorization': `Bearer ${cfg.access_token}`,
+        'Content-Type':  'application/json',
+      },
+      body: JSON.stringify({
+        messaging_product: 'whatsapp',
+        to:      external_id,
+        type:    'sticker',
+        sticker: { id: mediaId },
+      }),
+    });
+    const sendData = await sendRes.json().catch(() => ({}));
+
+    if (!sendRes.ok) {
+      const code = sendData?.error?.code;
+      if (code === 131053 && !isRetry) {
+        // Media ID expirado — borrar caché, resubir y reintentar una vez
+        _waMediaIdCache.delete(cacheKey);
+        logger.info(`[META STICKER] media_id expirado, resubiendo: ${cacheKey}`);
+        const freshId = await _uploadSticker();
+        return _sendSticker(freshId, true);
+      }
+      throw new Error(`WA send sticker ${sendRes.status}: ${sendData?.error?.message || ''}`);
+    }
+    return sendData;
+  }
+
+  let mediaId = _waMediaIdCache.get(cacheKey);
+  if (!mediaId) mediaId = await _uploadSticker();
+  return _sendSticker(mediaId);
+}
+
+module.exports = { iniciarMeta, enviarMensajeMeta, enviarAccionEscribiendoMeta, resolveWaMediaUrl, enviarStickerMeta };

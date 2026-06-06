@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Settings, LogOut, Download, Trash2, RefreshCw, AlertTriangle, CheckCircle, Server } from 'lucide-react';
+import { Settings, LogOut, Download, Trash2, RefreshCw, AlertTriangle, CheckCircle, Server, Layers } from 'lucide-react';
 import { API_URL } from '../../services/api';
 import '../../styles/ti-panel.css';
 
@@ -50,6 +50,12 @@ const TIPanel = ({ user, logout }) => {
   const [loadingLimpiar,    setLoadingLimpiar]    = useState(false);
   const [limpiarResult,     setLimpiarResult]     = useState(null);
 
+  // Stickers
+  const [stickers,             setStickers]            = useState([]);
+  const [loadingStickers,      setLoadingStickers]     = useState(false);
+  const [confirmDeleteSticker, setConfirmDeleteSticker]= useState(null); // {pack, file, favoritos}
+  const [loadingDeleteSticker, setLoadingDeleteSticker]= useState(false);
+
   // Error general
   const [error, setError] = useState('');
 
@@ -82,7 +88,17 @@ const TIPanel = ({ user, logout }) => {
     } catch (_) {}
   }, []);
 
-  useEffect(() => { cargarStatus(); cargarLogs(); }, [cargarStatus, cargarLogs]);
+  const cargarStickers = useCallback(async () => {
+    setLoadingStickers(true);
+    try {
+      const res  = await apiFetch('/stickers');
+      const data = await res.json();
+      setStickers(data || []);
+    } catch (_) { setStickers([]); }
+    finally { setLoadingStickers(false); }
+  }, []);
+
+  useEffect(() => { cargarStatus(); cargarLogs(); cargarStickers(); }, [cargarStatus, cargarLogs, cargarStickers]);
   useEffect(() => { cargarPurgaPreview(meses); }, [meses, cargarPurgaPreview]);
 
   // Recargar logs cada 10 s
@@ -157,6 +173,19 @@ const TIPanel = ({ user, logout }) => {
       await cargarPurgaPreview(meses);
     } catch (e) { setPurgaResult({ ok: false, msg: e.message }); }
     finally { setLoadingPurga(false); setConfirmPurga(false); }
+  };
+
+  // ── Stickers ───────────────────────────────────────────────────────────────
+  const ejecutarEliminarSticker = async () => {
+    if (!confirmDeleteSticker) return;
+    setLoadingDeleteSticker(true);
+    try {
+      const { pack, file } = confirmDeleteSticker;
+      await apiFetch(`/stickers/${encodeURIComponent(pack)}/${encodeURIComponent(file)}`, { method: 'DELETE' });
+      await cargarStickers();
+      setConfirmDeleteSticker(null);
+    } catch (e) { setError(e.message); setConfirmDeleteSticker(null); }
+    finally { setLoadingDeleteSticker(false); }
   };
 
   // ── Render ─────────────────────────────────────────────────────────────────
@@ -363,6 +392,67 @@ const TIPanel = ({ user, logout }) => {
           </div>
         </div>
 
+        {/* Gestión de stickers */}
+        <div className="ti-section">
+          <div className="ti-section-header">
+            <span className="ti-section-title"><Layers size={13} /> Gestión de stickers</span>
+            <button
+              className="ti-btn ti-btn-outline"
+              onClick={cargarStickers}
+              disabled={loadingStickers}
+              style={{ padding: '5px 10px', fontSize: 11, borderRadius: 8 }}
+            >
+              {loadingStickers ? <span className="ti-spinner" style={{ borderTopColor: '#54656f', borderColor: 'rgba(84,101,111,0.3)' }} /> : <RefreshCw size={11} />}
+            </button>
+          </div>
+          <div className="ti-section-body">
+            {loadingStickers && !stickers.length ? (
+              <div style={{ textAlign: 'center', padding: 24 }}>
+                <span className="ti-spinner" style={{ borderTopColor: '#dc2626', borderColor: 'rgba(220,38,38,0.2)', width: 22, height: 22 }} />
+              </div>
+            ) : !stickers.length ? (
+              <div style={{ color: '#667781', fontSize: 13, padding: '8px 0' }}>
+                No hay stickers en <code>uploads/stickers/</code>. Crea subcarpetas con archivos .webp para cada pack.
+              </div>
+            ) : (
+              stickers.map(pack => (
+                <div key={pack.pack} className="ti-sticker-pack">
+                  <div className="ti-sticker-pack-name">
+                    {pack.label || pack.pack}
+                    <span className="ti-sticker-pack-count">{pack.files.length} sticker{pack.files.length !== 1 ? 's' : ''}</span>
+                  </div>
+                  <div className="ti-sticker-grid">
+                    {pack.files.map(s => (
+                      <div key={s.file} className="ti-sticker-item">
+                        <img
+                          src={`${API_URL}/agente/sticker-file/${encodeURIComponent(pack.pack)}/${encodeURIComponent(s.file)}`}
+                          alt={s.file}
+                          className="ti-sticker-thumb"
+                        />
+                        {s.favoritos > 0 && (
+                          <span className="ti-sticker-fav-count" title={`${s.favoritos} agente${s.favoritos > 1 ? 's' : ''} lo tiene${s.favoritos > 1 ? 'n' : ''} como favorito`}>
+                            ♥ {s.favoritos}
+                          </span>
+                        )}
+                        <div className="ti-sticker-footer">
+                          <span className="ti-sticker-name" title={s.file}>{s.file.replace(/\.\w+$/, '')}</span>
+                          <button
+                            className="ti-sticker-del-btn"
+                            title="Eliminar permanentemente"
+                            onClick={() => setConfirmDeleteSticker({ pack: pack.pack, file: s.file, favoritos: s.favoritos })}
+                          >
+                            <Trash2 size={11} />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+
         {/* Logs */}
         <div className="ti-section">
           <div className="ti-section-header">
@@ -445,6 +535,47 @@ const TIPanel = ({ user, logout }) => {
               <button className="ti-btn ti-btn-danger" onClick={ejecutarPurga} disabled={loadingPurga}>
                 {loadingPurga ? <span className="ti-spinner" /> : <Trash2 size={14} />}
                 Sí, purgar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: eliminar sticker */}
+      {confirmDeleteSticker && (
+        <div className="ti-confirm-overlay">
+          <div className="ti-confirm-box">
+            <div className="ti-confirm-title">
+              <AlertTriangle size={18} /> Eliminar sticker
+            </div>
+            <div style={{ textAlign: 'center', margin: '12px 0' }}>
+              <img
+                src={`${API_URL}/agente/sticker-file/${encodeURIComponent(confirmDeleteSticker.pack)}/${encodeURIComponent(confirmDeleteSticker.file)}`}
+                alt="sticker"
+                style={{ width: 80, height: 80, objectFit: 'contain' }}
+              />
+            </div>
+            <p className="ti-confirm-text">
+              ¿Eliminar <strong>{confirmDeleteSticker.file.replace(/\.\w+$/, '')}</strong>{' '}
+              del pack <strong>{confirmDeleteSticker.pack}</strong>?
+              {confirmDeleteSticker.favoritos > 0 && (
+                <>
+                  <br /><br />
+                  <span style={{ color: '#DC1E1E' }}>
+                    ⚠️ {confirmDeleteSticker.favoritos} agente{confirmDeleteSticker.favoritos > 1 ? 's lo tienen' : ' lo tiene'} como favorito.
+                  </span>
+                </>
+              )}
+              <br /><br />
+              Esta acción <strong>no se puede deshacer</strong>.
+            </p>
+            <div className="ti-confirm-actions">
+              <button className="ti-btn ti-btn-outline" onClick={() => setConfirmDeleteSticker(null)}>
+                Cancelar
+              </button>
+              <button className="ti-btn ti-btn-danger" onClick={ejecutarEliminarSticker} disabled={loadingDeleteSticker}>
+                {loadingDeleteSticker ? <span className="ti-spinner" /> : <Trash2 size={14} />}
+                Sí, eliminar
               </button>
             </div>
           </div>

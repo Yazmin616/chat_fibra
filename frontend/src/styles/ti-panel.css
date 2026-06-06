@@ -489,6 +489,99 @@
   line-height: 1.6;
 }
 
+/* ── Gestión de stickers ─────────────────────────────────── */
+.ti-sticker-pack { margin-bottom: 20px; }
+
+.ti-sticker-pack-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #111b21;
+  margin-bottom: 10px;
+}
+
+.ti-sticker-pack-count {
+  font-size: 11px;
+  font-weight: 400;
+  color: #667781;
+}
+
+.ti-sticker-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+  gap: 8px;
+}
+
+.ti-sticker-item {
+  position: relative;
+  background: #f8f9fa;
+  border: 1px solid #e9ecef;
+  border-radius: 10px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.ti-sticker-thumb {
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: contain;
+  padding: 6px;
+  background: #fff;
+}
+
+.ti-sticker-fav-count {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  background: rgba(229, 62, 62, 0.9);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 5px;
+  border-radius: 10px;
+  line-height: 1.4;
+}
+
+.ti-sticker-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 6px;
+  border-top: 1px solid #e9ecef;
+  gap: 4px;
+  min-height: 26px;
+}
+
+.ti-sticker-name {
+  font-size: 10px;
+  color: #667781;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+
+.ti-sticker-del-btn {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border: none;
+  background: transparent;
+  border-radius: 4px;
+  cursor: pointer;
+  color: #bbb;
+  transition: color 0.15s, background 0.15s;
+  padding: 0;
+}
+
+.ti-sticker-del-btn:hover { color: #dc2626; background: #fee2e2; }
+
 /* ── Responsive ──────────────────────────────────────────── */
 @media (max-width: 640px) {
   .ti-header { padding: 0 16px; }

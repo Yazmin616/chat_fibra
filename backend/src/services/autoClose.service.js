@@ -8,7 +8,14 @@ const { enviarMensaje } = require('../adapters');
 const { emitToConv }   = require('../utils/rooms');
 const logger           = require('../config/logger');
 const { ESTADOS }      = require('../bot/constants');
-const { parseJornada, esDentroJornada, horasRealesDesde } = require('../utils/businessHours');
+const { horasRealesDesde } = require('../utils/businessHours');
+const {
+  cargarTurnos,
+  esTurnoActivo,
+  esFestivo,
+  minutosLaboralesTurnos,
+  TZ_DEFAULT,
+} = require('../utils/turnosHorarios');
 
 /** Minutos sin heartbeat para considerar a un agente como inactivo. */
 const INACTIVIDAD_AGENTE_MIN = 15;
@@ -23,11 +30,28 @@ const TIMEOUT_ENCUESTA_MIN = 20;
  */
 const VENTANA_META_HORAS = 24;
 
+// La constante ESPERA_INFRACCION_MIN fue reemplazada por la clave de configuración
+// `sla_agente_nivel1_min` (default 30), que ahora controla el SLA del agente
+// con cálculo de minutos laborales reales (pausado fuera de jornada).
+
+// ── Textos por defecto (se sobreescriben con los valores de `configuraciones`) ─
+const MSG_DEFAULTS = {
+  aviso1: '¿Sigues ahí? 👋 Seguimos disponibles para ayudarte cuando quieras.',
+  aviso2: 'Hola, si no continúas la conversación la cerraremos pronto. ¡Escríbenos cuando quieras! 😊',
+  cierre: '¿Cómo calificarías la atención de {nombre_agente} hoy? 🌟\n\n1️⃣  Mala\n2️⃣  Regular\n3️⃣  Buena\n\nEscribe el número de tu calificación.',
+};
+
 /**
- * Minutos dentro de jornada (sin respuesta del agente en estado "atendiendo")
- * para generar infracción aunque el auto-cierre aún no haya corrido.
+ * Sustituye las variables de plantilla por los valores reales de la conversación.
+ * Variables soportadas: {nombre_cliente}, {area}, {empresa}, {nombre_agente}
  */
-const ESPERA_INFRACCION_MIN = 15;
+function _sustituirVariables(plantilla, conv) {
+  return (plantilla || '')
+    .replace(/\{nombre_cliente\}/g, conv.cliente_nombre  || 'Cliente')
+    .replace(/\{area\}/g,           conv.departamento    || '')
+    .replace(/\{empresa\}/g,        conv.empresa_id      || '')
+    .replace(/\{nombre_agente\}/g,  conv.agente_nombre   || 'nuestro asesor');
+}
 
 function iniciarAutoCierre(io) {
   logger.info('Tarea de auto-cierre iniciada.');
@@ -50,7 +74,9 @@ function iniciarAutoCierre(io) {
     try {
       const { rows } = await db.query(`
         SELECT c.id, c.usuario_id, c.empresa_id, c.departamento, c.es_humano,
-               c.estado, c.agente_id, c.created_at,
+               c.estado, c.agente_id, c.created_at, c.updated_at,
+               c.ultimo_mensaje_cliente, c.aviso_inactividad_enviado,
+               c.sla_pendiente_desde,
                u.external_id, u.canal, u.nombre AS cliente_nombre,
                a.nombre AS agente_nombre
         FROM conversaciones c
@@ -60,7 +86,7 @@ function iniciarAutoCierre(io) {
       `);
 
       for (const conv of rows) {
-        // ── Configuración de la empresa (todos los pares clave-valor) ────────
+        // ── Configuración de la empresa ──────────────────────────────────────
         const configRes = await db.query(
           'SELECT clave, valor FROM configuraciones WHERE empresa_id=$1',
           [conv.empresa_id || 'fibratec']
@@ -68,81 +94,114 @@ function iniciarAutoCierre(io) {
         const configMap = {};
         configRes.rows.forEach(r => { configMap[r.clave] = r.valor; });
 
-        const minutos = parseInt(configMap.tiempo_inactividad || '10');
-        const jornada = parseJornada(configMap);
         const ahora   = new Date();
+        // Turnos del área de esta conversación (fallback → globales → jornada global)
+        const turnos  = await cargarTurnos(db, conv.empresa_id || 'fibratec', conv.departamento, configMap);
 
-        // ── ESPERANDO_AGENTE: ventana de 24 h reales desde creación ─────────
+        // ── ESPERANDO_AGENTE ─────────────────────────────────────────────────
         //
-        // Regla: el equipo tiene VENTANA_META_HORAS (24 h) desde que el cliente
-        // abrió el chat para responder sin coste ni infracción. Pasadas esas
-        // horas se levanta la infracción al área y se cierra el chat.
-        // No depende de la jornada: el contador corre en tiempo real.
+        //   A) Infracción al área: nadie tomó el chat en `sla_area_min` minutos.
+        //      Usa tiempo real (no laboral) — si el cliente escribe a las 10am y
+        //      nadie responde en 15 min, eso es una infracción independientemente
+        //      del horario.  La deduplicación en _evaluarInfraccion garantiza que
+        //      solo se registra una por conversación.
+        //
+        //   B) Cierre automático a las 24 h reales (ventana Meta de WhatsApp).
+        //      Es independiente de la infracción — la conversación se cierra aunque
+        //      la infracción ya haya sido registrada antes.
+        //
         if (conv.estado === ESTADOS.ESPERANDO_AGENTE) {
           const horasTranscurridas = horasRealesDesde(conv.created_at);
-          if (horasTranscurridas < VENTANA_META_HORAS) continue;
 
-          const minEspera = Math.round(horasTranscurridas * 60);
-          await _evaluarInfraccion(conv, minEspera, io);
-          await _cerrarHumano(conv, io);
+          // A) Infracción al área — usa minutos LABORALES para no penalizar fuera de jornada.
+          //    Si el cliente escribió a las 10pm y nadie respondió, el reloj solo corre
+          //    desde las 9am del día siguiente.
+          const slaAreaMin = parseInt(configMap.sla_area_min || '15');
+          if (slaAreaMin > 0) {
+            // Sin sanciones en día festivo
+            const tz      = configMap.tz || TZ_DEFAULT;
+            const festivo = await esFestivo(db, ahora, conv.empresa_id || 'fibratec', conv.departamento, tz);
+            if (!festivo) {
+              const minLabArea = minutosLaboralesTurnos(conv.created_at, ahora, turnos, tz);
+              if (minLabArea >= slaAreaMin) {
+                await _evaluarInfraccion(conv, Math.round(minLabArea), io);
+              }
+            }
+          }
+
+          // B) Cierre a las 24 h reales (ventana Meta — independiente del horario)
+          if (horasTranscurridas >= VENTANA_META_HORAS) {
+            await _cerrarHumano(conv, io);
+            continue;
+          }
+
           continue;
         }
 
-        // ── Sesiones humanas (atendiendo) fuera de jornada: no hacer nada ───
-        // Los agentes no trabajan fuera de jornada; infracciones y cierres
-        // solo aplican mientras el equipo está en horario laboral.
-        if (conv.es_humano && !esDentroJornada(ahora, jornada)) continue;
-
-        // ── Inactividad por tiempo_inactividad ───────────────────────────────
-        const { rows: inactiva } = await db.query(
-          `SELECT id,
-                  ROUND(EXTRACT(EPOCH FROM (NOW()-updated_at))/60) AS minutos_espera
-           FROM conversaciones
-           WHERE id=$1 AND updated_at < NOW()-($2||' minutes')::interval`,
-          [conv.id, minutos]
-        );
-
-        const estaInactiva = inactiva.length > 0;
-        const tiempoEspera = estaInactiva ? parseInt(inactiva[0].minutos_espera) : 0;
-
-        // ── Lógica de infracción (para estado "atendiendo") ──────────────────
+        // ── ATENDIENDO + HUMANO: lógica escalonada de inactividad ────────────
         //
-        // Regla:
-        //   - atendiendo + último mensaje del CLIENTE → infracción al AGENTE
-        //     si el agente lleva >= ESPERA_INFRACCION_MIN sin responder.
-        //   - atendiendo + último mensaje del AGENTE → SIN infracción
-        //     (fue el cliente quien dejó de responder).
-        const minutosParaInfraccion = Math.min(minutos, ESPERA_INFRACCION_MIN);
-        const { rows: inactivaInfrac } = await db.query(
+        // Separamos la lógica en dos preguntas independientes:
+        //
+        //   A) SLA del AGENTE: ¿cuántos minutos laborales lleva sin responder al cliente?
+        //      → Infracción si supera `sla_agente_nivel1_min` (default 30).
+        //      Ancora: sla_pendiente_desde (fijado cuando el CLIENTE escribe,
+        //              borrado cuando el AGENTE responde o al disparar la infracción).
+        //      El cálculo usa minutosLaboralesElapsados — el reloj se pausa fuera de jornada.
+        //
+        //   B) Inactividad del CLIENTE: escalada escalonada.
+        //      → Recordatorio / aviso / cierre automático.
+        //      Ancora: ultimo_mensaje_cliente (24/7, dentro de la ventana Meta de 24 h).
+        //
+        if (conv.estado === ESTADOS.ATENDIENDO && conv.es_humano) {
+
+          // A) SLA del agente (reloj laboral — pausa fuera de turno y en festivos)
+          if (conv.sla_pendiente_desde) {
+            const slaMin = parseInt(configMap.sla_agente_nivel1_min || '30');
+            if (slaMin > 0) {
+              const tz2     = configMap.tz || TZ_DEFAULT;
+              const festivo = await esFestivo(db, ahora, conv.empresa_id || 'fibratec', conv.departamento, tz2);
+              if (!festivo) {
+                const minLab = minutosLaboralesTurnos(conv.sla_pendiente_desde, ahora, turnos, tz2);
+                if (minLab >= slaMin) {
+                  await _evaluarInfraccionSLA(conv, Math.round(minLab), io);
+                }
+              }
+            }
+          }
+
+          // B) Escalada por inactividad del cliente (aplica 24/7 dentro de ventana Meta)
+          const closed = await _procesarInactividadCliente(conv, configMap, io);
+
+          if (closed) continue;
+
+          continue; // ya procesado — no caer en el bloque de sesiones bot
+        }
+
+        // ── Sesiones fuera de turno (bot o humano no-atendiendo): no actuar ─────
+        const tz3     = configMap.tz || TZ_DEFAULT;
+        const festivo = await esFestivo(db, ahora, conv.empresa_id || 'fibratec', conv.departamento, tz3);
+        if (festivo || !esTurnoActivo(ahora, turnos, tz3)) continue;
+
+        // ── Sesiones puras de bot: cierre por tiempo_inactividad ─────────────
+        const minutosBot = parseInt(configMap.tiempo_inactividad || '10');
+        const { rows: inactivaBot } = await db.query(
           `SELECT 1 FROM conversaciones
            WHERE id=$1 AND updated_at < NOW()-($2||' minutes')::interval`,
-          [conv.id, minutosParaInfraccion]
+          [conv.id, minutosBot]
         );
+        if (inactivaBot.length === 0) continue;
 
-        if (inactivaInfrac.length > 0) {
-          await _evaluarInfraccion(conv, tiempoEspera || minutosParaInfraccion, io);
+        await db.query(
+          'UPDATE conversaciones SET estado=$1, updated_at=NOW() WHERE id=$2',
+          [ESTADOS.CERRADA, conv.id]
+        );
+        if (io) {
+          emitToConv(io, conv.departamento, 'conversacion_actualizada', {
+            id: conv.id, empresa_id: conv.empresa_id, estado: ESTADOS.CERRADA, es_humano: false,
+          });
         }
-
-        // ── Cierre automático ────────────────────────────────────────────────
-        if (!estaInactiva) continue;
-
-        // Sesiones puras de bot: cerrar sin encuesta.
-        if (!conv.es_humano) {
-          await db.query(
-            'UPDATE conversaciones SET estado=$1, updated_at=NOW() WHERE id=$2',
-            [ESTADOS.CERRADA, conv.id]
-          );
-          if (io) {
-            emitToConv(io, conv.departamento, 'conversacion_actualizada', {
-              id: conv.id, empresa_id: conv.empresa_id, estado: ESTADOS.CERRADA, es_humano: false,
-            });
-          }
-          continue;
-        }
-
-        // Sesión humana (atendiendo): enviar encuesta CSAT y marcar ENCUESTA_AGENTE.
-        await _cerrarHumano(conv, io);
       }
+
       // ── Encuestas sin responder: cerrar como "no evaluada" ────────────────
       const { rows: encuestasVencidas } = await db.query(`
         SELECT c.id, c.usuario_id, c.empresa_id, c.departamento, c.estado,
@@ -157,7 +216,6 @@ function iniciarAutoCierre(io) {
         try {
           const tipo = conv.estado === ESTADOS.ENCUESTA_AGENTE ? 'agente' : 'bot';
 
-          // Despedida amable al cliente antes de cerrar
           const despedida = '¡Gracias por comunicarte con nosotros! 😊 Esperamos haber podido ayudarte. Estaremos atentos a cualquier consulta futura. ¡Hasta pronto! 👋';
           await enviarMensaje(conv.canal || 'telegram', conv.external_id, despedida, conv.empresa_id);
           await mensajeRepo.create(conv.id, 'bot', despedida);
@@ -206,17 +264,143 @@ function iniciarAutoCierre(io) {
   }, 60_000);
 }
 
+// ────────────────────────────────────────────────────────────────────────────────
+// Lógica escalonada de inactividad del CLIENTE
+// ────────────────────────────────────────────────────────────────────────────────
+
 /**
- * Cierra un chat humano enviando la encuesta CSAT al cliente y notificando
- * el dashboard. Se usa tanto desde el cierre por inactividad (atendiendo)
- * como desde el vencimiento de la ventana Meta (ESPERANDO_AGENTE).
+ * Evalúa y aplica la escalada de inactividad del cliente en conversaciones
+ * que ya están en estado "atendiendo" con un agente humano.
  *
+ * PRECONDICIÓN: solo se activa cuando el AGENTE escribió último y espera respuesta
+ * del cliente. Si el último mensaje fue del cliente (y el agente no ha respondido),
+ * es el SLA del agente quien actúa — este timer NO corre.
+ *
+ * Escalada configurable (claves en tabla `configuraciones`):
+ *   inactividad_aviso1_min  (default 30)  → recordatorio suave
+ *   inactividad_aviso2_min  (default 120) → aviso de cierre próximo
+ *   inactividad_cierre_min  (default 240) → cierre automático + encuesta
+ *
+ * Restricción de ventana Meta (WhatsApp): se evita enviar mensajes
+ * después de 23 h 30 min desde la creación de la conversación.
+ *
+ * @returns {Promise<boolean>} true si la conversación fue cerrada.
+ */
+async function _procesarInactividadCliente(conv, configMap, io) {
+  // Verificar quién envió el último mensaje.
+  // Si fue el cliente, el agente aún no respondió → no aplica inactividad del cliente.
+  const { rows: lastMsg } = await db.query(
+    'SELECT remitente FROM mensajes WHERE conversacion_id=$1 ORDER BY id DESC LIMIT 1',
+    [conv.id]
+  );
+  if (lastMsg[0]?.remitente === 'user') return false;
+
+  const aviso1Min  = parseInt(configMap.inactividad_aviso1_min || '30');
+  const aviso2Min  = parseInt(configMap.inactividad_aviso2_min || '120');
+  const cierreMin  = parseInt(configMap.inactividad_cierre_min || '240');
+  const avisoPrevio = parseInt(conv.aviso_inactividad_enviado || '0');
+
+  // Ancora: último mensaje del cliente (fallback a updated_at para convs antiguas)
+  const refTime = conv.ultimo_mensaje_cliente || conv.updated_at;
+  const minutosInactivo = Math.round((Date.now() - new Date(refTime).getTime()) / 60000);
+
+  // Seguridad ventana Meta: para WhatsApp no enviar mensajes pasadas las 23.5 h
+  // desde la creación de la conversación.
+  const horasDesdeCreacion = horasRealesDesde(conv.created_at);
+  const fueraDe24h = conv.canal === 'whatsapp' && horasDesdeCreacion >= 23.5;
+
+  // ── Cierre automático ──────────────────────────────────────────────────────
+  if (minutosInactivo >= cierreMin) {
+    if (!fueraDe24h) {
+      await _cerrarHumano(conv, io, configMap);
+    } else {
+      // Fuera de ventana Meta: cierre silencioso sin enviar mensaje al canal
+      await db.query(
+        `UPDATE conversaciones
+         SET estado=$1, es_humano=false, updated_at=NOW(), motivo_cierre=$2
+         WHERE id=$3`,
+        [ESTADOS.CERRADA, 'inactividad_ventana_meta_expirada', conv.id]
+      );
+      await mensajeRepo.create(conv.id, 'sistema_info',
+        'Conversación cerrada automáticamente (ventana de 24 h de Meta expirada)');
+      if (io) {
+        emitToConv(io, conv.departamento, 'conversacion_actualizada', {
+          id: conv.id, empresa_id: conv.empresa_id,
+          estado: ESTADOS.CERRADA, es_humano: false,
+        });
+      }
+    }
+    logger.info(
+      `[INACTIVIDAD CLIENTE] Conv ${conv.id} cerrada — ${minutosInactivo} min sin respuesta del cliente.`
+    );
+    return true;
+  }
+
+  // ── Avisos escalonados (solo si hay ventana Meta disponible) ──────────────
+  if (!fueraDe24h) {
+    if (minutosInactivo >= aviso2Min && avisoPrevio < 2) {
+      await _enviarAvisoInactividad(conv, 2, minutosInactivo, configMap, io);
+    } else if (minutosInactivo >= aviso1Min && avisoPrevio < 1) {
+      await _enviarAvisoInactividad(conv, 1, minutosInactivo, configMap, io);
+    }
+  }
+
+  return false;
+}
+
+/**
+ * Envía un aviso de inactividad al cliente y actualiza el nivel de aviso en BD.
+ * Lee el texto del aviso de configMap (inactividad_msg_aviso1/2) y sustituye variables.
+ * @param {object} conv
+ * @param {1|2}    nivel
+ * @param {number} minutosInactivo
+ * @param {object} configMap
+ * @param {import('socket.io').Server|null} io
  * @private
  */
-async function _cerrarHumano(conv, io) {
-  const bannerMsg   = 'Chat cerrado automáticamente por inactividad';
-  const agenteParte = conv.agente_nombre ? ` de *${conv.agente_nombre}*` : '';
-  const surveyText  = `¿Cómo calificarías la atención${agenteParte} que recibiste? 🌟\n\n1️⃣  Mala\n2️⃣  Regular\n3️⃣  Buena\n\nEscribe el número de tu calificación.`;
+async function _enviarAvisoInactividad(conv, nivel, minutosInactivo, configMap, io) {
+  const plantilla = configMap[`inactividad_msg_aviso${nivel}`] ||
+    (nivel === 1 ? MSG_DEFAULTS.aviso1 : MSG_DEFAULTS.aviso2);
+  const texto = _sustituirVariables(plantilla, conv);
+
+  await enviarMensaje(conv.canal || 'telegram', conv.external_id, texto, conv.empresa_id);
+  await mensajeRepo.create(conv.id, 'bot', texto);
+  await db.query(
+    'UPDATE conversaciones SET aviso_inactividad_enviado=$1 WHERE id=$2',
+    [nivel, conv.id]
+  );
+
+  if (io) {
+    emitToConv(io, conv.departamento, 'nuevo_mensaje', {
+      conversacion_id: conv.id,
+      usuario_id:      conv.usuario_id,
+      empresa_id:      conv.empresa_id,
+      mensaje:         texto,
+      remitente:       'bot',
+    });
+  }
+
+  logger.info(
+    `[INACTIVIDAD CLIENTE] Aviso nivel ${nivel} enviado — Conv ${conv.id} (${minutosInactivo} min sin respuesta).`
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────────────────
+// Helpers de cierre e infracción (sin cambios de contrato)
+// ────────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Cierra un chat humano enviando la encuesta CSAT al cliente y notificando
+ * el dashboard vía Socket.IO.
+ * @param {object}      conv
+ * @param {object|null} configMap - Si se pasa, lee el mensaje de cierre de configMap.
+ * @param {import('socket.io').Server|null} io
+ * @private
+ */
+async function _cerrarHumano(conv, io, configMap = null) {
+  const bannerMsg = 'Conversación cerrada automáticamente por inactividad del cliente';
+  const plantilla = configMap?.inactividad_msg_cierre || MSG_DEFAULTS.cierre;
+  const surveyText = _sustituirVariables(plantilla, conv);
 
   await db.query(
     'UPDATE conversaciones SET estado=$1, es_humano=false, updated_at=NOW() WHERE id=$2',
@@ -242,51 +426,51 @@ async function _cerrarHumano(conv, io) {
 }
 
 /**
- * Evalúa si la conversación merece una infracción y la crea si corresponde.
- *
+ * Evalúa infracción para conversaciones en ESPERANDO_AGENTE (tipo 'area').
+ * Una conversación puede generar como máximo una infracción de área.
  * @private
  */
 async function _evaluarInfraccion(conv, tiempoEspera, io) {
   try {
-    if (conv.estado === ESTADOS.ESPERANDO_AGENTE) {
-      // Nadie tomó el chat → infracción al ÁREA
-      const yaExiste = await infraccionRepo.existsByConversacion(conv.id, 'area');
-      if (yaExiste) return;
+    if (conv.estado !== ESTADOS.ESPERANDO_AGENTE) return;
 
-      const { rows: [inf] } = await infraccionRepo.create(
-        conv.id, conv.empresa_id, conv.departamento,
-        conv.cliente_nombre, tiempoEspera, 'area', null, null
-      );
-      logger.warn(`[INFRACCIÓN ÁREA] Conv ${conv.id} — ${conv.departamento} — ${tiempoEspera} min sin tomar.`);
-      _emitirInfraccion(io, conv, inf, tiempoEspera, 'area', null, null);
+    const yaExiste = await infraccionRepo.existsByConversacion(conv.id, 'area');
+    if (yaExiste) return;
 
-    } else if (conv.estado === ESTADOS.ATENDIENDO) {
-      // Verificar quién envió el último mensaje
-      const { rows: lastMsg } = await db.query(
-        `SELECT remitente FROM mensajes WHERE conversacion_id=$1 ORDER BY id DESC LIMIT 1`,
-        [conv.id]
-      );
-      const ultimoRemitente = lastMsg[0]?.remitente;
-
-      if (ultimoRemitente !== 'user') {
-        // El cliente fue quien dejó de responder → cierre por inactividad normal
-        // No se levanta infracción.
-        return;
-      }
-
-      // El agente no respondió al cliente → infracción al AGENTE
-      const yaExiste = await infraccionRepo.existsByConversacion(conv.id, 'agente');
-      if (yaExiste) return;
-
-      const { rows: [inf] } = await infraccionRepo.create(
-        conv.id, conv.empresa_id, conv.departamento,
-        conv.cliente_nombre, tiempoEspera, 'agente', conv.agente_id, conv.agente_nombre
-      );
-      logger.warn(`[INFRACCIÓN AGENTE] Conv ${conv.id} — ${conv.agente_nombre} — ${tiempoEspera} min sin responder.`);
-      _emitirInfraccion(io, conv, inf, tiempoEspera, 'agente', conv.agente_id, conv.agente_nombre);
-    }
+    const { rows: [inf] } = await infraccionRepo.create(
+      conv.id, conv.empresa_id, conv.departamento,
+      conv.cliente_nombre, tiempoEspera, 'area', null, null
+    );
+    logger.warn(`[INFRACCIÓN ÁREA] Conv ${conv.id} — ${conv.departamento} — ${tiempoEspera} min sin tomar.`);
+    _emitirInfraccion(io, conv, inf, tiempoEspera, 'area', null, null);
   } catch (err) {
-    logger.error('[INFRACCIÓN] Error al evaluar:', { error: err.message });
+    logger.error('[INFRACCIÓN ÁREA] Error al evaluar:', { error: err.message });
+  }
+}
+
+/**
+ * Registra una infracción de SLA del agente (tipo 'agente').
+ *
+ * Se llama cuando los minutos laborales transcurridos desde sla_pendiente_desde
+ * superan el umbral configurado (sla_agente_nivel1_min).
+ * Borra sla_pendiente_desde al disparar — el reloj se reinicia cuando el cliente
+ * vuelva a escribir (bot.service.js lo fija de nuevo en NOW()).
+ * @private
+ */
+async function _evaluarInfraccionSLA(conv, minLaborales, io) {
+  try {
+    const { rows: [inf] } = await infraccionRepo.create(
+      conv.id, conv.empresa_id, conv.departamento,
+      conv.cliente_nombre, minLaborales, 'agente', conv.agente_id, conv.agente_nombre
+    );
+    // Borrar el marcador — este período ya fue resuelto (con infracción)
+    await db.query('UPDATE conversaciones SET sla_pendiente_desde=NULL WHERE id=$1', [conv.id]);
+    logger.warn(
+      `[INFRACCIÓN SLA] Conv ${conv.id} — ${conv.agente_nombre} — ${minLaborales} min laborales sin responder.`
+    );
+    _emitirInfraccion(io, conv, inf, minLaborales, 'agente', conv.agente_id, conv.agente_nombre);
+  } catch (err) {
+    logger.error('[INFRACCIÓN SLA] Error al registrar:', { error: err.message });
   }
 }
 

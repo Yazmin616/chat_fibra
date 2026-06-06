@@ -19,12 +19,14 @@ const { verifyToken, requireTI } = require('../middleware/auth.middleware');
 
 const auth = [verifyToken, requireTI];
 
-router.get ('/status',        ...auth, tiController.getStatus);
-router.post('/mantenimiento', ...auth, tiController.setMantenimiento);
-router.get ('/backup',        ...auth, tiController.descargarBackup);
-router.get ('/purga-preview', ...auth, tiController.previewPurga);
-router.post('/purgar',        ...auth, tiController.purgar);
-router.post('/limpiar-bd',    ...auth, tiController.limpiarBD);
-router.get ('/logs',          ...auth, tiController.obtenerLogs);
+router.get    ('/status',              ...auth, tiController.getStatus);
+router.post   ('/mantenimiento',       ...auth, tiController.setMantenimiento);
+router.get    ('/backup',              ...auth, tiController.descargarBackup);
+router.get    ('/purga-preview',       ...auth, tiController.previewPurga);
+router.post   ('/purgar',              ...auth, tiController.purgar);
+router.post   ('/limpiar-bd',          ...auth, tiController.limpiarBD);
+router.get    ('/logs',                ...auth, tiController.obtenerLogs);
+router.get    ('/stickers',            ...auth, tiController.listarStickers);
+router.delete ('/stickers/:pack/:file',...auth, tiController.eliminarSticker);
 
 module.exports = router;
