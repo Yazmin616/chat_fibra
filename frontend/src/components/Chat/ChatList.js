@@ -22,7 +22,7 @@
  */
 
 import React from 'react';
-import { Search, MessageSquare, Clock, CheckCircle, ClipboardList } from 'lucide-react';
+import { Search, MessageSquare, Clock, CheckCircle, ClipboardList, User, CheckCheck } from 'lucide-react';
 import { formatConvTime } from '../../utils/formatDate';
 
 /**
@@ -97,47 +97,73 @@ const ChatList = ({
                 cargarMensajes(conv.usuario_id, conv.id);
               }}
             >
-              <div className="avatar" style={{ position: 'relative', backgroundColor: esCerrado ? '#9ca3af' : '#6b7280' }}>
-                {esCerrado
-                  ? <CheckCircle size={20} color="#fff" />
-                  : <MessageSquare size={20} color="#fff" />}
-                {!esCerrado && parseInt(conv.no_leidos) > 0 && (
-                  <div className="unread-badge">{conv.no_leidos}</div>
+              <div className="avatar" style={{ backgroundColor: esCerrado ? '#9ca3af' : 'transparent', flexShrink: 0 }}>
+                {esCerrado ? (
+                  <CheckCircle size={24} color="#fff" />
+                ) : (
+                  <img 
+                    src={`https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(conv.nombre || conv.username || conv.id)}&backgroundColor=0284c7,0ea5e9,3b82f6,6366f1,8b5cf6&textColor=ffffff`} 
+                    alt="avatar" 
+                    style={{ width: '45px', height: '45px', borderRadius: '50%', objectFit: 'cover' }} 
+                  />
                 )}
               </div>
 
-              <div className="conv-info">
-                <div className="conv-header">
-                  <div style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
-                    <span className="client-name">{conv.nombre || conv.username || 'Cliente'}</span>
-                    <div style={{ display: 'flex', gap: '6px', marginTop: '2px' }}>
-                      <span className="area-label">{conv.departamento || 'Bot'}</span>
-                      <span className="company-badge">{conv.empresa_id}</span>
-                    </div>
+              <div className="conv-info" style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0, paddingLeft: '4px', justifyContent: 'center' }}>
+                
+                {/* Primera fila: Nombre y Hora */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flex: 1, overflow: 'hidden' }}>
+                    <span className="client-name" style={{ fontWeight: 'bold', fontSize: '15px', color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {conv.nombre || conv.username || 'Cliente'}
+                    </span>
+                    <span className="company-badge" style={{ flexShrink: 0 }}>
+                      {conv.empresa_id}
+                    </span>
                   </div>
-                  <span className="time">{formatConvTime(conv.fecha_ultimo_mensaje)}</span>
+                  <span className="time" style={{ fontSize: '12px', color: 'var(--text-secondary)', flexShrink: 0, marginLeft: '8px' }}>
+                    {formatConvTime(conv.fecha_ultimo_mensaje)}
+                  </span>
                 </div>
 
-                <div className="last-message">
-                  {conv.estado === 'ESPERANDO_AGENTE' ? (
-                    <span style={{ color: '#ea4335', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                      <Clock size={12} /> EN ESPERA ({conv.departamento})
-                    </span>
-                  ) : esEncuesta ? (
-                    <span className="conv-estado-cerrado">
-                      <ClipboardList size={11} /> Encuesta pendiente
-                    </span>
-                  ) : esCerrado ? (
-                    <span className="conv-estado-cerrado">
-                      <CheckCircle size={11} /> {conv.ultimo_mensaje || 'Chat cerrado'}
-                    </span>
-                  ) : (
-                    <span>
-                      {conv.ultimo_remitente === 'agente' ? 'Tú: ' : ''}
-                      {conv.ultimo_mensaje || 'Sin mensajes'}
-                    </span>
-                  )}
+                {/* Segunda fila: Mensaje y Badges */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                  <div className="last-message" style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', whiteSpace: 'normal', overflow: 'hidden', color: 'var(--text-secondary)', fontSize: '13px', lineHeight: '1.3', flex: 1, paddingRight: '8px' }}>
+                    {conv.estado === 'ESPERANDO_AGENTE' ? (
+                      <span style={{ color: 'var(--accent)', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <Clock size={12} /> EN ESPERA ({conv.departamento})
+                      </span>
+                    ) : esEncuesta ? (
+                      <span className="conv-estado-cerrado">
+                        <ClipboardList size={11} /> Encuesta pendiente
+                      </span>
+                    ) : esCerrado ? (
+                      <span className="conv-estado-cerrado">
+                        {conv.ultimo_mensaje || 'Chat cerrado'}
+                      </span>
+                    ) : (
+                      <span>
+                        {conv.ultimo_remitente === 'agente' ? 'Tú: ' : ''}
+                        {conv.ultimo_mensaje || 'Sin mensajes'}
+                      </span>
+                    )}
+                  </div>
+
+                  <div style={{ flexShrink: 0, display: 'flex', alignItems: 'flex-start', paddingTop: '2px' }}>
+                    {!esCerrado && parseInt(conv.no_leidos) > 0 ? (
+                      <div className="unread-badge-right" style={{ backgroundColor: '#25D366', color: 'white', borderRadius: '50%', minWidth: '18px', height: '18px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: 'bold', padding: '0 4px' }}>
+                        {conv.no_leidos}
+                      </div>
+                    ) : conv.estado === 'ESPERANDO_AGENTE' ? (
+                      <Clock size={14} color="var(--text-hint)" />
+                    ) : esCerrado ? (
+                      <CheckCheck size={16} color="var(--text-hint)" />
+                    ) : (
+                      <CheckCheck size={16} color="var(--text-hint)" />
+                    )}
+                  </div>
                 </div>
+
               </div>
             </div>
           );

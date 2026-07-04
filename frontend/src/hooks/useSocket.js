@@ -43,10 +43,6 @@ export function useSocket({
       const convId      = Number(data.conversacion_id);
       const mismoChatId = convId === Number(convActiva?.id);
 
-      if (data.remitente === 'user') {
-        notifyRef.current('Nuevo mensaje', data.mensaje);
-      }
-
       // Actualizar la lista: preview, timestamp, badge de no-leídos y mover al tope.
       // Si idx === -1 (conversación nueva) se dispara un refetch desde server
       // para incluirla — no se devuelve prev sin más porque eso es mismo-referencia
@@ -81,13 +77,15 @@ export function useSocket({
       if (!convActiva || !mismoChatId) return;
 
       const newMsg = {
-        id:         data.mensaje_id,
-        remitente:  data.remitente,
-        texto:      data.mensaje,
-        tipo:       data.tipo      || 'text',
-        url_media:  data.url_media || null,
-        estado:     data.estado    || (data.remitente === 'user' ? undefined : 'enviado'),
-        created_at: data.fecha     || new Date(),
+        id:           data.mensaje_id,
+        remitente:    data.remitente,
+        texto:        data.mensaje,
+        tipo:         data.tipo      || 'text',
+        url_media:    data.url_media || null,
+        estado:       data.estado    || (data.remitente === 'user' ? undefined : 'enviado'),
+        created_at:   data.fecha     || new Date(),
+        agente_id:    data.agente_id    || null,
+        agente_nombre: data.agente_nombre || null,
       };
 
       clearTimeout(typingTimerRef.current);
@@ -242,6 +240,13 @@ export function useSocket({
       }
     };
 
+    // ─── conversacion_etiquetas ──────────────────────────────────────
+    // Cuando otro agente etiqueta la conversación, notificamos a ChatWindow
+    // mediante un evento de DOM para evitar prop drilling.
+    const handleConversacionEtiquetas = (data) => {
+      window.dispatchEvent(new CustomEvent('conversacion:etiquetas', { detail: data }));
+    };
+
     socket.on('nuevo_mensaje',            handleNuevoMensaje);
     socket.on('conversacion_leida',       handleLectura);
     socket.on('conversacion_actualizada', handleActualizacion);
@@ -250,6 +255,7 @@ export function useSocket({
     socket.on('mensaje_estado',           handleMensajeEstado);
     socket.on('mensajes_leidos',          handleMensajesLeidos);
     socket.on('cliente_escribiendo',      handleClienteEscribiendo);
+    socket.on('conversacion_etiquetas',   handleConversacionEtiquetas);
     socket.on('disconnect',               handleDisconnect);
     socket.on('connect',                  handleConnect);
 
@@ -262,10 +268,13 @@ export function useSocket({
       socket.off('mensaje_estado',           handleMensajeEstado);
       socket.off('mensajes_leidos',          handleMensajesLeidos);
       socket.off('cliente_escribiendo',      handleClienteEscribiendo);
+      socket.off('conversacion_etiquetas',   handleConversacionEtiquetas);
       socket.off('disconnect',               handleDisconnect);
       socket.off('connect',                  handleConnect);
       clearTimeout(typingTimerRef.current);
     };
+    // Nota: el evento conversacion_actualizada ya cubre el refresco completo de la lista
+    // tras una transferencia (el backend emite ese evento al área origen y destino).
   // Solo se monta/desmonta cuando el socket o el usuario cambian.
   // conversacionActiva se lee siempre fresco a través de convActivaRef.
   // eslint-disable-next-line react-hooks/exhaustive-deps

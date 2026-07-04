@@ -5,8 +5,8 @@
 /* Barra superior */
 .top-bar {
   height: 50px;
-  background-color: #f0f2f5;
-  border-bottom: 1px solid #d1d7db;
+  background-color: var(--bg-header);
+  border-bottom: 1px solid var(--border);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -26,9 +26,21 @@
   background: none;
   border: none;
   cursor: pointer;
-  color: #54656f;
+  color: var(--text-secondary);
   display: flex;
   align-items: center;
+}
+
+/* Toggle de tema oscuro */
+.dark-toggle-btn {
+  padding: 6px;
+  border-radius: 50%;
+  transition: background 0.15s, color 0.15s;
+}
+
+.dark-toggle-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
 }
 
 /* Perfil del agente en el TopBar */
@@ -36,6 +48,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
+  color: var(--text-secondary);
 }
 
 .user-avatar {
@@ -82,7 +95,7 @@
 .user-name {
   font-size: 13px;
   font-weight: 600;
-  color: #54656f;
+  color: var(--text-secondary);
 }
 
 /* Selector de empresa (multi-tenant) */
@@ -90,10 +103,10 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  background: white;
+  background: var(--bg-panel);
   padding: 4px 12px;
   border-radius: 20px;
-  border: 1px solid #d1d7db;
+  border: 1px solid var(--border);
   margin-left: 10px;
 }
 
@@ -102,7 +115,7 @@
   background: transparent;
   font-size: 14px;
   font-weight: 600;
-  color: #111b21;
+  color: var(--text-primary);
   outline: none;
   cursor: pointer;
 }

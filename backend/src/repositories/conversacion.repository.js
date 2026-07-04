@@ -114,10 +114,16 @@ const assignAgente = (id, agente_id) =>
  * @param {string} agente_nombre - Nombre del agente que cierra.
  * @returns {Promise<import('pg').QueryResult>}
  */
-const liberar = (id, motivo, agente_nombre) =>
+const liberar = (id, motivo, agente_nombre, categoria_cierre_id, comentario_cierre, tipo_cierre, cerrado_por_id) =>
   db.query(
-    'UPDATE conversaciones SET es_humano=false, estado=$1, motivo_cierre=$2, cerrado_por=$3, updated_at=NOW() WHERE id=$4',
-    ['ENCUESTA_AGENTE', motivo, agente_nombre, id]
+    `UPDATE conversaciones
+     SET es_humano=false, estado=$1, motivo_cierre=$2, cerrado_por=$3,
+         categoria_cierre_id=$4, comentario_cierre=$5,
+         tipo_cierre=$6, cerrado_por_id=$7, cerrado_en=NOW(), updated_at=NOW()
+     WHERE id=$8`,
+    ['ENCUESTA_AGENTE', motivo, agente_nombre,
+     categoria_cierre_id || null, comentario_cierre || null,
+     tipo_cierre || 'manual', cerrado_por_id || null, id]
   );
 
 /**
@@ -234,6 +240,14 @@ const updateMetadata = (id, parcialMetadata) =>
     'UPDATE conversaciones SET metadata = metadata || $1::jsonb, updated_at=NOW() WHERE id=$2',
     [JSON.stringify(parcialMetadata), id]
   );
+
+/**
+ * Listado incluyendo los campos de transferencia para que el frontend
+ * pueda mostrar la nota y filtrar el historial correctamente.
+ * Se usa en `listAdmin` y `listByArea` a través de MENSAJES_SUBQUERIES —
+ * los campos nota_transferencia, transferida_en y transferida_desde ya
+ * están en `c.*` porque son columnas de la tabla conversaciones.
+ */
 
 module.exports = {
   findById,

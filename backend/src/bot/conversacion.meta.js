@@ -31,11 +31,20 @@ class ConversacionMeta {
     /** @type {number} Número de intentos de identificación fallidos. */
     this.intentos_identificacion = src.intentos_identificacion || 0;
 
+    /** @type {number} Mensajes consecutivos no reconocidos por el bot (para auto-escalada). */
+    this.intentos_fallidos = src.intentos_fallidos || 0;
+
     /** @type {boolean} El cliente consulta por otra persona (temporal). */
     this.consulta_ajena = src.consulta_ajena || false;
 
     /** @type {boolean} El cliente fue identificado vía WISP en esta o sesiones anteriores. */
     this.identificado_via_wisp = src.identificado_via_wisp || false;
+
+    /**
+     * Intención detectada por NLU pendiente de confirmación del cliente.
+     * @type {{intencion: string, depto: string|null}|null}
+     */
+    this.intencion_pendiente = src.intencion_pendiente || null;
   }
 
   /** Servicio actualmente seleccionado según servicio_idx. */
@@ -56,8 +65,10 @@ class ConversacionMeta {
       servicio_idx:            this.servicio_idx,
       tipo_identificacion:     this.tipo_identificacion,
       intentos_identificacion: this.intentos_identificacion,
+      intentos_fallidos:       this.intentos_fallidos,
       consulta_ajena:          this.consulta_ajena,
       identificado_via_wisp:   this.identificado_via_wisp,
+      intencion_pendiente:     this.intencion_pendiente,
     };
   }
 }

@@ -14,8 +14,8 @@
  *   instagram → adapters/meta.js
  */
 
-const { enviarMensajeTelegram, enviarAccionEscribiendo: telegramEscribiendo, enviarFotoTelegram, enviarVozTelegram, enviarReaccionTelegram } = require('./telegram');
-const { enviarMensajeMeta, enviarAccionEscribiendoMeta } = require('./meta');
+const { enviarMensajeTelegram, enviarAccionEscribiendo: telegramEscribiendo, enviarFotoTelegram, enviarVozTelegram, enviarDocumentoTelegram, enviarReaccionTelegram } = require('./telegram');
+const { enviarMensajeMeta, enviarAccionEscribiendoMeta, enviarMediaMeta } = require('./meta');
 const logger = require('../config/logger');
 
 /**
@@ -63,19 +63,26 @@ async function enviarEscribiendo(canal, external_id, empresa_id, conversacion_id
 }
 
 /**
- * Envía una foto o nota de voz al cliente por el canal correspondiente.
+ * Envía un archivo multimedia al cliente por el canal correspondiente.
  * @param {string} canal
  * @param {string} external_id
  * @param {Buffer} buffer
- * @param {'photo'|'voice'} tipo
+ * @param {'photo'|'image'|'voice'|'document'} tipo
  * @param {string} caption
  * @param {string} empresa_id
- * @returns {Promise<{ok: boolean, file_id: string|null}>}
+ * @param {string} [filename]   - Nombre de archivo para document/Meta.
+ * @param {string} [mimetype]   - MIME type; se infiere del tipo si falta.
+ * @returns {Promise<{ok: boolean, file_id?: string|null}>}
  */
-async function enviarMedia(canal, external_id, buffer, tipo, caption, empresa_id) {
+async function enviarMedia(canal, external_id, buffer, tipo, caption, empresa_id, filename = '', mimetype = '') {
   if (canal === 'telegram') {
-    if (tipo === 'photo') return enviarFotoTelegram(external_id, buffer, caption, empresa_id);
-    if (tipo === 'voice') return enviarVozTelegram(external_id, buffer, empresa_id);
+    if (tipo === 'photo' || tipo === 'image') return enviarFotoTelegram(external_id, buffer, caption, empresa_id);
+    if (tipo === 'voice')                     return enviarVozTelegram(external_id, buffer, empresa_id);
+    if (tipo === 'document')                  return enviarDocumentoTelegram(external_id, buffer, caption, empresa_id, filename);
+  }
+  if (canal === 'whatsapp' || canal === 'facebook' || canal === 'instagram') {
+    const metaTipo = (tipo === 'photo' || tipo === 'image') ? 'image' : 'document';
+    return enviarMediaMeta(canal, external_id, buffer, metaTipo, caption, empresa_id, filename, mimetype);
   }
   logger.warn(`[ADAPTER] enviarMedia no soportado para canal="${canal}" tipo="${tipo}"`);
   return { ok: false, file_id: null };

@@ -27,25 +27,31 @@
  *   'contactos' → Directorio de clientes
  */
 
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useRef } from 'react';
 import { io } from 'socket.io-client';
 
 import { useAuth }           from './hooks/useAuth';
 import { useNotifications }  from './hooks/useNotifications';
 import { useConversaciones } from './hooks/useConversaciones';
 import { useSocket }         from './hooks/useSocket';
+import { usePermisos }       from './hooks/usePermisos';
 import { apiService }        from './services/api';
+import usePolling            from './hooks/usePolling';
 
 import Sidebar             from './components/Layout/Sidebar';
 import TopBar              from './components/Layout/TopBar';
 import ChatList            from './components/Chat/ChatList';
 import ChatWindow          from './components/Chat/ChatWindow';
 import SettingsView        from './components/Settings/SettingsView';
+import EtiquetasSection    from './components/Settings/sections/EtiquetasSection';
+import CategoriasCierreSection from './components/Settings/sections/CategoriasCierreSection';
 import AgentManagementView from './components/Settings/AgentManagementView';
 import DashboardView       from './components/Settings/DashboardView';
 import ContactsView        from './components/Contacts/ContactsView';
 import InfraccionesView    from './components/Infracciones/InfraccionesView';
+import FlowEditorView     from './components/FlowEditor/FlowEditorView';
 import CerrarChatModal     from './components/Chat/CerrarChatModal';
+import TransferModal       from './components/Chat/TransferModal';
 import Login               from './components/Auth/Login';
 import TIPanel             from './components/TI/TIPanel';
 import './styles/ti-panel.css';
@@ -67,6 +73,7 @@ const ESTADOS_PURO_BOT = ['abierta', 'MENU_PRINCIPAL', 'SELECCION_EMPRESA', 'SEL
 function App() {
   const { user, login, logout, actualizarUsuario } = useAuth();
   const { notify }                = useNotifications();
+  const { hasModulo, filtrarEmpresas } = usePermisos(user, socket);
   const [mantenimiento, setMantenimiento] = useState(false);
 
   // Escuchar evento de mantenimiento:
@@ -98,6 +105,8 @@ function App() {
   const [currentView,       setCurrentView]       = useState(() => localStorage.getItem('app_current_view') || 'chat');
   const [totalInfracciones, setTotalInfracciones] = useState(0);
   const [cerrarModalId,     setCerrarModalId]     = useState(null);
+  const [transferModalId,   setTransferModalId]   = useState(null);
+  const [darkMode,          setDarkMode]          = useState(() => localStorage.getItem('app_theme') === 'dark');
 
   // Empresa activa: usada solo como filtro visual y para configuración.
   // 'todas' por defecto para que el agente vea todo desde el primer momento.
@@ -123,6 +132,11 @@ function App() {
     eliminarChat
   } = useConversaciones(user, empresaId);
 
+  const convActivaRef = useRef(conversacionActiva);
+  useEffect(() => {
+    convActivaRef.current = conversacionActiva;
+  }, [conversacionActiva]);
+
   // Eventos en tiempo real vía Socket.io
   useSocket({
     socket,
@@ -134,6 +148,88 @@ function App() {
     setConversacionActiva,
     setClienteEscribiendo,
     notify
+  });
+
+  // Polling de respaldo e inyección en tiempo real
+  usePolling({
+    defaultInterval: 5000,
+    longInterval: 15000,
+    idleCycles: 3,
+    onNewData: (updates, activeAgents) => {
+      // Disparar evento global para actualizar tarjetas de agentes sin recargar
+      if (activeAgents) {
+        window.dispatchEvent(new CustomEvent('agentes:presencia_polling', { detail: activeAgents }));
+      }
+
+      if (!updates || updates.length === 0) return;
+      
+      updates.forEach(upd => {
+        // Adaptar estructura dependiendo si es Meta o Telegram
+        const isMeta = upd.source === 'meta';
+        const telefonoRemitente = isMeta 
+          ? (upd.data?.from || '') 
+          : (upd.data?.message?.from?.id || '');
+          
+        const textoMsj = isMeta 
+          ? (upd.data?.text?.body || 'Mensaje nuevo') 
+          : (upd.data?.message?.text || 'Mensaje nuevo');
+
+        if (!telefonoRemitente) return;
+        
+        // Determinar si el mensaje entrante es del chat que actualmente estamos viendo
+        const currentConv = convActivaRef.current;
+        const esChatActivo = currentConv && (
+          currentConv.username === String(telefonoRemitente) || 
+          currentConv.telefono === String(telefonoRemitente)
+        );
+        
+        // 1. Actualizar bandeja de conversaciones
+        setConversaciones(prev => {
+          const idx = prev.findIndex(c => 
+            c.username === String(telefonoRemitente) || 
+            c.telefono === String(telefonoRemitente)
+          );
+          
+          if (idx === -1) return prev; // Si no está en memoria, el websocket/backend se encargará
+          
+          const conv = prev[idx];
+          // Evitamos pisar si el mensaje por socket llegó antes (timestamp check)
+          const newTime = new Date(upd.timestamp).getTime();
+          const oldTime = new Date(conv.fecha_ultimo_mensaje || 0).getTime();
+          if (newTime <= oldTime) return prev; 
+
+          const updated = {
+            ...conv,
+            ultimo_mensaje: textoMsj,
+            ultimo_remitente: 'user',
+            fecha_ultimo_mensaje: upd.timestamp,
+            // Solo incrementar si NO es el chat activo (comportamiento WhatsApp)
+            no_leidos: !esChatActivo 
+              ? String(parseInt(conv.no_leidos || 0) + 1)
+              : conv.no_leidos,
+          };
+          return [updated, ...prev.filter((_, i) => i !== idx)];
+        });
+
+        // 2. Insertar en la vista de chat si está activa
+        if (esChatActivo) {
+          const newMsg = {
+            id: `poll_${upd.timestamp}_${Math.random()}`,
+            remitente: 'user',
+            texto: textoMsj,
+            tipo: 'text',
+            created_at: upd.timestamp,
+          };
+          
+          setMensajes(prev => [...prev, newMsg]);
+          
+          // Marcar en la base de datos como leído porque lo acabamos de ver
+          if (currentConv && currentConv.id) {
+            apiService.marcarLeido(currentConv.id).catch(() => {});
+          }
+        }
+      });
+    }
   });
 
   // Cargar conteo de infracciones de hoy y escuchar nuevas en tiempo real (solo admin)
@@ -155,7 +251,7 @@ function App() {
   // para recuperar las salas que el servidor pierde al reiniciarse.
   useEffect(() => {
     if (!user) return;
-    const joinRoom = () => socket.emit('agente:join', { rol: user.rol, area: user.area });
+    const joinRoom = () => socket.emit('agente:join', { id: user.id, rol: user.rol, area: user.area });
     joinRoom();
     socket.on('connect', joinRoom);
     return () => socket.off('connect', joinRoom);
@@ -166,7 +262,12 @@ function App() {
     localStorage.setItem('app_current_view', currentView);
     if (currentView === 'infracciones') setTotalInfracciones(0);
   }, [currentView]);
-  useEffect(() => { localStorage.setItem('app_empresa_id',   empresaId);   }, [empresaId]);
+  useEffect(() => { localStorage.setItem('app_empresa_id', empresaId); }, [empresaId]);
+
+  // Persistir preferencia de tema (solo afecta al chat)
+  useEffect(() => {
+    localStorage.setItem('app_theme', darkMode ? 'dark' : 'light');
+  }, [darkMode]);
 
   // Cerrar chat activo al presionar Escape
   useEffect(() => {
@@ -194,6 +295,11 @@ function App() {
     conversaciones.reduce((sum, c) => sum + parseInt(c.no_leidos || 0), 0),
     [conversaciones]
   );
+
+  // Actualizar título de la pestaña con contador de no leídos
+  useEffect(() => {
+    document.title = totalNoLeidos > 0 ? `(${totalNoLeidos}) ISP CRM` : 'ISP CRM';
+  }, [totalNoLeidos]);
 
   // ─────────────────────────────────────────────
   // Filtrado de conversaciones
@@ -237,9 +343,10 @@ function App() {
 
     if (filtro === 'Cerrados') {
       if (!esCerrado) return false;
+      // Admin ve todos los cerrados de todas las áreas
       if (user?.rol === 'admin') return true;
-      // Asesor: solo los que él atendió
-      return Number(c.agente_id) === Number(user?.id);
+      // Asesor: cerrados de su área (el backend filtra por departamento)
+      return c.departamento === user?.area;
     }
 
     return false;
@@ -251,9 +358,28 @@ function App() {
 
   const handleCerrarChat = (id) => setCerrarModalId(id);
 
-  const handleConfirmarCierre = async (motivo, solucion) => {
-    await cerrarChat(cerrarModalId, motivo, solucion);
+  const handleConfirmarCierre = async (categoria_cierre_id, comentario_cierre) => {
+    try {
+      await cerrarChat(cerrarModalId, categoria_cierre_id, comentario_cierre);
+    } catch (err) {
+      // 409: la conversación ya estaba cerrada (doble clic, race condition).
+      // No hay nada que hacer — cerrar el modal sin mostrar error.
+      if (!err.message?.includes('ya está cerrada')) throw err;
+    }
     setCerrarModalId(null);
+  };
+
+  const handleTransferirChat = (id) => setTransferModalId(id);
+
+  const handleConfirmarTransferencia = async (areaDestino, nota) => {
+    if (!transferModalId) return;
+    try {
+      await apiService.transferirChat(transferModalId, areaDestino, nota);
+      setTransferModalId(null);
+      setConversacionActiva(null);
+    } catch (err) {
+      alert(err.message || 'Error al transferir el chat');
+    }
   };
 
   const handleEliminarChat = async (id) => {
@@ -293,11 +419,12 @@ function App() {
       <Sidebar
         visible={sidebarVisible}
         currentView={currentView}
-        setView={(v) => { setCurrentView(v); setSidebarVisible(false); }}
+        setView={(v) => { setCurrentView(v); if (window.innerWidth <= 768) setSidebarVisible(false); }}
         user={user}
         onLogout={logout}
         totalNoLeidos={totalNoLeidos}
         totalInfracciones={totalInfracciones}
+        hasModulo={hasModulo}
       />
       <div className="main-wrapper">
         <TopBar
@@ -306,8 +433,10 @@ function App() {
           empresaId={empresaId}
           setEmpresaId={setEmpresaId}
           user={user}
+          darkMode={darkMode}
+          setDarkMode={setDarkMode}
         />
-        <div className={`main-content${conversacionActiva ? ' has-active-chat' : ''}`}>
+        <div className={`main-content${conversacionActiva ? ' has-active-chat' : ''}${darkMode && currentView === 'chat' ? ' chat-dark' : ''}`}>
 
           {currentView === 'chat' && (
             <>
@@ -328,10 +457,12 @@ function App() {
                 enviarMensaje={handleEnviarMensaje}
                 enviarMedia={enviarMedia}
                 cerrarConversacion={handleCerrarChat}
+                transferirConversacion={handleTransferirChat}
                 eliminarConversacion={handleEliminarChat}
                 setConversacionActiva={setConversacionActiva}
                 clienteEscribiendo={clienteEscribiendo}
                 user={user}
+                darkMode={darkMode}
               />
             </>
           )}
@@ -344,6 +475,8 @@ function App() {
             <SettingsView
               config={config}
               setConfig={setConfig}
+              empresaId={empresaId}
+              user={user}
               onSave={async (clave, valor) => {
                 await apiService.updateConfig(clave, valor, empresaId);
                 await cargar();
@@ -361,7 +494,19 @@ function App() {
             <InfraccionesView user={user} empresaId={empresaId} socket={socket} />
           )}
 
-          {!['chat','agents','config','dashboard','contactos','infracciones'].includes(currentView) && (
+          {currentView === 'etiquetas' && (
+            <EtiquetasSection empresaId={empresaId} user={user} />
+          )}
+
+          {currentView === 'categorias-cierre' && (
+            <CategoriasCierreSection empresaId={empresaId} user={user} />
+          )}
+
+          {currentView === 'flow-editor' && (
+            <FlowEditorView empresaId={empresaId !== 'todas' ? empresaId : 'fibratec'} user={user} />
+          )}
+
+          {!['chat','agents','config','dashboard','contactos','infracciones','etiquetas','categorias-cierre','flow-editor'].includes(currentView) && (
             <div className="empty-chat">
               <div className="empty-content"><h2>Próximamente</h2></div>
             </div>
@@ -372,8 +517,21 @@ function App() {
       {cerrarModalId && (
         <CerrarChatModal
           clienteNombre={conversaciones.find(c => c.id === cerrarModalId)?.nombre}
+          conversacion={conversaciones.find(c => c.id === cerrarModalId)}
+          user={user}
           onConfirmar={handleConfirmarCierre}
           onCancelar={() => setCerrarModalId(null)}
+        />
+      )}
+      {transferModalId && (
+        <TransferModal
+          clienteNombre={conversaciones.find(c => c.id === transferModalId)?.nombre}
+          areaActual={
+            conversaciones.find(c => c.id === transferModalId)?.departamento
+            || user?.area
+          }
+          onConfirmar={handleConfirmarTransferencia}
+          onCancelar={() => setTransferModalId(null)}
         />
       )}
     </div>

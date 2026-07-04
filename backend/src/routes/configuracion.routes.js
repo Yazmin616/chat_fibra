@@ -53,4 +53,16 @@ router.post('/', verifyToken, requireAdmin, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// --- Plantillas Bot ---
+const plantillasController = require('../controllers/plantillas.controller');
+
+router.get('/plantillas', verifyToken, requireAdmin, plantillasController.getPlantillas);
+router.post('/plantillas/:clave', verifyToken, requireAdmin, plantillasController.savePlantilla);
+
+// --- Menús Bot ---
+const menusController = require('../controllers/menus.controller');
+
+router.get('/menus', verifyToken, requireAdmin, menusController.getMenus);
+router.post('/menus/:menuId/:buttonId', verifyToken, requireAdmin, menusController.saveMenuButton);
+
 module.exports = router;

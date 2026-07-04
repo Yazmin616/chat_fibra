@@ -24,7 +24,7 @@ function getSectionFromHash() {
   return found ? found.id : DEFAULT_SECTION_ID;
 }
 
-const SettingsView = ({ config, onSave }) => {
+const SettingsView = ({ config, onSave, empresaId, user }) => {
   const [activeId, setActiveId] = useState(getSectionFromHash);
 
   // dirtyRef: escrito por la sección activa, leído por el shell al navegar.
@@ -56,7 +56,8 @@ const SettingsView = ({ config, onSave }) => {
     setActiveId(id);
   }, [activeId]);
 
-  const activeSection = SECTIONS.find(s => s.id === activeId) || SECTIONS[0];
+  const visibleSections = SECTIONS.filter(s => !s.adminOnly || user?.rol === 'admin');
+  const activeSection = visibleSections.find(s => s.id === activeId) || visibleSections[0];
   const ActiveComponent = activeSection.component;
 
   return (
@@ -69,7 +70,7 @@ const SettingsView = ({ config, onSave }) => {
         </div>
 
         <ul className="cfg-nav" role="menu">
-          {SECTIONS.map(section => (
+          {visibleSections.map(section => (
             <li key={section.id} role="none">
               <button
                 role="menuitem"
@@ -77,7 +78,7 @@ const SettingsView = ({ config, onSave }) => {
                 onClick={() => navigate(section.id)}
                 aria-current={section.id === activeId ? 'page' : undefined}
               >
-                <span className="cfg-nav-icon" aria-hidden="true">{section.icon}</span>
+                <span className="cfg-nav-icon" aria-hidden="true"><section.icon size={18} strokeWidth={2} /></span>
                 <span className="cfg-nav-text">
                   <span className="cfg-nav-label">{section.label}</span>
                   <span className="cfg-nav-desc">{section.description}</span>
@@ -97,6 +98,8 @@ const SettingsView = ({ config, onSave }) => {
           config={config}
           onSave={onSave}
           setDirty={setDirty}
+          empresaId={empresaId}
+          user={user}
         />
       </div>
 

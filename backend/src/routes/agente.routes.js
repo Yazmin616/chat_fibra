@@ -31,7 +31,18 @@ const upload = multer({
   limits:  { fileSize: 16 * 1024 * 1024 },
   fileFilter(_req, file, cb) {
     const allowed = ['image/jpeg','image/png','image/webp','image/gif',
-                     'audio/webm','audio/ogg','audio/mp4','audio/mpeg','audio/wav'];
+                     'audio/webm','audio/ogg','audio/mp4','audio/mpeg','audio/wav',
+                     'application/pdf'];
+    cb(null, allowed.includes(file.mimetype));
+  },
+});
+
+// Multer en memoria para media de respuestas rápidas (imágenes y PDF, máx. 8 MB)
+const rrMediaUpload = multer({
+  storage: multer.memoryStorage(),
+  limits:  { fileSize: 8 * 1024 * 1024 },
+  fileFilter(_req, file, cb) {
+    const allowed = ['image/jpeg','image/png','image/webp','image/gif','application/pdf'];
     cb(null, allowed.includes(file.mimetype));
   },
 });
@@ -115,7 +126,7 @@ router.get('/wa-media/:empresa_id/:media_id', async (req, res) => {
     Readable.fromWeb(upstream.body).pipe(res);
 
   } catch (err) {
-    logger.error(`[WA-MEDIA] Error para media_id=${media_id}:`, { error: err.message });
+    logger.warn(`[WA-MEDIA] Archivo no disponible en Meta (probablemente expirado). media_id=${media_id} - ${err.message}`);
     // 404 controlado en lugar de 500 — CORP ya está seteado arriba
     res.status(404).end();
   }
@@ -409,10 +420,11 @@ router.get('/infracciones/hoy',             verifyToken, requireAdmin, infraccio
 router.post('/reaccionar', verifyToken, agenteController.reaccionar);
 
 // Respuestas rápidas (personales de cada agente)
-router.get   ('/respuestas-rapidas',     verifyToken, agenteController.listarRR);
-router.post  ('/respuestas-rapidas',     verifyToken, agenteController.crearRR);
-router.put   ('/respuestas-rapidas/:id', verifyToken, agenteController.actualizarRR);
-router.delete('/respuestas-rapidas/:id', verifyToken, agenteController.eliminarRR);
+router.get   ('/respuestas-rapidas',        verifyToken,                                          agenteController.listarRR);
+router.post  ('/respuestas-rapidas/usar',   verifyToken,                                          agenteController.usarRespuestaRapida);
+router.post  ('/respuestas-rapidas',        verifyToken, rrMediaUpload.single('media'),            agenteController.crearRR);
+router.put   ('/respuestas-rapidas/:id',    verifyToken, rrMediaUpload.single('media'),            agenteController.actualizarRR);
+router.delete('/respuestas-rapidas/:id',    verifyToken,                                          agenteController.eliminarRR);
 
 router.post('/responder',          verifyToken,              agenteController.responder);
 router.post('/enviar-media',       verifyToken,              upload.single('archivo'), agenteController.enviarMediaHandler);

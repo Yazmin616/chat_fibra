@@ -10,14 +10,9 @@
 const { parseOtraConsulta } = require('../parsers');
 const { ESTADOS }           = require('../constants');
 const { ConversacionMeta }  = require('../conversacion.meta');
-const {
-  ENCUESTA,
-  getAutoservicioKeyboard,
-  getOtraConsultaKeyboard,
-  generarTecladoServicios,
-} = require('../keyboards');
+const keyboards = require('../keyboards');
 
-function handle(mensaje, conversacion) {
+async function handle(mensaje, conversacion) {
   const respuesta = parseOtraConsulta(mensaje);
   const meta      = new ConversacionMeta(conversacion.metadata);
 
@@ -26,7 +21,7 @@ function handle(mensaje, conversacion) {
     return {
       respuesta:   `🔄 ¿Cuál servicio deseas consultar?\n\n${listaTexto}`,
       nuevoEstado: ESTADOS.SELECCION_SERVICIO,
-      teclado:     generarTecladoServicios(meta.cliente.servicios),
+      teclado:     keyboards.generarTecladoServicios(meta.cliente.servicios),
     };
   }
 
@@ -34,7 +29,7 @@ function handle(mensaje, conversacion) {
     return {
       respuesta:   '¿En qué más puedo ayudarte?',
       nuevoEstado: ESTADOS.MENU_AUTOSERVICIO,
-      teclado:     getAutoservicioKeyboard(meta.toJSON()),
+      teclado:     await keyboards.getAutoservicioKeyboard(meta.toJSON(), conversacion.empresa_id),
     };
   }
 
@@ -42,14 +37,14 @@ function handle(mensaje, conversacion) {
     return {
       respuesta:   '¡Gracias por contactarnos! 😊\n\n¿Cómo calificarías la atención recibida hoy?',
       nuevoEstado: ESTADOS.ENCUESTA_BOT,
-      teclado:     ENCUESTA,
+      teclado: await keyboards.get('ENCUESTA', conversacion.empresa_id),
     };
   }
 
   return {
     respuesta:   '⚠️ Por favor selecciona una opción:',
     nuevoEstado: conversacion.estado,
-    teclado:     getOtraConsultaKeyboard(meta.toJSON()),
+    teclado:     await keyboards.getOtraConsultaKeyboard(meta.toJSON(), conversacion.empresa_id),
   };
 }
 

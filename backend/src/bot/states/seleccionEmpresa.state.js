@@ -14,13 +14,7 @@ const wisp              = require('../../services/wisp.service');
 const { parseEmpresa }  = require('../parsers');
 const { ESTADOS }       = require('../constants');
 const { ConversacionMeta } = require('../conversacion.meta');
-const {
-  EMPRESAS,
-  TIPO_CLIENTE,
-  TIPO_IDENTIFICACION,
-  AUTOSERVICIO_BASICO,
-  generarTecladoServicios,
-} = require('../keyboards');
+const keyboards = require('../keyboards');
 
 async function handle(mensaje, conversacion, usuario) {
   const { empresa, nombre } = parseEmpresa(mensaje);
@@ -29,7 +23,7 @@ async function handle(mensaje, conversacion, usuario) {
     return {
       respuesta:   '⚠️ Opción no reconocida. Por favor elige una empresa:',
       nuevoEstado: conversacion.estado,
-      teclado:     EMPRESAS,
+      teclado: await keyboards.get('EMPRESAS', conversacion.empresa_id),
     };
   }
 
@@ -58,11 +52,11 @@ async function handle(mensaje, conversacion, usuario) {
           respuesta:   `✅ Has seleccionado ${nombre}.\n\n` +
                        `¡Hola de nuevo, ${clienteWisp.nombre.split(' ')[0]}! Tienes varios servicios. ¿Cuál deseas consultar?\n\n${listaTexto}`,
           nuevoEstado: ESTADOS.SELECCION_SERVICIO,
-          teclado:     generarTecladoServicios(clienteWisp.servicios),
+          teclado:     keyboards.generarTecladoServicios(clienteWisp.servicios),
         };
       }
 
-      const teclado = yaIdentificado ? AUTOSERVICIO_BASICO : AUTOSERVICIO_BASICO;
+      const teclado = await keyboards.getAutoservicioKeyboard(meta, empresa);
       return {
         respuesta:   `✅ Has seleccionado ${nombre}.\n\n¡Bienvenido/a de vuelta, ${clienteWisp.nombre.split(' ')[0]}! ¿En qué puedo ayudarte?`,
         nuevoEstado: ESTADOS.MENU_AUTOSERVICIO,
@@ -74,14 +68,14 @@ async function handle(mensaje, conversacion, usuario) {
       respuesta:   `✅ Has seleccionado ${nombre}.\n\n` +
                    `Para consultar tu servicio, necesito verificar tus datos. ¿Con qué te identificas?`,
       nuevoEstado: ESTADOS.IDENTIFICACION_DATOS,
-      teclado:     TIPO_IDENTIFICACION,
+      teclado: await keyboards.get('TIPO_IDENTIFICACION', conversacion.empresa_id),
     };
   }
 
   return {
     respuesta:   `✅ Has seleccionado ${nombre}.\n\n¿Cómo puedo ayudarte?`,
     nuevoEstado: ESTADOS.MENU_TIPO_CLIENTE,
-    teclado:     TIPO_CLIENTE,
+    teclado: await keyboards.get('TIPO_CLIENTE', conversacion.empresa_id),
   };
 }
 

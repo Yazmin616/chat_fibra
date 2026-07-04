@@ -13,12 +13,7 @@ const { parseConfirmarCuenta } = require('../parsers');
 const { ESTADOS }              = require('../constants');
 const { ConversacionMeta }     = require('../conversacion.meta');
 
-const {
-  CONFIRMAR_CUENTA,
-  AUTOSERVICIO,
-  AUTOSERVICIO_BASICO,
-  generarTecladoServicios,
-} = require('../keyboards');
+const keyboards = require('../keyboards');
 
 async function handle(mensaje, conversacion, usuario) {
   const respuesta = parseConfirmarCuenta(mensaje);
@@ -28,7 +23,7 @@ async function handle(mensaje, conversacion, usuario) {
     return {
       respuesta:   '⚠️ Por favor selecciona una opción:',
       nuevoEstado: conversacion.estado,
-      teclado:     CONFIRMAR_CUENTA,
+      teclado: await keyboards.get('CONFIRMAR_CUENTA', conversacion.empresa_id),
     };
   }
 
@@ -61,7 +56,7 @@ async function handle(mensaje, conversacion, usuario) {
     return {
       respuesta:   `${saludo}\n\nTienes varios servicios registrados. ¿Cuál deseas consultar?\n\n${listaTexto}`,
       nuevoEstado: ESTADOS.SELECCION_SERVICIO,
-      teclado:     generarTecladoServicios(meta.cliente.servicios),
+      teclado:     keyboards.generarTecladoServicios(meta.cliente.servicios),
     };
   }
 

@@ -40,12 +40,26 @@ export function useAgentes() {
 
   useEffect(() => { cargar(); }, [cargar]);
 
-  // Recarga la lista cuando el backend notifica cambios de presencia
+  // Recarga la lista cuando el backend notifica cambios de presencia via Socket
   useEffect(() => {
     const handler = () => cargar();
     window.addEventListener('agentes:actualizar', handler);
     return () => window.removeEventListener('agentes:actualizar', handler);
   }, [cargar]);
+
+  // Actualiza presencia en vivo via Polling sin saturar base de datos
+  useEffect(() => {
+    const handler = (e) => {
+      if (!e.detail) return;
+      const onlineIds = new Set(e.detail.map(Number));
+      setAgentes(prev => prev.map(a => ({
+        ...a,
+        esta_online: onlineIds.has(Number(a.id))
+      })));
+    };
+    window.addEventListener('agentes:presencia_polling', handler);
+    return () => window.removeEventListener('agentes:presencia_polling', handler);
+  }, []);
 
   // Actualiza solo la foto del agente afectado sin recargar la lista completa
   useEffect(() => {

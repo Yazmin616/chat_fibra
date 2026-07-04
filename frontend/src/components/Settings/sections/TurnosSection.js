@@ -8,6 +8,7 @@
  *   3. Mensajes automáticos — textos editables para escenarios A (festivo) y B (fuera de horario).
  */
 import React, { useState, useEffect, useCallback } from 'react';
+import { CalendarDays, Pencil, Trash2, Globe, Folder, Info } from 'lucide-react';
 import { apiService } from '../../../services/api';
 import { MessageField, SectionStatus, DEFAULTS } from '../settingsUtils';
 
@@ -128,8 +129,8 @@ function TurnoRow({ turno, onEdit, onDelete }) {
       <div className="th-turno-dias">{labelDias(turno.dias)}</div>
       <div className="th-turno-horas">{formatHora(turno.hora_inicio)} – {formatHora(turno.hora_fin)}</div>
       <div className="th-turno-acciones">
-        <button className="th-btn-icon" title="Editar" onClick={() => onEdit(turno)}>✏️</button>
-        <button className="th-btn-icon th-btn-delete" title="Eliminar" onClick={() => onDelete(turno.id)}>🗑</button>
+        <button className="th-btn-icon" title="Editar" onClick={() => onEdit(turno)}><Pencil size={14} /></button>
+        <button className="th-btn-icon th-btn-delete" title="Eliminar" onClick={() => onDelete(turno.id)}><Trash2 size={14} /></button>
       </div>
     </div>
   );
@@ -243,7 +244,10 @@ function PanelTurnos({ areas, refreshAreas }) {
         ordenGrupos.map(key => (
           <div key={key} className="th-grupo">
             <div className="th-grupo-header">
-              {key === '__global__' ? '🌐 Global — todas las áreas' : `📂 ${key}`}
+              {key === '__global__'
+                ? <><Globe size={14} style={{ verticalAlign: 'middle', marginRight: 4 }} /> Global — todas las áreas</>
+                : <><Folder size={14} style={{ verticalAlign: 'middle', marginRight: 4 }} /> {key}</>
+              }
             </div>
             {grupos[key].map(t =>
               showing && showing !== 'new' && showing.id === t.id ? (
@@ -385,7 +389,7 @@ function PanelFestivos({ areas }) {
                 <td>{f.nombre || <span className="th-sin-nombre">—</span>}</td>
                 <td>{f.area || <span className="th-todas-areas">Todas</span>}</td>
                 <td>
-                  <button className="th-btn-icon th-btn-delete" onClick={() => handleEliminar(f.id)}>🗑</button>
+                  <button className="th-btn-icon th-btn-delete" onClick={() => handleEliminar(f.id)}><Trash2 size={14} /></button>
                 </td>
               </tr>
             ))}
@@ -454,7 +458,7 @@ function PanelMensajes({ config, onSave, setDirty }) {
       </div>
 
       <div className="sc-alert sc-alert--info">
-        ℹ️ <strong>Escenario C (turno activo)</strong>: flujo normal del bot — sin mensaje automático de horario.
+        <Info size={14} style={{ verticalAlign: 'middle', marginRight: 5, flexShrink: 0 }} /> <strong>Escenario C (turno activo)</strong>: flujo normal del bot — sin mensaje automático de horario.
       </div>
 
       <div className="sc-footer">
@@ -482,7 +486,7 @@ const TurnosSection = ({ config, onSave, setDirty }) => {
   return (
     <div className="cfg-section-wrap">
       <div className="cfg-section-header">
-        <h2><span className="cfg-section-icon-h">📅</span> Turnos y horarios por área</h2>
+        <h2><span className="cfg-section-icon-h"><CalendarDays size={20} /></span> Turnos y horarios por área</h2>
         <p>
           Cada área puede tener múltiples turnos con sus propios días y horarios.
           Las áreas sin turno heredan los turnos globales; si tampoco los hay, se usa la Jornada laboral.

@@ -58,6 +58,7 @@ function parsePuntuacion(mensaje) {
  */
 function parseTipoCliente(mensaje) {
   const m = norm(mensaje);
+  if (m === 'asesor' || m.includes('asesor'))                            return 'asesor';
   if (m.includes('soy_cliente') || m.includes('cliente') || m === '1') return 'soy_cliente';
   if (m.includes('contratar')   || m.includes('nuevo')   || m === '2') return 'contratar';
   return null;

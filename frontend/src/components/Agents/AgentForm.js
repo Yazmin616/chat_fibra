@@ -1,6 +1,8 @@
-import React, { useState, useRef } from 'react';
-import { Camera, User } from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
+import { Camera, User, Shield } from 'lucide-react';
 import { apiService, resolveAvatar } from '../../services/api';
+import { usePermisosForm } from '../../hooks/usePermisosForm';
+import PermisosFormPanel from './PermisosFormPanel';
 
 const AREAS = ['Ventas', 'Cobranza', 'Soporte Técnico', 'General'];
 
@@ -14,13 +16,36 @@ const AgentForm = ({ agente, onSubmit, onClose }) => {
     rol:      agente?.rol      ?? 'asesor',
     area:     agente?.area     ?? 'Ventas',
   });
-  const [submitting,   setSubmitting]   = useState(false);
-  const [error,        setError]        = useState('');
-  const [fotoPreview,  setFotoPreview]  = useState(agente?.foto_perfil ? resolveAvatar(agente.foto_perfil) : null);
-  const [subiendoFoto, setSubiendoFoto] = useState(false);
+  const [submitting,       setSubmitting]       = useState(false);
+  const [error,            setError]            = useState('');
+  const [fotoPreview,      setFotoPreview]      = useState(agente?.foto_perfil ? resolveAvatar(agente.foto_perfil) : null);
+  const [subiendoFoto,     setSubiendoFoto]     = useState(false);
+  const [loadingTemplate,  setLoadingTemplate]  = useState(false);
   const fotoInputRef = useRef(null);
 
+  // Permisos para la creación (no se usa en edición; la edición tiene PermisosEditor en su propio tab)
+  const form = usePermisosForm();
+
   const set = (field, value) => setFormData(prev => ({ ...prev, [field]: value }));
+
+  // Al cambiar el rol en creación, pre-carga la plantilla correspondiente
+  useEffect(() => {
+    if (esEdicion) return;
+    let cancelled = false;
+    const cargarTemplate = async () => {
+      setLoadingTemplate(true);
+      try {
+        const tpl = await apiService.getRolTemplate(formData.rol);
+        if (!cancelled) form.load(tpl);
+      } catch (_) {
+        // Si no hay plantilla definida, queda en blanco — sin bloquear el formulario
+      } finally {
+        if (!cancelled) setLoadingTemplate(false);
+      }
+    };
+    cargarTemplate();
+    return () => { cancelled = true; };
+  }, [formData.rol, esEdicion]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleFotoChange = async (e) => {
     const file = e.target.files?.[0];
@@ -45,7 +70,10 @@ const AgentForm = ({ agente, onSubmit, onClose }) => {
     setError('');
     setSubmitting(true);
     try {
-      await onSubmit(formData);
+      const payload = esEdicion
+        ? formData
+        : { ...formData, permisos: form.serialize() };
+      await onSubmit(payload);
       onClose();
     } catch (err) {
       setError(err.message || (esEdicion ? 'Error al guardar cambios' : 'Error al crear agente'));
@@ -58,6 +86,7 @@ const AgentForm = ({ agente, onSubmit, onClose }) => {
     <form onSubmit={handleSubmit} className="agent-form">
       {error && <div className="agent-form-error">{error}</div>}
 
+      {/* Foto de perfil — solo en edición */}
       {esEdicion && (
         <div className="agent-photo-upload">
           <input
@@ -86,26 +115,16 @@ const AgentForm = ({ agente, onSubmit, onClose }) => {
         </div>
       )}
 
+      {/* Datos básicos */}
       <div className="form-grid">
-
         <div className="form-group">
           <label>Nombre Completo</label>
-          <input
-            type="text" required
-            value={formData.nombre}
-            onChange={e => set('nombre', e.target.value)}
-          />
+          <input type="text" required value={formData.nombre} onChange={e => set('nombre', e.target.value)} />
         </div>
-
         <div className="form-group">
           <label>Correo Electrónico</label>
-          <input
-            type="email" required
-            value={formData.email}
-            onChange={e => set('email', e.target.value)}
-          />
+          <input type="email" required value={formData.email} onChange={e => set('email', e.target.value)} />
         </div>
-
         <div className="form-group">
           <label>
             Contraseña
@@ -120,32 +139,45 @@ const AgentForm = ({ agente, onSubmit, onClose }) => {
             onChange={e => set('password', e.target.value)}
           />
         </div>
-
         <div className="form-group">
           <label>Rol del Sistema</label>
           <select value={formData.rol} onChange={e => set('rol', e.target.value)}>
-            <option value="asesor">Asesor (Solo área asignada)</option>
-            <option value="admin">Administrador (Acceso total)</option>
+            <option value="asesor">Asesor</option>
+            <option value="admin">Administrador</option>
+            <option value="ti">Soporte TI</option>
           </select>
         </div>
-
         <div className="form-group">
           <label>Área / Departamento</label>
           <select value={formData.area} onChange={e => set('area', e.target.value)}>
             {AREAS.map(a => <option key={a} value={a}>{a}</option>)}
           </select>
         </div>
-
       </div>
+
+      {/* Permisos — solo en creación, pre-cargados desde la plantilla del rol */}
+      {!esEdicion && (
+        <div className="af-permisos-wrap">
+          <div className="af-permisos-header">
+            <Shield size={15} />
+            <span>Permisos iniciales</span>
+            {loadingTemplate && <span className="af-tpl-loading">Cargando plantilla del rol…</span>}
+            {!loadingTemplate && (
+              <span className="af-tpl-hint">Pre-cargados desde la plantilla del rol — puedes ajustarlos</span>
+            )}
+          </div>
+          <PermisosFormPanel form={form} />
+        </div>
+      )}
 
       <div className="agent-form-actions">
         <button type="button" className="btn-cancel" onClick={onClose} disabled={submitting}>
           Cancelar
         </button>
-        <button type="submit" className="btn-save" disabled={submitting}>
+        <button type="submit" className="btn-save" disabled={submitting || loadingTemplate}>
           {submitting
             ? (esEdicion ? 'Guardando...' : 'Creando...')
-            : (esEdicion ? 'Guardar cambios' : 'Crear cuenta')
+            : (esEdicion ? 'Guardar cambios' : 'Crear agente')
           }
         </button>
       </div>

@@ -14,14 +14,7 @@ const conversacionRepo = require('../../repositories/conversacion.repository');
 const wisp             = require('../../services/wisp.service');
 const { ESTADOS }      = require('../constants');
 const { ConversacionMeta } = require('../conversacion.meta');
-const {
-  EMPRESAS,
-  TIPO_CLIENTE,
-  TIPO_IDENTIFICACION,
-  AUTOSERVICIO,
-  AUTOSERVICIO_BASICO,
-  generarTecladoServicios,
-} = require('../keyboards');
+const keyboards = require('../keyboards');
 
 const NOMBRES_EMPRESA = {
   fibratec:   'Fibratec',
@@ -35,7 +28,7 @@ async function handle(_mensaje, conversacion, usuario, _io, empresaPreconfigurad
     return {
       respuesta:   `👋 ¡Hola, ${nombre}! Bienvenido/a.\n\n¿A cuál de nuestras empresas deseas comunicarte?`,
       nuevoEstado: ESTADOS.SELECCION_EMPRESA,
-      teclado:     EMPRESAS,
+      teclado: await keyboards.get('EMPRESAS', conversacion.empresa_id),
     };
   }
 
@@ -64,11 +57,11 @@ async function handle(_mensaje, conversacion, usuario, _io, empresaPreconfigurad
           respuesta:   `👋 ¡Hola de nuevo, ${clienteWisp.nombre.split(' ')[0]}! Bienvenido/a a ${empresa}.\n\n` +
                        `Tienes varios servicios registrados. ¿Cuál deseas consultar?\n\n${listaTexto}`,
           nuevoEstado: ESTADOS.SELECCION_SERVICIO,
-          teclado:     generarTecladoServicios(clienteWisp.servicios),
+          teclado:     keyboards.generarTecladoServicios(clienteWisp.servicios),
         };
       }
 
-      const teclado = yaIdentificado ? AUTOSERVICIO : AUTOSERVICIO_BASICO;
+      const teclado = await keyboards.getAutoservicioKeyboard(meta, conversacion.empresa_id);
       return {
         respuesta:   `👋 ¡Hola de nuevo, ${clienteWisp.nombre.split(' ')[0]}! Bienvenido/a a ${empresa}.\n\n¿En qué puedo ayudarte hoy?`,
         nuevoEstado: ESTADOS.MENU_AUTOSERVICIO,
@@ -80,14 +73,14 @@ async function handle(_mensaje, conversacion, usuario, _io, empresaPreconfigurad
       respuesta:   `👋 ¡Hola de nuevo, ${nombre}! Bienvenido/a a ${empresa}.\n\n` +
                    `Para consultar tu servicio, necesito verificar tus datos. ¿Con qué te identificas?`,
       nuevoEstado: ESTADOS.IDENTIFICACION_DATOS,
-      teclado:     TIPO_IDENTIFICACION,
+      teclado: await keyboards.get('TIPO_IDENTIFICACION', conversacion.empresa_id),
     };
   }
 
   return {
-    respuesta:   `👋 ¡Hola, ${nombre}! Bienvenido/a a ${empresa}.\n\n¿Cómo puedo ayudarte?`,
+    respuesta:   `👋 ¡Hola, ${nombre}! Bienvenido/a a ${empresa}.\n\n¿Cómo puedo ayudarte? Toca una opción o escribe tu consulta.\n\n_Para hablar directamente con un asesor, escribe "asesor"._`,
     nuevoEstado: ESTADOS.MENU_TIPO_CLIENTE,
-    teclado:     TIPO_CLIENTE,
+    teclado: await keyboards.get('TIPO_CLIENTE', conversacion.empresa_id),
   };
 }
 

@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { User, Zap, Trash2, Send, MessageCircle, Activity, ArrowLeft, Smile, Check, CheckCheck, Layers } from 'lucide-react';
+import { User, Zap, Trash2, Send, MessageCircle, Activity, Info, X, ArrowLeft, Smile, Check, CheckCheck, ArrowRightLeft, CheckCircle2, BookOpen, Briefcase, DollarSign, Wrench } from 'lucide-react';
 import Picker from '@emoji-mart/react';
 import data from '@emoji-mart/data';
 import { apiService, resolveMedia } from '../../services/api';
@@ -10,6 +10,8 @@ import VoicePlayer from './VoicePlayer';
 import QuickReplyPicker from './QuickReplyPicker';
 import QuickRepliesModal from './QuickRepliesModal';
 import StickerPicker from './StickerPicker';
+import TransferLogPanel from '../Transferencias/TransferLogPanel';
+import EtiquetasPicker from './EtiquetasPicker';
 import '../../styles/media-upload.css';
 import '../../styles/quick-replies.css';
 
@@ -79,12 +81,83 @@ const CANAL_INFO = {
   facebook:  { label: 'Facebook', color: '#1877f2', bg: '#e8f0fe' },
   instagram: { label: 'Instagram',color: '#c13584', bg: '#fde8f5' },
 };
-const ChannelBadge = ({ canal }) => {
+const CanalIconSVG = ({ canal, size = 14 }) => {
+  if (canal === 'whatsapp') return <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"/></svg>;
+  if (canal === 'facebook') return <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.469h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.469h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>;
+  if (canal === 'telegram') return <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12s5.37 12 12 12 12-5.37 12-12S18.63 0 12 0zm5.894 8.221l-1.97 9.28c-.145.658-.537.818-1.084.508l-3-2.21-1.446 1.394c-.14.18-.357.295-.6.295-.002 0-.003 0-.005 0l.213-3.054 5.56-5.022c.24-.213-.054-.334-.373-.121l-6.869 4.326-2.96-.924c-.64-.203-.658-.64.135-.954l11.566-4.458c.538-.196 1.006.128.832.94z"/></svg>;
+  if (canal === 'instagram') return <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zM12 0C8.741 0 8.333.014 7.053.072 2.695.272.273 2.69.073 7.052.014 8.333 0 8.741 0 12c0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98C8.333 23.986 8.741 24 12 24c3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98C15.668.014 15.259 0 12 0zm0 5.838a6.162 6.162 0 100 12.324 6.162 6.162 0 000-12.324zM12 16a4 4 0 110-8 4 4 0 010 8zm6.406-11.845a1.44 1.44 0 100 2.881 1.44 1.44 0 000-2.881z"/></svg>;
+  return <MessageCircle size={size} />;
+};
+
+const ChannelBadge = ({ canal, iconOnly = false }) => {
   const info = CANAL_INFO[canal] || { label: 'Chat', color: '#667781', bg: '#f0f2f5' };
+  
+  if (iconOnly) {
+    return (
+      <span style={{ color: info.color, display: 'flex', alignItems: 'center' }} title={info.label}>
+        <CanalIconSVG canal={canal} size={18} />
+      </span>
+    );
+  }
+
   return (
-    <span className="canal-badge" style={{ color: info.color, background: info.bg }}>
+    <span className="canal-badge" style={{ color: info.color, background: info.bg, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+      <CanalIconSVG canal={canal} size={11} />
       {info.label}
     </span>
+  );
+};
+
+const StickerBubble = ({ m, resolveMedia, savedWaStickers, handleSaveClientSticker, savingSticker }) => {
+  const [mediaError, setMediaError] = useState(false);
+  const url = resolveMedia(m.url_media);
+  
+  const showSaveBtn = m.remitente === 'user' && (m.url_media?.startsWith('wa://') || m.url_media?.startsWith('tg://'));
+  const isSaved = savedWaStickers.has(m.url_media);
+  const isSaving = savingSticker === m.url_media;
+
+  // Intentamos img (WebP animados), y si falla intentamos video (MP4), y si falla enlace
+  return (
+    <div className="msg-sticker-wrap">
+      {!mediaError ? (
+        <img
+          src={url}
+          alt="sticker"
+          className="msg-media msg-sticker"
+          onError={() => setMediaError('video')}
+        />
+      ) : mediaError === 'video' ? (
+        <video
+          src={url}
+          className="msg-media msg-sticker"
+          autoPlay
+          loop
+          muted
+          playsInline
+          onError={() => setMediaError('failed')}
+        />
+      ) : (
+        <a 
+          href={url} 
+          target="_blank" 
+          rel="noopener noreferrer" 
+          className="msg-media msg-sticker"
+          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '120px', height: '120px', background: 'rgba(0,0,0,0.1)', borderRadius: '8px', color: 'inherit', textDecoration: 'none', fontSize: '12px', textAlign: 'center' }}
+        >
+          <span>⚠️<br/>Ver sticker</span>
+        </a>
+      )}
+      {showSaveBtn && (
+        <button
+          className={`msg-sticker-save-btn${isSaved ? ' saved' : ''}`}
+          title={isSaved ? 'Guardado en Mis stickers' : 'Guardar en Mis stickers'}
+          onClick={() => handleSaveClientSticker(m.url_media)}
+          disabled={isSaving}
+        >
+          {isSaving ? '…' : isSaved ? '♥' : '♡'}
+        </button>
+      )}
+    </div>
   );
 };
 
@@ -106,13 +179,19 @@ function computeGroupInfo(mensajes) {
     const tPrev = prev ? new Date(prev.created_at || prev.fecha).getTime() : null;
     const tNext = next ? new Date(next.created_at || next.fecha).getTime() : null;
 
+    const differentAgent = m.agente_id && prev?.agente_id && prev.agente_id !== m.agente_id;
+
     const isFirst = !prev || prev.remitente !== m.remitente ||
                     prev.remitente?.startsWith('sistema') ||
-                    t - tPrev >= GRUPO_VENTANA_MS;
+                    t - tPrev >= GRUPO_VENTANA_MS ||
+                    differentAgent;
+
+    const differentAgentNext = m.agente_id && next?.agente_id && next.agente_id !== m.agente_id;
 
     const isLast  = !next || next.remitente !== m.remitente ||
                     next.remitente?.startsWith('sistema') ||
-                    tNext - t >= GRUPO_VENTANA_MS;
+                    tNext - t >= GRUPO_VENTANA_MS ||
+                    differentAgentNext;
 
     return { isFirst, isLast };
   });
@@ -127,7 +206,7 @@ const ESTADO_LABEL = {
   ENCUESTA_BOT:     'Encuesta bot',
   cerrada:          'Cerrada',
 };
-const DEPTO_ICON = { Ventas: '💼', Cobranza: '💰', 'Soporte Técnico': '🔧' };
+const DEPTO_ICON = { Ventas: Briefcase, Cobranza: DollarSign, 'Soporte Técnico': Wrench };
 
 function ResumenFlujo({ conv }) {
   const meta     = conv.metadata || {};
@@ -137,10 +216,15 @@ function ResumenFlujo({ conv }) {
     ['Canal',       CANAL_INFO[conv.canal]?.label || conv.canal],
     ['Empresa',     conv.empresa_id],
     ['Estado',      ESTADO_LABEL[conv.estado] || conv.estado],
-    conv.departamento && ['Área', `${DEPTO_ICON[conv.departamento] || ''} ${conv.departamento}`],
+    conv.departamento && ['Área', (() => {
+      const Icon = DEPTO_ICON[conv.departamento];
+      return Icon
+        ? <><Icon size={13} style={{ verticalAlign: 'middle', marginRight: 4 }} />{conv.departamento}</>
+        : conv.departamento;
+    })()],
     cliente         && ['Cliente WISP', cliente.nombre],
     servicio        && ['Servicio',     servicio.etiqueta],
-    servicio        && ['Deuda',        servicio.deuda > 0 ? `$${servicio.deuda.toFixed(2)} MXN` : 'Al corriente ✅'],
+    servicio        && ['Deuda',        servicio.deuda > 0 ? `$${servicio.deuda.toFixed(2)} MXN` : <><CheckCircle2 size={13} style={{ verticalAlign: 'middle', marginRight: 4, color: '#16a34a' }} />Al corriente</>],
     servicio        && ['Vencimiento',  servicio.fecha_vencimiento],
     meta.identificado_via_wisp !== undefined && ['Identificado', meta.identificado_via_wisp ? 'Sí (datos guardados)' : 'Consulta de sesión'],
     meta.consulta_ajena && ['Consulta',  'Por otra persona'],
@@ -163,6 +247,41 @@ function ResumenFlujo({ conv }) {
   );
 }
 
+function InfoPanel({ conv, displayName, telefonoFmt, onClose }) {
+  return (
+    <>
+      <div className="info-panel-header">
+        <span className="info-panel-title">Ficha del contacto</span>
+        <button className="info-panel-close" onClick={onClose} title="Cerrar ficha">
+          <X size={16} />
+        </button>
+      </div>
+      <div className="info-panel-body">
+        <div className="info-panel-profile">
+          <div className="info-panel-avatar" style={{ backgroundColor: 'transparent' }}>
+            <img 
+              src={`https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(displayName || conv?.id)}&backgroundColor=0284c7,0ea5e9,3b82f6,6366f1,8b5cf6&textColor=ffffff`} 
+              alt="avatar" 
+              style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} 
+            />
+          </div>
+          <div className="info-panel-client-info">
+            <div className="info-panel-name">{displayName}</div>
+            {telefonoFmt && <div className="info-panel-phone">{telefonoFmt}</div>}
+            {conv.canal && (
+              <div style={{ marginTop: '5px' }}>
+                <ChannelBadge canal={conv.canal} />
+              </div>
+            )}
+          </div>
+        </div>
+        <ResumenFlujo conv={conv} />
+        <TransferLogPanel conversacion_id={conv?.id} />
+      </div>
+    </>
+  );
+}
+
 const ChatWindow = ({
   conversacionActiva,
   mensajes,
@@ -172,17 +291,19 @@ const ChatWindow = ({
   enviarMensaje,
   enviarMedia,
   cerrarConversacion,
+  transferirConversacion,
   eliminarConversacion,
   setConversacionActiva,
   clienteEscribiendo,
   user,
+  darkMode,
 }) => {
-  const [showEmojiPicker,   setShowEmojiPicker]   = useState(false);
-  const [showStickerPicker, setShowStickerPicker] = useState(false);
+  const [pickerMode, setPickerMode] = useState(null); // null | 'emoji' | 'sticker'
   const [enviandoMedia,     setEnviandoMedia]     = useState(false);
   const [respuestasRapidas, setRespuestasRapidas] = useState([]);
   const [showQRModal,       setShowQRModal]       = useState(false);
-  const [showResumen,       setShowResumen]       = useState(true);
+  const [showInfoPanel,     setShowInfoPanel]     = useState(false);
+  const [etiquetas,         setEtiquetas]         = useState([]);
   const pickerRef      = useRef(null);
   const inputRef       = useRef(null);
   const lastTypingRef  = useRef(0);
@@ -210,7 +331,12 @@ const ChatWindow = ({
     setSavedWaStickers(new Set());
     setSavingSticker(null);
     setStickerError('');
-    setShowStickerPicker(false);
+    setPickerMode(null);
+    // Cargar etiquetas de la conversación
+    setEtiquetas([]);
+    apiService.getEtiquetasConversacion(conversacionActiva.id)
+      .then(data => setEtiquetas(Array.isArray(data) ? data : []))
+      .catch(() => {});
   }, [conversacionActiva?.id]);
 
   // Scroll al actualizarse los mensajes
@@ -227,21 +353,44 @@ const ChatWindow = ({
     }
   }, [mensajes.length]);
 
-  // Cerrar emoji picker al hacer clic fuera
+  // Actualizar etiquetas en tiempo real (otro agente etiquetó esta conversación)
   useEffect(() => {
-    if (!showEmojiPicker) return;
+    const handler = (e) => {
+      if (Number(e.detail?.conversacion_id) === Number(conversacionActiva?.id)) {
+        setEtiquetas(e.detail.etiquetas || []);
+      }
+    };
+    window.addEventListener('conversacion:etiquetas', handler);
+    return () => window.removeEventListener('conversacion:etiquetas', handler);
+  }, [conversacionActiva?.id]);
+
+  // Cerrar el panel combinado emoji/stickers al hacer clic fuera
+  useEffect(() => {
+    if (!pickerMode) return;
     const handleClickOutside = (e) => {
       if (pickerRef.current && !pickerRef.current.contains(e.target)) {
-        setShowEmojiPicker(false);
+        setPickerMode(null);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [showEmojiPicker]);
+  }, [pickerMode]);
 
-  const handleSelectRR = (item) => {
-    setTexto(item.contenido);
-    inputRef.current?.focus();
+  const handleSelectRR = async (item) => {
+    setTexto(''); // cierra el picker en todos los casos
+    if (item.url_media) {
+      // Media: enviar de inmediato, igual que un sticker
+      if (!conversacionActiva) return;
+      try {
+        await apiService.usarRespuestaRapida(conversacionActiva.id, item.id);
+      } catch (e) {
+        alert(e.message || 'Error al enviar la respuesta rápida');
+      }
+    } else {
+      // Solo texto: insertar en el input para que el agente lo revise/edite
+      setTexto(item.contenido || '');
+      inputRef.current?.focus();
+    }
   };
 
   const handleEnviarFoto = async (blob, caption) => {
@@ -349,11 +498,13 @@ const ChatWindow = ({
   if (!conversacionActiva) {
     return (
       <div className="chat-window-panel">
-        <div className="empty-chat">
-          <div className="empty-content">
-            <MessageCircle size={80} color="#bdc3c7" />
-            <h2>Selecciona un chat</h2>
-            <p>Elige una conversación para empezar.</p>
+        <div className="chat-main">
+          <div className="empty-chat">
+            <div className="empty-content">
+              <MessageCircle size={80} color="#bdc3c7" />
+              <h2>Selecciona un chat</h2>
+              <p>Elige una conversación para empezar.</p>
+            </div>
           </div>
         </div>
       </div>
@@ -368,11 +519,24 @@ const ChatWindow = ({
   const displayName  = nombreReal || telefonoFmt || canalFallback || conversacionActiva?.username || '—';
   const subtitleLine = nombreReal ? (telefonoFmt || null) : null;
 
+  // Para Caso 2 (transferencia entre equipos): filtrar mensajes anteriores a la transferencia
+  // Los admins ven el historial completo; los asesores solo ven desde la transferencia.
+  const mensajesFiltrados = (() => {
+    const conv = conversacionActiva;
+    if (!conv?.transferida_en || user?.rol === 'admin') return mensajes;
+    const corte = new Date(conv.transferida_en).getTime();
+    return mensajes.filter(m => {
+      const t = new Date(m.created_at || m.fecha).getTime();
+      return t >= corte || m.remitente?.startsWith('sistema');
+    });
+  })();
+
   // Precomputar info de agrupamiento
-  const groupInfo = computeGroupInfo(mensajes);
+  const groupInfo = computeGroupInfo(mensajesFiltrados);
 
   return (
     <div className="chat-window-panel">
+      <div className="chat-main">
 
       {/* ── Header ─────────────────────────────────────────────── */}
       <div className="chat-header">
@@ -380,20 +544,26 @@ const ChatWindow = ({
           <button
             className="back-btn"
             onClick={() => setConversacionActiva(null)}
-            style={{ marginRight: '8px', background: 'transparent', border: 'none', cursor: 'pointer', color: '#54656f', display: 'flex', alignItems: 'center' }}
+            style={{ marginRight: '8px', background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center' }}
           >
             <ArrowLeft size={22} />
           </button>
-          <div className="avatar"><User size={24} color="#fff" /></div>
+          <div className="avatar" style={{ backgroundColor: 'transparent', flexShrink: 0 }}>
+            <img 
+              src={`https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(displayName || conversacionActiva?.id)}&backgroundColor=0284c7,0ea5e9,3b82f6,6366f1,8b5cf6&textColor=ffffff`} 
+              alt="avatar" 
+              style={{ width: '45px', height: '45px', borderRadius: '50%', objectFit: 'cover' }} 
+            />
+          </div>
           <div className="header-contact">
             <div className="header-contact-top">
               <h3 className="header-name">{displayName}</h3>
               {conversacionActiva.canal && (
-                <ChannelBadge canal={conversacionActiva.canal} />
+                <ChannelBadge canal={conversacionActiva.canal} iconOnly={true} />
               )}
             </div>
             {clienteEscribiendo ? (
-              <p className="status" style={{ color: '#dc2626', fontStyle: 'italic' }}>escribiendo...</p>
+              <p className="status" style={{ color: 'var(--accent)', fontStyle: 'italic' }}>escribiendo...</p>
             ) : (
               <p className="status">
                 {subtitleLine && <span className="header-phone">{subtitleLine} · </span>}
@@ -403,18 +573,39 @@ const ChatWindow = ({
                 )}
               </p>
             )}
+            <EtiquetasPicker
+              conversacion={conversacionActiva}
+              etiquetas={etiquetas}
+              onEtiquetasChange={setEtiquetas}
+            />
           </div>
         </div>
         <div className="header-actions">
           <button
-            className={`icon-btn-gray resumen-toggle${showResumen ? ' active' : ''}`}
-            onClick={() => setShowResumen(s => !s)}
-            title={showResumen ? 'Ver conversación completa' : 'Ver resumen'}
+            className={`icon-btn-gray info-panel-toggle${showInfoPanel ? ' active' : ''}`}
+            onClick={() => setShowInfoPanel(s => !s)}
+            title={showInfoPanel ? 'Cerrar ficha' : 'Ficha del contacto'}
           >
-            <Activity size={17} />
+            <Info size={17} />
           </button>
-          <button className="icon-btn-gray" onClick={() => cerrarConversacion(conversacionActiva.id)}>
-            <Zap size={18} />
+          {/* Botón de transferencia: visible cuando el chat está activo (no cerrado/encuesta) */}
+          {conversacionActiva.es_humano && !['cerrada','ENCUESTA_AGENTE','ENCUESTA_BOT'].includes(conversacionActiva.estado) && (
+            <button
+              className="icon-btn-gray"
+              title="Transferir chat"
+              onClick={() => transferirConversacion(conversacionActiva.id)}
+              style={{ color: '#3b82f6' }}
+            >
+              <ArrowRightLeft size={17} />
+            </button>
+          )}
+          <button
+            className="icon-btn-gray"
+            onClick={() => cerrarConversacion(conversacionActiva.id)}
+            title={['cerrada','ENCUESTA_AGENTE','ENCUESTA_BOT'].includes(conversacionActiva.estado) ? 'Conversación ya cerrada' : 'Resolver y cerrar chat'}
+            disabled={['cerrada','ENCUESTA_AGENTE','ENCUESTA_BOT'].includes(conversacionActiva.estado)}
+          >
+            <CheckCircle2 size={18} />
           </button>
           <button className="icon-btn-gray" onClick={() => eliminarConversacion(conversacionActiva.id)}>
             <Trash2 size={18} color="#e74c3c" />
@@ -422,14 +613,26 @@ const ChatWindow = ({
         </div>
       </div>
 
-      {/* ── Vista resumen ──────────────────────────────────────── */}
-      {showResumen && <ResumenFlujo conv={conversacionActiva} />}
-
       {/* ── Mensajes ───────────────────────────────────────────── */}
       <div className="messages-container" ref={containerRef}>
-        {mensajes.map((m, idx) => {
+
+        {/* Banner de nota de transferencia (visible mientras no ha sido tomado) */}
+        {conversacionActiva.nota_transferencia && (
+          <div className="transfer-note-banner">
+            <ArrowRightLeft size={14} style={{ flexShrink: 0 }} />
+            <div>
+              <span className="transfer-note-label">Nota de transferencia:</span>{' '}
+              {conversacionActiva.nota_transferencia}
+              {conversacionActiva.transferida_desde && (
+                <span className="transfer-note-origin"> · Desde {conversacionActiva.transferida_desde}</span>
+              )}
+            </div>
+          </div>
+        )}
+
+        {mensajesFiltrados.map((m, idx) => {
           const fechaMsg   = m.created_at || m.fecha;
-          const fechaPrev  = idx > 0 ? (mensajes[idx - 1].created_at || mensajes[idx - 1].fecha) : null;
+          const fechaPrev  = idx > 0 ? (mensajesFiltrados[idx - 1].created_at || mensajesFiltrados[idx - 1].fecha) : null;
           const mostrarSep = !fechaPrev || !isSameDay(fechaMsg, fechaPrev);
           const { isFirst, isLast } = groupInfo[idx] || { isFirst: true, isLast: true };
 
@@ -464,12 +667,12 @@ const ChatWindow = ({
               {/* Etiqueta de remitente (solo en primer mensaje del grupo) */}
               {isFirst && !isUser && (
                 <div className={`sender-label ${isUser ? 'received' : 'sent'}`}>
-                  {isBot ? 'Bot' : 'Agente'}
+                  {isBot ? 'Bot' : (m.agente_nombre || 'Agente')}
                 </div>
               )}
 
               <div className={rowCls} style={{ marginBottom: isLast ? '6px' : '1px' }}>
-                {m.tipo === 'photo' ? (
+                {(m.tipo === 'photo' || m.tipo === 'image') && m.url_media ? (
                   <div className="message-bubble msg-bubble-photo">
                     <div className="msg-photo-wrap">
                       <img
@@ -500,39 +703,14 @@ const ChatWindow = ({
                   />
                 ) : (
                   <div className="message-bubble">
-                    {m.tipo === 'sticker' ? (
-                      <div className="msg-sticker-wrap">
-                        <img
-                          src={resolveMedia(m.url_media)}
-                          alt="sticker"
-                          className="msg-media msg-sticker"
-                          onError={e => { e.target.style.display = 'none'; }}
-                        />
-                        {m.remitente === 'user' && (m.url_media?.startsWith('wa://') || m.url_media?.startsWith('tg://')) && (
-                          <button
-                            className={`msg-sticker-save-btn${savedWaStickers.has(m.url_media) ? ' saved' : ''}`}
-                            title={savedWaStickers.has(m.url_media) ? 'Guardado en Mis stickers' : 'Guardar en Mis stickers'}
-                            onClick={() => handleSaveClientSticker(m.url_media)}
-                            disabled={savingSticker === m.url_media}
-                          >
-                            {savingSticker === m.url_media ? '…' : savedWaStickers.has(m.url_media) ? '♥' : '♡'}
-                          </button>
-                        )}
-                      </div>
-                    ) : m.tipo === 'sticker_video' ? (
-                      <div className="msg-sticker-wrap">
-                        <video src={resolveMedia(m.url_media)} className="msg-media msg-sticker" autoPlay loop muted playsInline />
-                        {m.remitente === 'user' && (m.url_media?.startsWith('wa://') || m.url_media?.startsWith('tg://')) && (
-                          <button
-                            className={`msg-sticker-save-btn${savedWaStickers.has(m.url_media) ? ' saved' : ''}`}
-                            title={savedWaStickers.has(m.url_media) ? 'Guardado en Mis stickers' : 'Guardar en Mis stickers'}
-                            onClick={() => handleSaveClientSticker(m.url_media)}
-                            disabled={savingSticker === m.url_media}
-                          >
-                            {savingSticker === m.url_media ? '…' : savedWaStickers.has(m.url_media) ? '♥' : '♡'}
-                          </button>
-                        )}
-                      </div>
+                    {['sticker', 'sticker_video', 'sticker_animado'].includes(m.tipo) ? (
+                      <StickerBubble 
+                        m={m} 
+                        resolveMedia={resolveMedia} 
+                        savedWaStickers={savedWaStickers} 
+                        handleSaveClientSticker={handleSaveClientSticker} 
+                        savingSticker={savingSticker} 
+                      />
                     ) : m.tipo === 'location' ? (
                       <a href={m.url_media} target="_blank" rel="noopener noreferrer" className="msg-location">
                         <span className="msg-location-pin">📍</span>
@@ -542,6 +720,16 @@ const ChatWindow = ({
                           )}
                           <span className="msg-location-link">Ver en Google Maps</span>
                         </span>
+                      </a>
+                    ) : m.tipo === 'document' && m.url_media ? (
+                      <a
+                        href={resolveMedia(m.url_media)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="msg-document"
+                      >
+                        <span className="msg-doc-icon">📎</span>
+                        <span className="msg-doc-name">{m.texto || 'Documento'}</span>
                       </a>
                     ) : (
                       <span className="msg-text">{renderTexto(m.texto)}</span>
@@ -569,19 +757,43 @@ const ChatWindow = ({
       </div>
 
       <div className="chat-input-area" style={{ position: 'relative' }}>
-        {showEmojiPicker && (
-          <div ref={pickerRef} className="emoji-picker-container">
-            <Picker
-              data={data}
-              onEmojiSelect={(e) => {
-                setTexto(prev => prev + e.native);
-                inputRef.current?.focus();
-              }}
-              locale="es"
-              theme="light"
-              previewPosition="none"
-              skinTonePosition="none"
-            />
+        {/* Panel combinado Emoji / Stickers */}
+        {pickerMode && (
+          <div ref={pickerRef} className="esp-panel">
+            <div className="esp-tab-bar">
+              <button
+                className={`esp-tab${pickerMode === 'emoji' ? ' active' : ''}`}
+                onClick={() => setPickerMode('emoji')}
+              >
+                😀 Emoji
+              </button>
+              <button
+                className={`esp-tab${pickerMode === 'sticker' ? ' active' : ''}`}
+                onClick={() => setPickerMode('sticker')}
+              >
+                🎭 Stickers
+              </button>
+            </div>
+            {pickerMode === 'emoji' ? (
+              <Picker
+                data={data}
+                onEmojiSelect={(e) => {
+                  setTexto(prev => prev + e.native);
+                  inputRef.current?.focus();
+                }}
+                locale="es"
+                theme={darkMode ? 'dark' : 'light'}
+                previewPosition="none"
+                skinTonePosition="none"
+              />
+            ) : (
+              <StickerPicker
+                onSelect={handleEnviarSticker}
+                onClose={() => setPickerMode(null)}
+                agenteId={user?.id}
+                embedded
+              />
+            )}
           </div>
         )}
 
@@ -595,41 +807,28 @@ const ChatWindow = ({
           />
         )}
 
-        {showStickerPicker && (
-          <StickerPicker
-            onSelect={handleEnviarSticker}
-            onClose={() => setShowStickerPicker(false)}
-            agenteId={user?.id}
-          />
-        )}
-
-        <button
-          className={`icon-btn-gray${showEmojiPicker ? ' active' : ''}`}
-          onClick={() => setShowEmojiPicker(s => !s)}
-          title="Emojis"
-        >
-          <Smile size={22} />
-        </button>
-        <MediaUpload onSend={handleEnviarFoto} disabled={enviandoMedia} />
-        <button
-          className="icon-btn-gray"
-          title="Respuestas rápidas"
-          onClick={() => setShowQRModal(true)}
-        >
-          <Zap size={20} />
-        </button>
-        <button
-          className={`icon-btn-gray${showStickerPicker ? ' active' : ''}`}
-          title={conversacionActiva?.canal !== 'whatsapp' ? 'Stickers (solo WhatsApp)' : 'Stickers'}
-          onClick={() => setShowStickerPicker(s => !s)}
-          disabled={enviandoMedia || conversacionActiva?.canal !== 'whatsapp'}
-          style={conversacionActiva?.canal !== 'whatsapp' ? { opacity: 0.4, cursor: 'not-allowed' } : {}}
-        >
-          <Layers size={20} />
-        </button>
         {stickerError && (
           <div className="sticker-send-error">{stickerError}</div>
         )}
+
+        <div className="chat-input-tools">
+          <button
+            className={`icon-btn-gray${pickerMode ? ' active' : ''}`}
+            onClick={() => setPickerMode(m => m ? null : 'emoji')}
+            title="Emoji y Stickers"
+          >
+            <Smile size={20} />
+          </button>
+          <MediaUpload onSend={handleEnviarFoto} disabled={enviandoMedia} />
+          <button
+            className="icon-btn-gray"
+            title="Respuestas rápidas (o escribe /)"
+            onClick={() => setShowQRModal(true)}
+          >
+            <BookOpen size={20} />
+          </button>
+        </div>
+        <div className="chat-input-divider" />
         <textarea
           ref={inputRef}
           rows={1}
@@ -656,6 +855,19 @@ const ChatWindow = ({
           onChange={setRespuestasRapidas}
         />
       )}
+      </div>{/* /chat-main */}
+
+      {/* ── Panel lateral de información ───────────────────────── */}
+      <div className={`info-panel${showInfoPanel ? ' open' : ''}`}>
+        {showInfoPanel && (
+          <InfoPanel
+            conv={conversacionActiva}
+            displayName={displayName}
+            telefonoFmt={telefonoFmt}
+            onClose={() => setShowInfoPanel(false)}
+          />
+        )}
+      </div>
     </div>
   );
 };

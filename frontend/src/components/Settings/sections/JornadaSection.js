@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Clock } from 'lucide-react';
 import { DEFAULTS, SectionStatus, useSectionSave } from '../settingsUtils';
 
 const DIAS = [
@@ -36,7 +37,7 @@ const JornadaSection = ({ config, onSave, setDirty }) => {
   return (
     <div className="cfg-section-wrap">
       <div className="cfg-section-header">
-        <h2><span className="cfg-section-icon-h">🕐</span> Jornada laboral</h2>
+        <h2><span className="cfg-section-icon-h"><Clock size={20} /></span> Jornada laboral</h2>
         <p>
           Infracciones y cierres por inactividad del agente solo aplican dentro del horario laboral.
           Las conversaciones en espera tienen 24 h reales para ser tomadas (ventana Meta).

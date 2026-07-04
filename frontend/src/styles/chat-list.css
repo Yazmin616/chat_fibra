@@ -5,8 +5,8 @@
 
 .chat-list-panel {
   width: 320px;
-  background: white;
-  border-right: 1px solid #d1d7db;
+  background: var(--bg-chat-list);
+  border-right: 1px solid var(--border);
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
@@ -14,13 +14,13 @@
 
 /* Barra de búsqueda */
 .search-container {
-  padding: 10px;
+  padding: 15px 15px 5px;
 }
 
 .search-box {
-  background: #f0f2f5;
-  border-radius: 8px;
-  padding: 6px 12px;
+  background: var(--bg-search);
+  border-radius: 10px;
+  padding: 10px 14px;
   display: flex;
   align-items: center;
 }
@@ -31,38 +31,44 @@
   flex: 1;
   outline: none;
   font-size: 14px;
-  padding: 0 5px;
+  padding: 0 8px;
+  color: var(--text-primary);
+}
+
+.search-box input::placeholder {
+  color: var(--text-hint);
 }
 
 /* Pestañas de filtro */
 .filter-tabs {
-  padding: 5px 10px 10px;
+  padding: 8px 15px 12px;
   display: flex;
-  gap: 5px;
+  gap: 8px;
   overflow-x: auto;
 }
 
 .tab-pill {
-  background: #f0f2f5;
+  background: var(--bg-search);
   border: none;
-  padding: 5px 12px;
-  border-radius: 15px;
-  font-size: 11px;
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: 13px;
   font-weight: 600;
-  color: #54656f;
+  color: var(--text-secondary);
   cursor: pointer;
   white-space: nowrap;
+  transition: all 0.2s;
 }
 
 .tab-pill.active {
-  background: #dc2626;
+  background: var(--accent);
   color: white;
 }
 
 /* Pestaña Cerrados — color neutro para diferenciarla de las activas */
 .tab-pill--cerrados.active {
-  background: #6b7280;
-  color: white;
+  background: var(--bg-search);
+  color: var(--text-secondary);
 }
 
 /* Lista de conversaciones */
@@ -75,17 +81,17 @@
   display: flex;
   padding: 10px 15px;
   gap: 12px;
-  border-bottom: 1px solid #f0f2f5;
+  border-bottom: 1px solid var(--border-light);
   cursor: pointer;
   transition: background 0.12s;
 }
 
 .conversation-item:hover {
-  background-color: #f5f6f6;
+  background-color: var(--bg-hover);
 }
 
 .conversation-item.active {
-  background-color: #f0f2f5;
+  background-color: var(--bg-active);
 }
 
 /* Avatar circular del contacto */
@@ -93,7 +99,7 @@
   width: 45px;
   height: 45px;
   border-radius: 50%;
-  background-color: #6b7280;
+  background-color: var(--text-hint);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -132,17 +138,17 @@
 .client-name {
   font-weight: 600;
   font-size: 14px;
-  color: #111b21;
+  color: var(--text-primary);
 }
 
 .time {
   font-size: 11px;
-  color: #667781;
+  color: var(--text-secondary);
 }
 
 .last-message {
   font-size: 12px;
-  color: #667781;
+  color: var(--text-secondary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -151,7 +157,7 @@
 /* Etiquetas de área y empresa dentro de la conversación */
 .area-label {
   font-size: 10px;
-  color: #667781;
+  color: var(--text-hint);
   text-transform: uppercase;
   font-weight: 700;
   letter-spacing: 0.5px;

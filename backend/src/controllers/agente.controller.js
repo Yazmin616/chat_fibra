@@ -20,8 +20,10 @@ const db            = require('../config/db');
 const agenteService = require('../services/agente.service');
 const chatService   = require('../services/chat.service');
 const { enviarEscribiendo, enviarReaccion } = require('../adapters');
-const rrRepo        = require('../repositories/respuestaRapida.repository');
-const mensajeRepo   = require('../repositories/mensaje.repository');
+const rrRepo           = require('../repositories/respuestaRapida.repository');
+const mensajeRepo      = require('../repositories/mensaje.repository');
+const permisosRepo     = require('../repositories/permisos.repository');
+const rolTemplateRepo  = require('../repositories/rolTemplate.repository');
 const { emitToConv } = require('../utils/rooms');
 
 // ── Schemas de validación ───────────────────────────────────────────────────
@@ -32,6 +34,14 @@ const crearSchema = Joi.object({
   password: Joi.string().min(6).required(),
   rol:      Joi.string().valid('admin', 'asesor', 'ti').required(),
   area:     Joi.string().min(1).max(50).required(),
+  permisos: Joi.object({
+    empresas: Joi.array().items(Joi.string()).min(1).required(),
+    areas:    Joi.array().items(Joi.object({
+      empresa_id: Joi.string().required(),
+      areas:      Joi.array().items(Joi.string()).min(1).required(),
+    })).required(),
+    modulos:  Joi.array().items(Joi.string()).required(),
+  }).optional(),
 });
 
 const editarSchema = Joi.object({
@@ -50,10 +60,12 @@ const responderSchema = Joi.object({
 });
 
 const liberarSchema = Joi.object({
-  conversacion_id: Joi.number().integer().positive().required(),
-  motivo:          Joi.string().min(1).required(),
-  agente_nombre:   Joi.string().min(1).required(),
-  solucion:        Joi.string().min(1).max(1000).optional().allow(''),
+  conversacion_id:    Joi.number().integer().positive().required(),
+  categoria_cierre_id: Joi.number().integer().positive().required()
+    .messages({ 'any.required': 'Debes seleccionar una categoría de cierre' }),
+  comentario_cierre:  Joi.string().min(1).max(2000).required()
+    .messages({ 'string.empty': 'El comentario de cierre es obligatorio', 'any.required': 'El comentario de cierre es obligatorio' }),
+  agente_nombre:      Joi.string().min(1).required(),
 });
 
 const escribiendoSchema = Joi.object({
@@ -66,7 +78,7 @@ const escribiendoSchema = Joi.object({
 const enviarMediaSchema = Joi.object({
   conversacion_id: Joi.number().integer().positive().required(),
   agente_id:       Joi.number().integer().positive().required(),
-  tipo:            Joi.string().valid('photo', 'voice').required(),
+  tipo:            Joi.string().valid('photo', 'image', 'voice', 'document').required(),
   caption:         Joi.string().max(1024).optional().allow(''),
 });
 
@@ -95,7 +107,23 @@ const crear = async (req, res, next) => {
     if (error) {
       return res.status(400).json({ error: error.details.map(d => d.message).join(', ') });
     }
-    const agente = await agenteService.crear(value);
+
+    const { permisos: permisosOverride, ...agenteData } = value;
+    const agente = await agenteService.crear(agenteData);
+
+    // Aplicar permisos: usa override enviado en el body, o la plantilla del rol
+    let permisos = permisosOverride;
+    if (!permisos) {
+      const tplRes = await rolTemplateRepo.getByRol(value.rol);
+      if (tplRes.rows.length) {
+        const tpl = tplRes.rows[0];
+        permisos = { empresas: tpl.empresas, areas: tpl.areas, modulos: tpl.modulos };
+      }
+    }
+    if (permisos) {
+      await permisosRepo.setPermisos(agente.id, permisos, req.agente.id);
+    }
+
     const io = req.app.get('io');
     if (io) io.emit('agentes_actualizados');
     res.status(201).json(agente);
@@ -161,7 +189,7 @@ const responder = async (req, res, next) => {
       return res.status(400).json({ error: error.details.map(d => d.message).join(', ') });
     }
     const io = req.app.get('io');
-    await chatService.responder({ ...value, io });
+    await chatService.responder({ ...value, agente_nombre: req.agente.nombre, io });
     res.json({ ok: true });
   } catch (err) { next(err); }
 };
@@ -180,7 +208,7 @@ const liberar = async (req, res, next) => {
       return res.status(400).json({ error: error.details.map(d => d.message).join(', ') });
     }
     const io = req.app.get('io');
-    await chatService.liberar({ ...value, io });
+    await chatService.liberar({ ...value, agente_id: req.agente?.id, io });
     res.json({ ok: true });
   } catch (err) { next(err); }
 };
@@ -226,14 +254,21 @@ const enviarMediaHandler = async (req, res, next) => {
     const { error, value } = enviarMediaSchema.validate(req.body, { abortEarly: false });
     if (error) return res.status(400).json({ error: error.details.map(d => d.message).join(', ') });
 
-    // Validar tamaño: 10 MB fotos, 16 MB voz
-    const maxBytes = value.tipo === 'voice' ? 16 * 1024 * 1024 : 10 * 1024 * 1024;
+    // Validar tamaño: 16 MB voz, 8 MB fotos/documentos (límite canal más restrictivo)
+    const maxBytes = value.tipo === 'voice' ? 16 * 1024 * 1024 : 8 * 1024 * 1024;
     if (req.file.buffer.length > maxBytes) {
       return res.status(400).json({ error: 'Archivo demasiado grande' });
     }
 
     const io = req.app.get('io');
-    await chatService.enviarMedia({ ...value, buffer: req.file.buffer, io });
+    await chatService.enviarMedia({
+      ...value,
+      buffer:        req.file.buffer,
+      io,
+      filename:      req.file.originalname || '',
+      mimetype:      req.file.mimetype     || '',
+      agente_nombre: req.agente.nombre,
+    });
     res.json({ ok: true });
   } catch (err) { next(err); }
 };
@@ -324,9 +359,12 @@ const reaccionar = async (req, res, next) => {
 
 // ── Respuestas rápidas ──────────────────────────────────────────────────────
 
+const RR_MEDIA_DIR = path.join(__dirname, '../../uploads/rr-media');
+
 const rrSchema = Joi.object({
-  titulo:    Joi.string().min(1).max(100).required(),
-  contenido: Joi.string().min(1).max(2000).required(),
+  titulo:      Joi.string().min(1).max(100).required(),
+  contenido:   Joi.string().max(2000).allow('').optional(),
+  removeMedia: Joi.boolean().optional(),
 });
 
 const listarRR = async (req, res, next) => {
@@ -340,7 +378,27 @@ const crearRR = async (req, res, next) => {
   try {
     const { error, value } = rrSchema.validate(req.body, { abortEarly: false });
     if (error) return res.status(400).json({ error: error.details.map(d => d.message).join(', ') });
-    const { rows } = await rrRepo.create(req.agente.id, value.titulo, value.contenido);
+
+    if (!req.file && !value.contenido) {
+      return res.status(400).json({ error: 'Se requiere texto o un archivo media' });
+    }
+
+    let url_media = null, tipo_media = null, nombre_archivo = null;
+    if (req.file) {
+      const ext       = path.extname(req.file.originalname) || '.jpg';
+      const filename  = `${Date.now()}${ext}`;
+      const dir       = path.join(RR_MEDIA_DIR, `${req.agente.id}`);
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(path.join(dir, filename), req.file.buffer);
+      url_media     = `rr://${req.agente.id}/${filename}`;
+      tipo_media    = req.file.mimetype.startsWith('image/') ? 'image' : 'document';
+      nombre_archivo = req.file.originalname;
+    }
+
+    const { rows } = await rrRepo.create(
+      req.agente.id, value.titulo, value.contenido || null,
+      url_media, tipo_media, nombre_archivo
+    );
     res.status(201).json(rows[0]);
   } catch (err) { next(err); }
 };
@@ -349,7 +407,44 @@ const actualizarRR = async (req, res, next) => {
   try {
     const { error, value } = rrSchema.validate(req.body, { abortEarly: false });
     if (error) return res.status(400).json({ error: error.details.map(d => d.message).join(', ') });
-    const { rows } = await rrRepo.update(req.params.id, req.agente.id, value.titulo, value.contenido);
+
+    // Si el agente quita el adjunto sin proveer texto, la RR quedaría vacía
+    if (value.removeMedia && !req.file && !value.contenido) {
+      return res.status(400).json({ error: 'Agrega texto o un nuevo archivo si quitas el adjunto' });
+    }
+
+    let url_media, tipo_media, nombre_archivo;
+
+    if (req.file) {
+      // Nuevo archivo: guardar y reemplazar
+      const existing = await rrRepo.findById(req.params.id, req.agente.id);
+      if (existing?.url_media?.startsWith('rr://')) {
+        const oldPath = path.join(RR_MEDIA_DIR, existing.url_media.slice(5));
+        fs.unlink(oldPath, () => {});
+      }
+      const ext      = path.extname(req.file.originalname) || '.jpg';
+      const filename = `${Date.now()}${ext}`;
+      const dir      = path.join(RR_MEDIA_DIR, `${req.agente.id}`);
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(path.join(dir, filename), req.file.buffer);
+      url_media     = `rr://${req.agente.id}/${filename}`;
+      tipo_media    = req.file.mimetype.startsWith('image/') ? 'image' : 'document';
+      nombre_archivo = req.file.originalname;
+    } else if (value.removeMedia) {
+      // Eliminar media existente
+      const existing = await rrRepo.findById(req.params.id, req.agente.id);
+      if (existing?.url_media?.startsWith('rr://')) {
+        fs.unlink(path.join(RR_MEDIA_DIR, existing.url_media.slice(5)), () => {});
+      }
+      url_media = null; tipo_media = null; nombre_archivo = null;
+    }
+    // else: url_media === undefined → no toca los campos de media
+
+    const { rows } = await rrRepo.update(
+      req.params.id, req.agente.id,
+      value.titulo, value.contenido || null,
+      url_media, tipo_media, nombre_archivo
+    );
     if (!rows.length) return res.status(404).json({ error: 'No encontrado' });
     res.json(rows[0]);
   } catch (err) { next(err); }
@@ -357,9 +452,31 @@ const actualizarRR = async (req, res, next) => {
 
 const eliminarRR = async (req, res, next) => {
   try {
-    await rrRepo.remove(req.params.id, req.agente.id);
+    // Conservar la referencia de media antes de borrar (para limpieza de disco)
+    const { rows } = await rrRepo.remove(req.params.id, req.agente.id);
+    const urlMedia  = rows[0]?.url_media;
+    // Nota: NO borramos el archivo de disco si existe — puede ser referenciado
+    // por mensajes anteriores. El archivo queda huérfano pero no rompe el historial.
     res.json({ ok: true });
   } catch (err) { next(err); }
 };
 
-module.exports = { listar, crear, actualizar, eliminar, responder, liberar, eliminarConversacion, escribiendo, enviarMediaHandler, subirFoto, reaccionar, listarRR, crearRR, actualizarRR, eliminarRR };
+const usarRespuestaRapida = async (req, res, next) => {
+  try {
+    const { conversacion_id, rr_id } = req.body;
+    if (!conversacion_id || !rr_id) {
+      return res.status(400).json({ error: 'Faltan conversacion_id o rr_id' });
+    }
+    const io = req.app.get('io');
+    await chatService.enviarRespuestaRapida({
+      conversacion_id: parseInt(conversacion_id),
+      rr_id:           parseInt(rr_id),
+      agente_id:       req.agente.id,
+      agente_nombre:   req.agente.nombre,
+      io,
+    });
+    res.json({ ok: true });
+  } catch (err) { next(err); }
+};
+
+module.exports = { listar, crear, actualizar, eliminar, responder, liberar, eliminarConversacion, escribiendo, enviarMediaHandler, subirFoto, reaccionar, listarRR, crearRR, actualizarRR, eliminarRR, usarRespuestaRapida };

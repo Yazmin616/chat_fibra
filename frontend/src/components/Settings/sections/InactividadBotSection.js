@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Bot } from 'lucide-react';
 import { DEFAULTS, TimeField, SectionStatus, bestUnit, useSectionSave } from '../settingsUtils';
 
 /**
@@ -20,7 +21,7 @@ const InactividadBotSection = ({ config, onSave, setDirty }) => {
   return (
     <div className="cfg-section-wrap">
       <div className="cfg-section-header">
-        <h2><span className="cfg-section-icon-h">🤖</span> Inactividad del bot</h2>
+        <h2><span className="cfg-section-icon-h"><Bot size={20} /></span> Inactividad del bot</h2>
         <p>Tiempo sin mensajes para cerrar automáticamente sesiones del menú del bot (sin agente humano).</p>
       </div>
 

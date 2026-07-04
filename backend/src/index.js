@@ -33,13 +33,20 @@ const errorHandler         = require('./middleware/errorHandler.middleware');
 const maintenance          = require('./maintenance');
 
 // Rutas
-const authRoutes           = require('./routes/auth.routes');
-const agenteRoutes         = require('./routes/agente.routes');
-const conversacionesRoutes = require('./routes/conversaciones.routes');
-const configuracionRoutes  = require('./routes/configuracion.routes');
-const contactosRoutes      = require('./routes/contactos.routes');
-const tiRoutes             = require('./routes/ti.routes');
-const horariosRoutes       = require('./routes/horarios.routes');
+const authRoutes             = require('./routes/auth.routes');
+const agenteRoutes           = require('./routes/agente.routes');
+const conversacionesRoutes   = require('./routes/conversaciones.routes');
+const configuracionRoutes    = require('./routes/configuracion.routes');
+const contactosRoutes        = require('./routes/contactos.routes');
+const tiRoutes               = require('./routes/ti.routes');
+const horariosRoutes         = require('./routes/horarios.routes');
+const transferenciaRoutes    = require('./routes/transferencia.routes');
+const etiquetaRoutes         = require('./routes/etiqueta.routes');
+const categoriaCierreRoutes  = require('./routes/categoriaCierre.routes');
+const permisosRoutes         = require('./routes/permisos.routes');
+const rolTemplateRoutes      = require('./routes/rolTemplate.routes');
+const palabrasClaveRoutes    = require('./routes/palabrasClave.routes');
+const flujoRoutes            = require('./routes/flujo.routes');
 
 const app    = express();
 const server = http.createServer(app);
@@ -127,7 +134,8 @@ app.use(express.json());
 // Servir archivos subidos (avatares, etc.) con CORP permisivo para que los
 // navegadores puedan cargar las imágenes desde el mismo origen o rutas de red.
 const uploadsDir = path.join(__dirname, '..', 'uploads');
-fs.mkdirSync(path.join(uploadsDir, 'avatars'), { recursive: true });
+fs.mkdirSync(path.join(uploadsDir, 'avatars'),   { recursive: true });
+fs.mkdirSync(path.join(uploadsDir, 'rr-media'),  { recursive: true });
 app.use('/uploads', express.static(uploadsDir, {
   setHeaders: (res) => res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin'),
 }));
@@ -136,13 +144,14 @@ app.use('/uploads', express.static(uploadsDir, {
 app.set('io', io);
 
 // Middleware global de modo mantenimiento.
-// Bloquea todas las rutas operativas excepto: login, health y panel TI.
+// Bloquea rutas operativas de agentes, pero deja pasar webhooks (clientes siguen atendidos).
 app.use((req, res, next) => {
   if (!maintenance.isActive()) return next();
   const libre = req.path === '/auth/login'
              || req.path === '/'
              || req.path === '/health'
-             || req.path.startsWith('/ti/');
+             || req.path.startsWith('/ti/')
+             || req.path.startsWith('/meta/webhook'); // webhooks siguen vivos durante mantenimiento
   if (libre) return next();
   res.status(503).json({ error: 'Sistema en mantenimiento. Por favor espere.', mantenimiento: true });
 });
@@ -152,7 +161,11 @@ io.on('connection', (socket) => {
   logger.info('Cliente conectado', { socketId: socket.id });
 
   // El agente emite este evento al iniciar sesión para unirse a su sala
-  socket.on('agente:join', ({ rol, area }) => {
+  socket.on('agente:join', ({ rol, area, id }) => {
+    if (id) {
+      socket.agenteId = id;
+      require('./services/pollingService').setAgentOnline(id);
+    }
     if (rol === 'admin') {
       socket.join('admin');
     } else if (area) {
@@ -161,23 +174,38 @@ io.on('connection', (socket) => {
     logger.info(`Socket ${socket.id} joined room: ${rol === 'admin' ? 'admin' : 'area:' + area}`);
   });
 
-  socket.on('disconnect', () => logger.info('Cliente desconectado', { socketId: socket.id }));
+  socket.on('disconnect', () => {
+    if (socket.agenteId) {
+      require('./services/pollingService').setAgentOffline(socket.agenteId);
+    }
+    logger.info('Cliente desconectado', { socketId: socket.id });
+  });
 });
 
 // Rutas de la API (con rate limiting por IP)
-app.use('/auth',           apiLimiter, authRoutes);
-app.use('/ti',             tiRoutes);
-app.use('/agente',         apiLimiter, agenteRoutes);
-app.use('/conversaciones', apiLimiter, conversacionesRoutes);
-app.use('/configuracion',  apiLimiter, configuracionRoutes);
-app.use('/contactos',      apiLimiter, contactosRoutes);
-app.use('/horarios',       apiLimiter, horariosRoutes);
+app.use('/auth',             apiLimiter, authRoutes);
+app.use('/ti',               tiRoutes);
+app.use('/agente',           apiLimiter, agenteRoutes);
+app.use('/conversaciones',   apiLimiter, conversacionesRoutes);
+app.use('/configuracion',    apiLimiter, configuracionRoutes);
+app.use('/contactos',        apiLimiter, contactosRoutes);
+app.use('/horarios',         apiLimiter, horariosRoutes);
+app.use('/transferencias',   apiLimiter, transferenciaRoutes);
+app.use('/etiquetas',        apiLimiter, etiquetaRoutes);
+app.use('/categorias-cierre', apiLimiter, categoriaCierreRoutes);
+app.use('/permisos',         apiLimiter, permisosRoutes);
+app.use('/rol-template',     apiLimiter, rolTemplateRoutes);
+app.use('/palabras-clave',   apiLimiter, palabrasClaveRoutes);
+app.use('/flujos',           apiLimiter, flujoRoutes);
 // Los webhooks de Telegram usan el webhookLimiter; Meta se registra en iniciarMeta()
 app.use('/telegram',       webhookLimiter);
 
 // Health checks
 app.get('/',       (req, res) => res.send('API funcionando'));
 app.get('/health', (req, res) => res.json({ status: 'ok' }));
+
+// Módulo Polling Interno
+require('./services/pollingService').setupPollingEndpoint(app);
 
 // Middleware global de errores (debe ir DESPUÉS de todas las rutas)
 app.use(errorHandler);

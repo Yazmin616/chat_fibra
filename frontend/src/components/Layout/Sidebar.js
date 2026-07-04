@@ -1,8 +1,36 @@
 import React from 'react';
-import { LayoutDashboard, MessageCircle, Settings, Users, LogOut, Shield, AlertTriangle } from 'lucide-react';
+import {
+  LayoutDashboard, MessageCircle, Settings, Users,
+  LogOut, Shield, AlertTriangle, Tag, FileText, GitBranch,
+} from 'lucide-react';
 
-const Sidebar = ({ visible, currentView, setView, user, onLogout, totalNoLeidos = 0, totalInfracciones = 0 }) => {
+const Sidebar = ({
+  visible, currentView, setView, user, onLogout,
+  totalNoLeidos = 0, totalInfracciones = 0,
+  hasModulo = () => true,  // fallback: muestra todo si no hay permisos aún
+}) => {
   if (!visible) return null;
+
+  const item = (modulo, view, icon, label, badge) => {
+    if (!hasModulo(modulo)) return null;
+    return (
+      <div
+        className={`menu-item ${currentView === view ? 'active' : ''}`}
+        onClick={() => setView(view)}
+        style={{ position: 'relative' }}
+      >
+        <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+          {icon}
+          {badge > 0 && (
+            <span className="sidebar-badge" style={modulo === 'infracciones' ? { background: '#ef4444' } : {}}>
+              {badge > 99 ? '99+' : badge}
+            </span>
+          )}
+        </div>
+        <span>{label}</span>
+      </div>
+    );
+  };
 
   return (
     <div className="sidebar">
@@ -15,82 +43,20 @@ const Sidebar = ({ visible, currentView, setView, user, onLogout, totalNoLeidos 
         width: '100%',
         boxSizing: 'border-box'
       }}>
-        <img src="/logo-fibratec.png" alt="Logo 1" style={{ height: '30px', objectFit: 'contain' }} />
-        <img src="/logo-compusemmm.png" alt="Compusemmm" style={{ height: '30px', objectFit: 'contain' }} />
+        <img src="/logo-fibratec.png"    alt="Fibratec"    style={{ height: '30px', objectFit: 'contain' }} />
+        <img src="/logo-compusemmm.png"  alt="Compusemmm"  style={{ height: '30px', objectFit: 'contain' }} />
       </div>
 
       <div className="menu-section">
-
-        <div
-          className={`menu-item ${currentView === 'dashboard' ? 'active' : ''}`}
-          onClick={() => setView('dashboard')}
-        >
-          <LayoutDashboard size={20} />
-          <span>Dashboard</span>
-        </div>
-
-        <div
-          className={`menu-item ${currentView === 'chat' ? 'active' : ''}`}
-          onClick={() => setView('chat')}
-          style={{ position: 'relative' }}
-        >
-          <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-            <MessageCircle size={20} />
-            {totalNoLeidos > 0 && (
-              <span className="sidebar-badge">
-                {totalNoLeidos > 99 ? '99+' : totalNoLeidos}
-              </span>
-            )}
-          </div>
-          <span>Chat</span>
-        </div>
-
-        <div
-          className={`menu-item ${currentView === 'contactos' ? 'active' : ''}`}
-          onClick={() => setView('contactos')}
-        >
-          <Users size={20} />
-          <span>Contactos</span>
-        </div>
-
-        {user?.rol === 'admin' && (
-          <div
-            className={`menu-item ${currentView === 'infracciones' ? 'active' : ''}`}
-            onClick={() => setView('infracciones')}
-            style={{ position: 'relative' }}
-          >
-            <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-              <AlertTriangle size={20} />
-              {totalInfracciones > 0 && (
-                <span className="sidebar-badge" style={{ background: '#ef4444' }}>
-                  {totalInfracciones > 99 ? '99+' : totalInfracciones}
-                </span>
-              )}
-            </div>
-            <span>Infracciones</span>
-          </div>
-        )}
-
-        {user?.rol === 'admin' && (
-          <div
-            className={`menu-item ${currentView === 'agents' ? 'active' : ''}`}
-            onClick={() => setView('agents')}
-          >
-            <Users size={20} />
-            <span>Usuarios / Agentes</span>
-          </div>
-        )}
-
-        {user?.rol === 'admin' && (
-          <div
-            className={`menu-item ${currentView === 'config' ? 'active' : ''}`}
-            onClick={() => setView('config')}
-          >
-            <Settings size={20} />
-            <span>Configuración</span>
-          </div>
-        )}
-
+        {item('dashboard',     'dashboard',         <LayoutDashboard size={20} />, 'Dashboard')}
+        {item('chat',          'chat',              <MessageCircle size={20} />,  'Chat',              totalNoLeidos)}
+        {item('contactos',     'contactos',         <Users size={20} />,          'Contactos')}
+        {item('infracciones',  'infracciones',      <AlertTriangle size={20} />,  'Infracciones',      totalInfracciones)}
+        {item('etiquetas',     'etiquetas',         <Tag size={20} />,            'Etiquetas')}
+        {item('notas_cierre',  'categorias-cierre', <FileText size={20} />,       'Notas de Cierre')}
+        {item('flujo_bot',     'flow-editor',       <GitBranch size={20} />,      'Flujo del Bot')}
+        {item('usuarios',      'agents',            <Users size={20} />,          'Usuarios / Agentes')}
+        {item('configuracion', 'config',            <Settings size={20} />,       'Configuración')}
       </div>
 
       <div className="sidebar-footer">

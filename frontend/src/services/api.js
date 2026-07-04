@@ -39,6 +39,9 @@ export const resolveMedia = (url) => {
   if (url.startsWith('st://')) {
     return `${API_URL}/agente/sticker-file/${url.slice(5)}`;
   }
+  if (url.startsWith('rr://')) {
+    return `${API_URL}/uploads/rr-media/${url.slice(5)}`;
+  }
   return url;
 };
 
@@ -182,6 +185,42 @@ export const apiService = {
     return _parseJson(res);
   },
 
+  async getPlantillasBot(empresa_id) {
+    const qs = new URLSearchParams();
+    if (empresa_id) qs.append('empresa_id', empresa_id);
+    const res = await fetch(`${API_URL}/configuracion/plantillas?${qs.toString()}`, {
+      headers: _authHeaders(),
+    });
+    return _parseJson(res);
+  },
+
+  async updatePlantillaBot(clave, texto, empresa_id) {
+    const res = await fetch(`${API_URL}/configuracion/plantillas/${clave}`, {
+      method:  'POST',
+      headers: _authHeaders(),
+      body:    JSON.stringify({ texto, empresa_id }),
+    });
+    return _parseJson(res);
+  },
+
+  async getMenusBot(empresa_id) {
+    const qs = new URLSearchParams();
+    if (empresa_id) qs.append('empresa_id', empresa_id);
+    const res = await fetch(`${API_URL}/configuracion/menus?${qs.toString()}`, {
+      headers: _authHeaders(),
+    });
+    return _parseJson(res);
+  },
+
+  async updateMenuBotButton(menuId, buttonId, texto, activo, empresa_id) {
+    const res = await fetch(`${API_URL}/configuracion/menus/${menuId}/${buttonId}`, {
+      method:  'POST',
+      headers: _authHeaders(),
+      body:    JSON.stringify({ texto, activo, empresa_id }),
+    });
+    return _parseJson(res);
+  },
+
   // ─────────────────────────────────────────────
   // CONVERSACIONES
   // ─────────────────────────────────────────────
@@ -281,11 +320,11 @@ export const apiService = {
    * @param {string} agente_nombre   - Nombre del agente que cierra.
    * @returns {Promise<{ok: boolean}>}
    */
-  async cerrarChat(conversacion_id, motivo, agente_nombre, solucion) {
+  async cerrarChat(conversacion_id, categoria_cierre_id, comentario_cierre, agente_nombre) {
     const res = await fetch(`${API_URL}/agente/liberar`, {
       method:  'POST',
       headers: _authHeaders(),
-      body:    JSON.stringify({ conversacion_id, motivo, agente_nombre, solucion }),
+      body:    JSON.stringify({ conversacion_id, categoria_cierre_id, comentario_cierre, agente_nombre }),
     });
     return _parseJson(res);
   },
@@ -298,6 +337,50 @@ export const apiService = {
   async eliminarChat(id) {
     const res = await fetch(`${API_URL}/agente/conversacion/${id}`, {
       method:  'DELETE',
+      headers: _authHeaders(),
+    });
+    return _parseJson(res);
+  },
+
+  // ─────────────────────────────────────────────
+  // TRANSFERENCIAS
+  // ─────────────────────────────────────────────
+
+  /**
+   * Transfiere un chat a la cola de un equipo (mismo o distinto área).
+   * @param {number} conversacion_id - PK de la conversación.
+   * @param {string} area_destino    - Área destino.
+   * @param {string} nota            - Nota de contexto (obligatoria).
+   * @returns {Promise<{ok: boolean, tipo: string, area_destino: string}>}
+   */
+  async transferirChat(conversacion_id, area_destino, nota) {
+    const res = await fetch(`${API_URL}/transferencias/transferir`, {
+      method:  'POST',
+      headers: _authHeaders(),
+      body:    JSON.stringify({ conversacion_id, area_destino, nota }),
+    });
+    return _parseJson(res);
+  },
+
+  /**
+   * Obtiene el historial de transferencias de una conversación.
+   * @param {number} conversacion_id
+   * @returns {Promise<object[]>}
+   */
+  async getTransferencias(conversacion_id) {
+    const res = await fetch(`${API_URL}/transferencias/conversacion/${conversacion_id}`, {
+      headers: _authHeaders(),
+    });
+    return _parseJson(res);
+  },
+
+  /**
+   * Lista todas las transferencias (solo admin/supervisor).
+   * @param {string} empresa_id - "todas" o ID concreto.
+   * @returns {Promise<object[]>}
+   */
+  async getAllTransferencias(empresa_id = 'todas') {
+    const res = await fetch(`${API_URL}/transferencias?empresa_id=${empresa_id}`, {
       headers: _authHeaders(),
     });
     return _parseJson(res);
@@ -479,20 +562,29 @@ export const apiService = {
     return _parseJson(res);
   },
 
-  async crearRespuestaRapida(titulo, contenido) {
+  async crearRespuestaRapida(titulo, contenido, mediaFile = null) {
+    const form = new FormData();
+    form.append('titulo', titulo);
+    if (contenido) form.append('contenido', contenido);
+    if (mediaFile) form.append('media', mediaFile);
     const res = await fetch(`${API_URL}/agente/respuestas-rapidas`, {
       method:  'POST',
-      headers: _authHeaders(),
-      body:    JSON.stringify({ titulo, contenido }),
+      headers: _authHeadersMultipart(),
+      body:    form,
     });
     return _parseJson(res);
   },
 
-  async actualizarRespuestaRapida(id, titulo, contenido) {
+  async actualizarRespuestaRapida(id, titulo, contenido, mediaFile = null, removeMedia = false) {
+    const form = new FormData();
+    form.append('titulo', titulo);
+    if (contenido) form.append('contenido', contenido);
+    if (removeMedia) form.append('removeMedia', 'true');
+    if (mediaFile) form.append('media', mediaFile);
     const res = await fetch(`${API_URL}/agente/respuestas-rapidas/${id}`, {
       method:  'PUT',
-      headers: _authHeaders(),
-      body:    JSON.stringify({ titulo, contenido }),
+      headers: _authHeadersMultipart(),
+      body:    form,
     });
     return _parseJson(res);
   },
@@ -501,6 +593,15 @@ export const apiService = {
     const res = await fetch(`${API_URL}/agente/respuestas-rapidas/${id}`, {
       method:  'DELETE',
       headers: _authHeaders(),
+    });
+    return _parseJson(res);
+  },
+
+  async usarRespuestaRapida(conversacion_id, rr_id) {
+    const res = await fetch(`${API_URL}/agente/respuestas-rapidas/usar`, {
+      method:  'POST',
+      headers: _authHeaders(),
+      body:    JSON.stringify({ conversacion_id, rr_id }),
     });
     return _parseJson(res);
   },
@@ -634,6 +735,205 @@ export const apiService = {
     const res = await fetch(`${API_URL}/horarios/festivos/${id}`, {
       method:  'DELETE',
       headers: _authHeaders(),
+    });
+    return _parseJson(res);
+  },
+
+  // ─────────────────────────────────────────────
+  // ETIQUETAS
+  // ─────────────────────────────────────────────
+
+  // area: null | 'todas' | '__general__' | 'Soporte Técnico' | 'Ventas' | 'Cobranza'
+  async listarEtiquetas(empresa_id, q, area) {
+    const qs = new URLSearchParams({ empresa_id });
+    if (q)    qs.set('q',    q);
+    if (area && area !== 'todas') {
+      // '__general__' se mapea a 'general' para que el backend filtre IS NULL
+      qs.set('area', area === '__general__' ? '__general__' : area);
+    }
+    const res = await fetch(`${API_URL}/etiquetas?${qs}`, { headers: _authHeaders() });
+    return _parseJson(res);
+  },
+
+  async crearEtiqueta(data) {
+    const res = await fetch(`${API_URL}/etiquetas`, {
+      method:  'POST',
+      headers: _authHeaders(),
+      body:    JSON.stringify(data),
+    });
+    return _parseJson(res);
+  },
+
+  async actualizarEtiqueta(id, data) {
+    const res = await fetch(`${API_URL}/etiquetas/${id}`, {
+      method:  'PUT',
+      headers: _authHeaders(),
+      body:    JSON.stringify(data),
+    });
+    return _parseJson(res);
+  },
+
+  async eliminarEtiqueta(id, empresa_id) {
+    const res = await fetch(`${API_URL}/etiquetas/${id}?empresa_id=${empresa_id}`, {
+      method:  'DELETE',
+      headers: _authHeaders(),
+    });
+    return _parseJson(res);
+  },
+
+  async getEtiquetasConversacion(conversacion_id) {
+    const res = await fetch(`${API_URL}/etiquetas/conversacion/${conversacion_id}`, {
+      headers: _authHeaders(),
+    });
+    return _parseJson(res);
+  },
+
+  async asignarEtiqueta(conversacion_id, etiqueta_id) {
+    const res = await fetch(`${API_URL}/etiquetas/conversacion/${conversacion_id}`, {
+      method:  'POST',
+      headers: _authHeaders(),
+      body:    JSON.stringify({ etiqueta_id }),
+    });
+    return _parseJson(res);
+  },
+
+  async quitarEtiqueta(conversacion_id, etiqueta_id) {
+    const res = await fetch(`${API_URL}/etiquetas/conversacion/${conversacion_id}/${etiqueta_id}`, {
+      method:  'DELETE',
+      headers: _authHeaders(),
+    });
+    return _parseJson(res);
+  },
+
+  // ─────────────────────────────────────────────
+  // CATEGORÍAS DE CIERRE
+  // ─────────────────────────────────────────────
+  async listarCategoriasCierre(empresa_id, q, area) {
+    const qs = new URLSearchParams({ empresa_id });
+    if (q) qs.set('q', q);
+    if (area && area !== 'todas') qs.set('area', area === '__general__' ? '__general__' : area);
+    const res = await fetch(`${API_URL}/categorias-cierre?${qs}`, { headers: _authHeaders() });
+    return _parseJson(res);
+  },
+  async crearCategoriaCierre(data) {
+    const res = await fetch(`${API_URL}/categorias-cierre`, {
+      method: 'POST', headers: _authHeaders(), body: JSON.stringify(data),
+    });
+    return _parseJson(res);
+  },
+  async actualizarCategoriaCierre(id, data) {
+    const res = await fetch(`${API_URL}/categorias-cierre/${id}`, {
+      method: 'PUT', headers: _authHeaders(), body: JSON.stringify(data),
+    });
+    return _parseJson(res);
+  },
+  async eliminarCategoriaCierre(id, empresa_id) {
+    const res = await fetch(`${API_URL}/categorias-cierre/${id}?empresa_id=${empresa_id}`, {
+      method: 'DELETE', headers: _authHeaders(),
+    });
+    return _parseJson(res);
+  },
+
+  // ─────────────────────────────────────────────
+  // PERMISOS
+  // ─────────────────────────────────────────────
+  async getMisPermisos() {
+    const res = await fetch(`${API_URL}/permisos/mi`, { headers: _authHeaders() });
+    return _parseJson(res);
+  },
+  async getPermisosUsuario(id) {
+    const res = await fetch(`${API_URL}/permisos/${id}`, { headers: _authHeaders() });
+    return _parseJson(res);
+  },
+  async setPermisosUsuario(id, data) {
+    const res = await fetch(`${API_URL}/permisos/${id}`, {
+      method: 'PUT', headers: _authHeaders(), body: JSON.stringify(data),
+    });
+    return _parseJson(res);
+  },
+
+  // ─────────────────────────────────────────────
+  // PLANTILLAS DE ROL
+  // ─────────────────────────────────────────────
+  async getRolTemplates() {
+    const res = await fetch(`${API_URL}/rol-template`, { headers: _authHeaders() });
+    return _parseJson(res);
+  },
+  async getRolTemplate(rol) {
+    const res = await fetch(`${API_URL}/rol-template/${rol}`, { headers: _authHeaders() });
+    return _parseJson(res);
+  },
+  async setRolTemplate(rol, data) {
+    const res = await fetch(`${API_URL}/rol-template/${rol}`, {
+      method: 'PUT', headers: _authHeaders(), body: JSON.stringify(data),
+    });
+    return _parseJson(res);
+  },
+  async applyRolTemplate(rol) {
+    const res = await fetch(`${API_URL}/rol-template/${rol}/apply`, {
+      method: 'POST', headers: _authHeaders(),
+    });
+    return _parseJson(res);
+  },
+
+  // PALABRAS CLAVE DEL BOT
+  // ─────────────────────────────────────────────
+  async getPalabrasClave(empresa_id = null) {
+    const qs = empresa_id ? `?empresa_id=${encodeURIComponent(empresa_id)}` : '';
+    const res = await fetch(`${API_URL}/palabras-clave${qs}`, { headers: _authHeaders() });
+    return _parseJson(res);
+  },
+  async crearPalabraClave(data) {
+    const res = await fetch(`${API_URL}/palabras-clave`, {
+      method: 'POST',
+      headers: { ..._authHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    return _parseJson(res);
+  },
+  async actualizarPalabraClave(id, data) {
+    const res = await fetch(`${API_URL}/palabras-clave/${id}`, {
+      method: 'PUT',
+      headers: { ..._authHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    return _parseJson(res);
+  },
+  async eliminarPalabraClave(id) {
+    const res = await fetch(`${API_URL}/palabras-clave/${id}`, {
+      method: 'DELETE', headers: _authHeaders(),
+    });
+    return _parseJson(res);
+  },
+
+  // ─────────────────────────────────────────────
+  // FLUJOS VISUALES DEL BOT
+  // ─────────────────────────────────────────────
+  async getFlujo(empresa_id) {
+    const res = await fetch(`${API_URL}/flujos/${encodeURIComponent(empresa_id)}`, {
+      headers: _authHeaders(),
+    });
+    return _parseJson(res);
+  },
+  async saveFlujo(empresa_id, payload) {
+    const res = await fetch(`${API_URL}/flujos/${encodeURIComponent(empresa_id)}`, {
+      method: 'PUT',
+      headers: _authHeaders(),
+      body: JSON.stringify(payload),
+    });
+    return _parseJson(res);
+  },
+  async listFlujos(empresa_id) {
+    const res = await fetch(`${API_URL}/flujos/${encodeURIComponent(empresa_id)}/lista`, {
+      headers: _authHeaders(),
+    });
+    return _parseJson(res);
+  },
+  async toggleFlujoActivo(id, activo) {
+    const res = await fetch(`${API_URL}/flujos/${id}/activo`, {
+      method: 'PATCH',
+      headers: _authHeaders(),
+      body: JSON.stringify({ activo }),
     });
     return _parseJson(res);
   },

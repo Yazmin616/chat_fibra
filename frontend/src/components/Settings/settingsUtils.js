@@ -4,6 +4,9 @@
  * para todas las secciones del panel de configuración.
  */
 import React, { useCallback, useState } from 'react';
+import { Eye, Pencil, Smile } from 'lucide-react';
+import data from '@emoji-mart/data';
+import Picker from '@emoji-mart/react';
 
 // ── Conversión de tiempo ──────────────────────────────────────────────────────
 
@@ -39,12 +42,13 @@ export function unitEquiv(min) {
 // ── Variables de plantilla ────────────────────────────────────────────────────
 
 export const VARS = [
-  { key: '{nombre_cliente}',   demo: 'Carlos López'                     },
-  { key: '{area}',             demo: 'Soporte Técnico'                  },
-  { key: '{empresa}',          demo: 'Fibratec'                         },
-  { key: '{nombre_agente}',    demo: 'María García'                     },
-  { key: '{horarios_atencion}',demo: 'Lun-Vie 9am-6pm, Sáb 9am-8pm'   },
-  { key: '{proximo_dia_habil}',demo: 'lunes 9/6'                        },
+  { key: '{nombre_cliente}',   demo: 'Carlos López'                                                        },
+  { key: '{area}',             demo: 'Soporte Técnico'                                                     },
+  { key: '{empresa}',          demo: 'Fibratec'                                                            },
+  { key: '{nombre_agente}',    demo: 'María García'                                                        },
+  { key: '{horarios_atencion}',demo: 'Lun-Vie 9am-6pm, Sáb 9am-8pm'                                      },
+  { key: '{proximo_dia_habil}',demo: 'lunes 9/6'                                                          },
+  { key: '{telefonos_areas}',  demo: '🔧 Soporte Técnico: 555-0001\n💼 Ventas: 555-0002\n💰 Cobranza: 555-0003' },
 ];
 
 export function applyVars(text) {
@@ -107,6 +111,7 @@ export function TimeField({ id, minutes, unit, onChangeMinutes, onChangeUnit }) 
 
 export function MessageField({ id, value, onChange }) {
   const [editing, setEditing] = useState(false);
+  const [showPicker, setShowPicker] = useState(false);
 
   const insertVar = useCallback((varKey) => {
     const el = document.getElementById(id);
@@ -120,16 +125,25 @@ export function MessageField({ id, value, onChange }) {
     }
   }, [id, value, onChange]);
 
+  const addEmoji = (e) => {
+    const sym = e.unified.split('-');
+    const codesArray = [];
+    sym.forEach(el => codesArray.push('0x' + el));
+    const emoji = String.fromCodePoint(...codesArray);
+    insertVar(emoji);
+    setShowPicker(false);
+  };
+
   return (
     <div className="sc-msg-field">
       <div className="sc-msg-header">
         <span className="sc-msg-label">Mensaje al cliente</span>
         <button type="button" className="sc-preview-btn" onClick={() => setEditing(v => !v)}>
-          {editing ? '👁 Vista previa' : '✏️ Editar'}
+          {editing ? <><Eye size={13} /> Vista previa</> : <><Pencil size={13} /> Editar</>}
         </button>
       </div>
       {editing ? (
-        <>
+        <div style={{ position: 'relative' }}>
           <textarea
             id={id}
             className="sc-msg-textarea"
@@ -138,7 +152,7 @@ export function MessageField({ id, value, onChange }) {
             onChange={e => onChange(e.target.value)}
             placeholder="Escribe el mensaje que recibirá el cliente…"
           />
-          <div className="sc-vars-bar">
+          <div className="sc-vars-bar" style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '5px' }}>
             <span className="sc-vars-label">Insertar:</span>
             {VARS.map(v => (
               <button key={v.key} type="button" className="sc-var-chip"
@@ -146,8 +160,18 @@ export function MessageField({ id, value, onChange }) {
                 {v.key}
               </button>
             ))}
+            <div style={{ marginLeft: 'auto', position: 'relative' }}>
+              <button type="button" className="sc-var-chip" onClick={() => setShowPicker(!showPicker)} title="Añadir Emoji">
+                <Smile size={14} style={{ verticalAlign: 'middle' }} />
+              </button>
+              {showPicker && (
+                <div style={{ position: 'absolute', bottom: '30px', right: 0, zIndex: 1000, boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)' }}>
+                  <Picker data={data} onEmojiSelect={addEmoji} locale="es" />
+                </div>
+              )}
+            </div>
           </div>
-        </>
+        </div>
       ) : (
         <div className="sc-preview-wrap">
           <div className="sc-preview-bubble">{applyVars(value)}</div>

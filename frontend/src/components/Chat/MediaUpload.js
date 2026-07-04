@@ -1,5 +1,5 @@
-import React, { useRef, useState, useCallback } from 'react';
-import { Image, X, Send, Camera } from 'lucide-react';
+import React, { useRef, useState, useCallback, useEffect } from 'react';
+import { Image, X, Send, Camera, Paperclip } from 'lucide-react';
 
 const MAX_DIMENSION = 1920;
 const JPEG_QUALITY  = 0.85;
@@ -44,10 +44,22 @@ function comprimirImagen(file) {
 const MediaUpload = ({ onSend, disabled }) => {
   const fileInputRef   = useRef(null);
   const cameraInputRef = useRef(null);
-  const [preview, setPreview]   = useState(null); // { url, blob }
-  const [caption, setCaption]   = useState('');
-  const [loading, setLoading]   = useState(false);
-  const [error,   setError]     = useState('');
+  const menuRef        = useRef(null);
+  const [preview,    setPreview]    = useState(null); // { url, blob }
+  const [caption,    setCaption]    = useState('');
+  const [loading,    setLoading]    = useState(false);
+  const [error,      setError]      = useState('');
+  const [showMenu,   setShowMenu]   = useState(false);
+
+  // Cierra el mini-menú al hacer clic fuera
+  useEffect(() => {
+    if (!showMenu) return;
+    const handler = (e) => {
+      if (menuRef.current && !menuRef.current.contains(e.target)) setShowMenu(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [showMenu]);
 
   const handleFile = useCallback(async (file) => {
     if (!file) return;
@@ -106,23 +118,37 @@ const MediaUpload = ({ onSend, disabled }) => {
         onChange={handleInputChange}
       />
 
-      {/* Botones en la barra */}
-      <button
-        className="icon-btn-gray"
-        title="Adjuntar imagen"
-        disabled={disabled}
-        onClick={() => fileInputRef.current?.click()}
-      >
-        <Image size={20} />
-      </button>
-      <button
-        className="icon-btn-gray"
-        title="Tomar foto"
-        disabled={disabled}
-        onClick={() => cameraInputRef.current?.click()}
-      >
-        <Camera size={20} />
-      </button>
+      {/* Botón único con mini-menú */}
+      <div ref={menuRef} style={{ position: 'relative' }}>
+        {showMenu && (
+          <div className="attach-menu">
+            <button
+              className="icon-btn-gray attach-menu-opt"
+              title="Imagen de galería"
+              onClick={() => { fileInputRef.current?.click(); setShowMenu(false); }}
+            >
+              <Image size={20} />
+              <span>Galería</span>
+            </button>
+            <button
+              className="icon-btn-gray attach-menu-opt"
+              title="Tomar foto"
+              onClick={() => { cameraInputRef.current?.click(); setShowMenu(false); }}
+            >
+              <Camera size={20} />
+              <span>Cámara</span>
+            </button>
+          </div>
+        )}
+        <button
+          className={`icon-btn-gray${showMenu ? ' active' : ''}`}
+          title="Adjuntar imagen"
+          disabled={disabled}
+          onClick={() => setShowMenu(s => !s)}
+        >
+          <Paperclip size={20} />
+        </button>
+      </div>
 
       {/* Modal de preview */}
       {preview && (

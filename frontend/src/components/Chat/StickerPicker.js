@@ -4,7 +4,7 @@ import { apiService, resolveMedia } from '../../services/api';
 const FAVS_KEY    = '__favorites__';
 const MINE_PREFIX = 'agente_';
 
-const StickerPicker = ({ onSelect, onClose, agenteId }) => {
+const StickerPicker = ({ onSelect, onClose, agenteId, embedded = false }) => {
   const [packs,      setPacks]      = useState([]);
   const [favorites,  setFavorites]  = useState(new Set());
   const [activePack, setActivePack] = useState(null);
@@ -28,24 +28,27 @@ const StickerPicker = ({ onSelect, onClose, agenteId }) => {
       setPacks(visible);
       const favSet = new Set((favsData || []).map(f => `${f.pack}/${f.file}`));
       setFavorites(favSet);
-      const hasMine = visible.some(p => isMyPack(p.pack));
-      if (hasMine)          setActivePack(myPack);
-      else if (favSet.size) setActivePack(FAVS_KEY);
-      else                  setActivePack(visible[0]?.pack || null);
     }).finally(() => setLoading(false));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [agenteId]);
 
   useEffect(() => { cargar(); }, [cargar]);
 
-  // ── Cerrar al clic fuera ────────────────────────────────────────────────────
   useEffect(() => {
+    if (packs.length > 0 && !activePack) {
+      setActivePack(FAVS_KEY);
+    }
+  }, [packs, activePack]);
+
+  // ── Cerrar al clic fuera (solo cuando no está embebido en otro panel) ───────
+  useEffect(() => {
+    if (embedded) return;
     const handler = (e) => {
       if (panelRef.current && !panelRef.current.contains(e.target)) onClose();
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
-  }, [onClose]);
+  }, [onClose, embedded]);
 
   // ── Toggle favorito (optimista) ─────────────────────────────────────────────
   const toggleFavorite = useCallback((e, pack, file) => {
@@ -106,27 +109,16 @@ const StickerPicker = ({ onSelect, onClose, agenteId }) => {
 
   // ── Render ──────────────────────────────────────────────────────────────────
   return (
-    <div ref={panelRef} className="sticker-picker">
+    <div ref={embedded ? undefined : panelRef} className={`sticker-picker${embedded ? ' embedded' : ''}`}>
 
       {/* Tabs */}
       <div className="sticker-picker-tabs">
-        {myPack && (
-          <button
-            className={`sticker-tab${activePack === myPack ? ' active' : ''}`}
-            onClick={() => setActivePack(myPack)}
-            title="Mis stickers guardados de clientes"
-          >
-            👤 Míos
-          </button>
-        )}
-        {showFavsTab && (
-          <button
-            className={`sticker-tab${activePack === FAVS_KEY ? ' active' : ''}`}
-            onClick={() => setActivePack(FAVS_KEY)}
-          >
-            ★ Favoritos
-          </button>
-        )}
+        <button
+          className={`sticker-tab${activePack === FAVS_KEY ? ' active' : ''}`}
+          onClick={() => setActivePack(FAVS_KEY)}
+        >
+          ★ Favoritos
+        </button>
         {packs.filter(p => !isMyPack(p.pack)).map(p => (
           <button
             key={p.pack}

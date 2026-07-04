@@ -20,12 +20,7 @@ const wisp                      = require('../../services/wisp.service');
 const { parseTipoIdentificacion } = require('../parsers');
 const { ESTADOS, DEPARTAMENTOS }  = require('../constants');
 const { ConversacionMeta }        = require('../conversacion.meta');
-const {
-  TIPO_IDENTIFICACION,
-  CONFIRMAR_CUENTA,
-  getAutoservicioKeyboard,
-  generarTecladoServicios,
-} = require('../keyboards');
+const keyboards = require('../keyboards');
 
 const MAX_INTENTOS = 3;
 
@@ -52,10 +47,12 @@ async function handle(mensaje, conversacion) {
     }
 
     if (!tipo) {
+      const { getTexto } = require('../../services/plantillas.service');
+      const respuesta = await getTexto('identificacion_tipo', conversacion.empresa_id);
       return {
-        respuesta:   '⚠️ Por favor selecciona una opción para identificarte:',
+        respuesta,
         nuevoEstado: conversacion.estado,
-        teclado:     TIPO_IDENTIFICACION,
+        teclado: await keyboards.get('TIPO_IDENTIFICACION', conversacion.empresa_id),
       };
     }
 
@@ -90,20 +87,20 @@ async function handle(mensaje, conversacion) {
         return {
           respuesta:   `✅ Cuenta de *${nombre}* encontrada.\n\n¿Cuál servicio deseas consultar?\n\n${listaTexto}`,
           nuevoEstado: ESTADOS.SELECCION_SERVICIO,
-          teclado:     generarTecladoServicios(cliente.servicios),
+          teclado:     keyboards.generarTecladoServicios(cliente.servicios),
         };
       }
       return {
         respuesta:   `✅ Cuenta de *${nombre}* encontrada.\n\n¿En qué puedo ayudarte?`,
         nuevoEstado: ESTADOS.MENU_AUTOSERVICIO,
-        teclado:     getAutoservicioKeyboard(metaActualizada.toJSON()),
+        teclado:     await keyboards.getAutoservicioKeyboard(metaActualizada.toJSON(), conversacion.empresa_id),
       };
     }
 
     return {
       respuesta:   `✅ Encontramos la cuenta de *${cliente.nombre}*.\n\n¿Es tu cuenta?`,
       nuevoEstado: ESTADOS.CONFIRMAR_CUENTA,
-      teclado:     CONFIRMAR_CUENTA,
+      teclado: await keyboards.get('CONFIRMAR_CUENTA', conversacion.empresa_id),
     };
   }
 
@@ -127,7 +124,7 @@ async function handle(mensaje, conversacion) {
     respuesta:   `❌ No encontramos ningún servicio con ese dato.\n\n` +
                  `Intenta con otro tipo de identificación _(${restantes} intento${restantes !== 1 ? 's' : ''} restante${restantes !== 1 ? 's' : ''})_:`,
     nuevoEstado: conversacion.estado,
-    teclado:     TIPO_IDENTIFICACION,
+    teclado: await keyboards.get('TIPO_IDENTIFICACION', conversacion.empresa_id),
   };
 }
 

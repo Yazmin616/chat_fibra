@@ -140,8 +140,8 @@ export function useConversaciones(user, empresaId) {
    * @param {number} id     - PK de la conversación.
    * @param {string} motivo - Motivo del cierre.
    */
-  const cerrarChat = useCallback(async (id, motivo, solucion) => {
-    await apiService.cerrarChat(id, motivo, user.nombre, solucion);
+  const cerrarChat = useCallback(async (id, categoria_cierre_id, comentario_cierre) => {
+    await apiService.cerrarChat(id, categoria_cierre_id, comentario_cierre, user.nombre);
     await cargar();
   }, [user, cargar]);
 

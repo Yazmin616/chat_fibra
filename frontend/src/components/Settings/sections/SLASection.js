@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Timer, Info } from 'lucide-react';
 import {
   DEFAULTS, TimeField, SectionStatus,
   bestUnit, unitEquiv, useSectionSave,
@@ -41,7 +42,7 @@ const SLASection = ({ config, onSave, setDirty }) => {
   return (
     <div className="cfg-section-wrap">
       <div className="cfg-section-header">
-        <h2><span className="cfg-section-icon-h">⏱</span> SLA de respuesta</h2>
+        <h2><span className="cfg-section-icon-h"><Timer size={20} /></span> SLA de respuesta</h2>
         <p>
           Tiempos máximos antes de que se registre una infracción automática.
           Las infracciones son visibles solo para supervisores — no se notifica al cliente.
@@ -122,7 +123,7 @@ const SLASection = ({ config, onSave, setDirty }) => {
         </div>
 
         <div className="sc-alert sc-alert--info">
-          ℹ️ El reloj inicia cuando el cliente escribe y el agente aún no ha respondido.
+          <Info size={14} style={{ verticalAlign: 'middle', marginRight: 5, flexShrink: 0 }} /> El reloj inicia cuando el cliente escribe y el agente aún no ha respondido.
           Se pausa fuera de los turnos activos del área (configura los turnos en <strong>Turnos por área</strong>)
           y se cancela en cuanto el agente responde.
           Si el cliente escribe de nuevo después de una infracción, el reloj arranca desde cero.

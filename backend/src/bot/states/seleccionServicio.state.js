@@ -10,12 +10,7 @@ const conversacionRepo  = require('../../repositories/conversacion.repository');
 const { parseNumeroServicio, parseAutoservicio } = require('../parsers');
 const { ESTADOS }       = require('../constants');
 const { ConversacionMeta } = require('../conversacion.meta');
-const {
-  AUTOSERVICIO,
-  AUTOSERVICIO_BASICO,
-  TIPO_IDENTIFICACION,
-  generarTecladoServicios,
-} = require('../keyboards');
+const keyboards = require('../keyboards');
 
 async function handle(mensaje, conversacion) {
   const meta     = new ConversacionMeta(conversacion.metadata);
@@ -37,7 +32,7 @@ async function handle(mensaje, conversacion) {
     return {
       respuesta:   '👥 De acuerdo. ¿Con qué dato identifico a la persona?',
       nuevoEstado: ESTADOS.IDENTIFICACION_DATOS,
-      teclado:     TIPO_IDENTIFICACION,
+      teclado: await keyboards.get('TIPO_IDENTIFICACION', conversacion.empresa_id),
     };
   }
 
@@ -48,14 +43,14 @@ async function handle(mensaje, conversacion) {
     return {
       respuesta:   `⚠️ Opción no reconocida. Por favor selecciona un servicio:\n\n${listaTexto}`,
       nuevoEstado: conversacion.estado,
-      teclado:     generarTecladoServicios(servicios),
+      teclado:     keyboards.generarTecladoServicios(servicios),
     };
   }
 
   await conversacionRepo.updateMetadata(conversacion.id, { ...meta.toJSON(), servicio_idx: idx });
 
   const servicio = servicios[idx];
-  const teclado  = meta.identificado_via_wisp ? AUTOSERVICIO : AUTOSERVICIO_BASICO;
+  const teclado  = await keyboards.getAutoservicioKeyboard(meta, conversacion.empresa_id);
 
   return {
     respuesta:   `📋 Servicio seleccionado: *${servicio.etiqueta}*\n\n¿En qué puedo ayudarte?`,

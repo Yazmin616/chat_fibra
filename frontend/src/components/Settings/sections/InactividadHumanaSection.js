@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { MessageSquare, AlertTriangle, XCircle } from 'lucide-react';
 import {
   DEFAULTS, TimeField, MessageField, SectionStatus,
   bestUnit, unitEquiv, useSectionSave,
@@ -48,7 +49,7 @@ const InactividadHumanaSection = ({ config, onSave, setDirty }) => {
   return (
     <div className="cfg-section-wrap">
       <div className="cfg-section-header">
-        <h2><span className="cfg-section-icon-h">💬</span> Inactividad en atención humana</h2>
+        <h2><span className="cfg-section-icon-h"><MessageSquare size={20} /></span> Inactividad en atención humana</h2>
         <p>
           Escalada cuando el <strong>cliente</strong> deja de responder a un agente.
           El temporizador se reinicia cada vez que el cliente escribe.{' '}
@@ -83,17 +84,17 @@ const InactividadHumanaSection = ({ config, onSave, setDirty }) => {
       {/* ── Alertas ───────────────────────────────────────────────────────── */}
       {!orderOk && (
         <div className="sc-alert sc-alert--err">
-          ⚠️ El orden debe ser: Recordatorio &lt; Aviso de cierre &lt; Cierre automático.
+          <AlertTriangle size={14} style={{ verticalAlign: 'middle', marginRight: 5, flexShrink: 0 }} /> El orden debe ser: Recordatorio &lt; Aviso de cierre &lt; Cierre automático.
         </div>
       )}
       {waError && (
         <div className="sc-alert sc-alert--err">
-          🚫 El cierre supera las 24 h. WhatsApp no permite mensajes fuera de la ventana de Meta sin plantilla aprobada.
+          <XCircle size={14} style={{ verticalAlign: 'middle', marginRight: 5, flexShrink: 0 }} /> El cierre supera las 24 h. WhatsApp no permite mensajes fuera de la ventana de Meta sin plantilla aprobada.
         </div>
       )}
       {waWarn && (
         <div className="sc-alert sc-alert--warn">
-          ⚠️ El cierre supera las 12 h. Verifica que sea correcto para la ventana de 24 h de WhatsApp.
+          <AlertTriangle size={14} style={{ verticalAlign: 'middle', marginRight: 5, flexShrink: 0 }} /> El cierre supera las 12 h. Verifica que sea correcto para la ventana de 24 h de WhatsApp.
         </div>
       )}
 

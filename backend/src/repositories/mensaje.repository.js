@@ -23,11 +23,11 @@ const db = require('../config/db');
  * @param {string|null} [url_media]     - URL del archivo de media (para stickers/imágenes).
  * @returns {Promise<import('pg').QueryResult>}
  */
-const create = (conversacion_id, remitente, texto, tipo = 'text', url_media = null, telegram_msg_id = null) =>
+const create = (conversacion_id, remitente, texto, tipo = 'text', url_media = null, telegram_msg_id = null, agente_id = null) =>
   db.query(
-    `INSERT INTO mensajes (conversacion_id, remitente, texto, tipo, url_media, telegram_msg_id)
-     VALUES ($1,$2,$3,$4,$5,$6) RETURNING id, created_at`,
-    [conversacion_id, remitente, texto, tipo, url_media, telegram_msg_id]
+    `INSERT INTO mensajes (conversacion_id, remitente, texto, tipo, url_media, telegram_msg_id, agente_id)
+     VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id, created_at`,
+    [conversacion_id, remitente, texto, tipo, url_media, telegram_msg_id, agente_id]
   );
 
 /** Encuentra un mensaje por su ID de Telegram (para vincular reacciones). */
@@ -121,7 +121,14 @@ const markReadByUsuario = (usuario_id) =>
  * @returns {Promise<import('pg').QueryResult>}
  */
 const getByConversacion = (conversacion_id) =>
-  db.query('SELECT * FROM mensajes WHERE conversacion_id=$1 ORDER BY id ASC', [conversacion_id]);
+  db.query(
+    `SELECT m.*, a.nombre AS agente_nombre
+     FROM mensajes m
+     LEFT JOIN agentes a ON a.id = m.agente_id
+     WHERE m.conversacion_id=$1
+     ORDER BY m.id ASC`,
+    [conversacion_id]
+  );
 
 /**
  * Obtiene el historial completo de mensajes de un usuario en una empresa,
@@ -133,8 +140,10 @@ const getByConversacion = (conversacion_id) =>
  */
 const getByUsuarioAndEmpresa = (usuario_id, empresa_id) =>
   db.query(
-    `SELECT m.* FROM mensajes m
+    `SELECT m.*, a.nombre AS agente_nombre
+     FROM mensajes m
      JOIN conversaciones c ON m.conversacion_id=c.id
+     LEFT JOIN agentes a ON a.id = m.agente_id
      WHERE c.usuario_id=$1 AND c.empresa_id=$2
      ORDER BY m.id ASC`,
     [usuario_id, empresa_id]
@@ -148,7 +157,12 @@ const getByUsuarioAndEmpresa = (usuario_id, empresa_id) =>
  */
 const getByUsuario = (usuario_id) =>
   db.query(
-    'SELECT m.* FROM mensajes m JOIN conversaciones c ON m.conversacion_id=c.id WHERE c.usuario_id=$1 ORDER BY m.id ASC',
+    `SELECT m.*, a.nombre AS agente_nombre
+     FROM mensajes m
+     JOIN conversaciones c ON m.conversacion_id=c.id
+     LEFT JOIN agentes a ON a.id = m.agente_id
+     WHERE c.usuario_id=$1
+     ORDER BY m.id ASC`,
     [usuario_id]
   );
 
@@ -163,8 +177,10 @@ const getByUsuario = (usuario_id) =>
  */
 const getByUsuarioAndArea = (usuario_id, area, empresa_id) =>
   db.query(
-    `SELECT m.* FROM mensajes m
+    `SELECT m.*, a.nombre AS agente_nombre
+     FROM mensajes m
      JOIN conversaciones c ON m.conversacion_id=c.id
+     LEFT JOIN agentes a ON a.id = m.agente_id
      WHERE c.usuario_id=$1 AND c.departamento=$2 AND c.empresa_id=$3
      ORDER BY m.id ASC`,
     [usuario_id, area, empresa_id]

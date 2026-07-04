@@ -25,7 +25,9 @@ const logger           = require('../config/logger');
 const { sanitize }     = require('../utils/logSanitizer');
 const { getHandler }   = require('../bot/dispatcher');
 const { ESTADOS }      = require('../bot/constants');
+const { esAsesorIntent, esAgradecimientoIntent, detectarArea } = require('../bot/nlu');
 const { detectarEscenario, formatearHorarios, proximoDiaHabil } = require('../utils/turnosHorarios');
+const { interpolarVars, nombreLimpio } = require('../utils/vars');
 
 const MSG_DEFAULT_FESTIVO        = '¡Hola! 👋 Hoy es día festivo en {empresa}. El equipo de {area} retoma actividades el {proximo_dia_habil}. Disculpa el inconveniente — escríbenos entonces y te atenderemos con gusto.\n\n🕐 Horarios habituales:\n{horarios_atencion}';
 const MSG_DEFAULT_FUERA_HORARIO  = '¡Hola! 👋 Gracias por contactar a {empresa}. En este momento el equipo de {area} no está disponible.\n\n🕐 Horarios de atención:\n{horarios_atencion}\n\nTu mensaje quedó registrado y te responderemos en cuanto retomemos actividades. ¡Hasta pronto!';
@@ -116,7 +118,8 @@ async function procesar(input, io) {
     conversacion,
     usuario,
     io,
-    input.empresa_preconfigurada || false
+    input.empresa_preconfigurada || false,
+    input.tipo || 'text'
   );
   return resultado
     ? { ...resultado, mensaje_id, conversacion }
@@ -147,14 +150,16 @@ function _esNombreCrudo(nombre) {
  */
 async function _upsertUsuario({ canal, user_id, nombre, username }) {
   const { rows } = await usuarioRepo.findByCanal(canal, user_id);
+  const telefono = canal === 'whatsapp' ? user_id : null;
+
   if (rows.length > 0) {
     const stored = rows[0];
     // Si el nombre guardado ya es real, preservarlo. Solo actualizar si era un ID crudo.
     const nombreFinal = !_esNombreCrudo(stored.nombre) ? stored.nombre : nombre;
-    await usuarioRepo.update(stored.id, nombreFinal, username || stored.username, null);
+    await usuarioRepo.update(stored.id, nombreFinal, username || stored.username, telefono);
     return stored;
   }
-  return (await usuarioRepo.create(canal, user_id, nombre, username, null)).rows[0];
+  return (await usuarioRepo.create(canal, user_id, nombre, username, telefono)).rows[0];
 }
 
 /**
@@ -187,8 +192,84 @@ async function _upsertConversacion(usuario_id, empresa_id) {
  * Despacha el mensaje al handler del estado actual y actualiza la DB.
  * @private
  */
-async function _maquinaEstados(mensaje, conversacion, usuario, io, empresaPreconfigurada) {
+// Estados del bot donde aplica el pre-check de asesor (excluye estados de espera/encuesta)
+const _ESTADOS_BOT_ACTIVOS = new Set([
+  ESTADOS.ABIERTA, ESTADOS.INICIO, ESTADOS.SELECCION_EMPRESA,
+  ESTADOS.MENU_TIPO_CLIENTE, ESTADOS.IDENTIFICACION_DATOS,
+  ESTADOS.CONFIRMAR_CUENTA, ESTADOS.SELECCION_SERVICIO,
+  ESTADOS.MENU_AUTOSERVICIO, ESTADOS.OTRA_CONSULTA,
+]);
+
+async function _maquinaEstados(mensaje, conversacion, usuario, io, empresaPreconfigurada, tipo = 'text') {
   try {
+    // ── Pre-check universal: intenciones globales ──────────────────────────────
+    // Solo se evalúan intenciones (NLU) si el cliente TECLEÓ un mensaje.
+    // Si seleccionó un botón (tipo !== 'text'), delegamos el payload directamente al handler
+    // para evitar que el payload accidentalmente dispare una intención global.
+    if (_ESTADOS_BOT_ACTIVOS.has(conversacion.estado) && tipo === 'text') {
+      const asesor = await esAsesorIntent(mensaje, conversacion.empresa_id || 'fibratec');
+      if (asesor) {
+        const { AREAS } = require('../bot/keyboards');
+        const respuesta = '🧑‍💼 Entendido, quieres hablar con un asesor.\n\n¿Con qué área quieres hablar?\n\nToca una opción o escribe el nombre del área:';
+        await conversacionRepo.updateEstado(conversacion.id, ESTADOS.SELECCION_AREA);
+        await mensajeRepo.create(conversacion.id, 'bot', respuesta);
+        return { texto: respuesta, conversacion_id: conversacion.id, teclado: AREAS };
+      }
+
+      // ── Pre-check universal: agradecimiento y despedida ──────────────────────
+      const agradecimiento = await esAgradecimientoIntent(mensaje, conversacion.empresa_id || 'fibratec');
+      if (agradecimiento) {
+        const { getTexto } = require('../../services/plantillas.service');
+        const respuesta = await getTexto('agradecimiento_despedida', conversacion.empresa_id);
+        await conversacionRepo.updateEstado(conversacion.id, ESTADOS.CERRADA);
+        await mensajeRepo.create(conversacion.id, 'bot', respuesta);
+        return {
+          mensaje_id,
+          conversacion_id: conversacion.id,
+          texto: respuesta,
+          conversacion,
+        };
+      }
+      
+      // ── Pre-check universal: Intenciones de Áreas (Ventas, Soporte, etc) ───
+      // Permite que si el cliente menciona un área en cualquier momento del flujo, 
+      // salte directamente a la transferencia, SIEMPRE Y CUANDO no sea una opción válida del menú actual.
+      const areaMatch = await detectarArea(mensaje, conversacion.empresa_id || 'fibratec');
+      if (areaMatch) {
+        const parsers = require('../bot/parsers');
+        let esOpcionValidaDelMenu = false;
+
+        switch (conversacion.estado) {
+          case ESTADOS.MENU_AUTOSERVICIO:
+            if (parsers.parseAutoservicio(mensaje)) esOpcionValidaDelMenu = true;
+            break;
+          case ESTADOS.OTRA_CONSULTA:
+            if (parsers.parseOtraConsulta(mensaje)) esOpcionValidaDelMenu = true;
+            break;
+          case ESTADOS.IDENTIFICACION_DATOS:
+            // Solo aplicamos a fase 1 (tipo identificacion). En fase 2, el cliente escribe su dato (ej. Juan Ventas).
+            // Para no complicarlo, desactivamos el hijack de áreas en la fase 2 si no es obvio, 
+            // pero lo más seguro es revisar si el parser coincide:
+            if (parsers.parseTipoIdentificacion(mensaje)) esOpcionValidaDelMenu = true;
+            break;
+          case ESTADOS.SELECCION_SERVICIO:
+            if (parsers.parseNumeroServicio(mensaje, 20) !== null) esOpcionValidaDelMenu = true;
+            break;
+          case ESTADOS.MENU_TIPO_CLIENTE:
+            if (parsers.parseTipoCliente(mensaje)) esOpcionValidaDelMenu = true;
+            break;
+          case ESTADOS.CONFIRMAR_CUENTA:
+            if (parsers.parseConfirmarCuenta(mensaje)) esOpcionValidaDelMenu = true;
+            break;
+        }
+
+        if (!esOpcionValidaDelMenu) {
+          conversacion.estado = ESTADOS.SELECCION_AREA; // Forzar el handler de selección
+          await conversacionRepo.updateEstado(conversacion.id, ESTADOS.SELECCION_AREA);
+        }
+      }
+    }
+
     const handler = getHandler(conversacion.estado);
     if (!handler) {
       logger.warn(`[BOT SERVICE] Estado desconocido: "${conversacion.estado}" — ignorando.`);
@@ -253,16 +334,32 @@ async function _checkEscenarioHorario(conversacion, input, io) {
       ? (configMap.msg_festivo || MSG_DEFAULT_FESTIVO)
       : (configMap.msg_fuera_horario || MSG_DEFAULT_FUERA_HORARIO);
 
-    const texto = plantilla
-      .replace(/\{horarios_atencion\}/g, horarios)
-      .replace(/\{proximo_dia_habil\}/g, proximo)
-      .replace(/\{area\}/g,    conversacion.departamento || '')
-      .replace(/\{empresa\}/g, empresaId);
+    const texto = interpolarVars(plantilla, {
+      nombre_cliente:    nombreLimpio(input.nombre),
+      empresa:           empresaId,
+      area:              conversacion.departamento || '',
+      horarios_atencion: horarios,
+      proximo_dia_habil: proximo,
+    });
 
     // Lazy require para romper la dependencia circular adapters ↔ bot.service
     const { enviarMensaje } = require('../adapters');
     await enviarMensaje(input.canal || 'telegram', input.user_id, texto, empresaId);
-    await mensajeRepo.create(conversacion.id, 'bot', texto);
+    const { rows: [msgRow] } = await mensajeRepo.create(conversacion.id, 'bot', texto);
+
+    if (io) {
+      const { emitToConv } = require('../utils/rooms');
+      emitToConv(io, conversacion.departamento, 'nuevo_mensaje', {
+        mensaje_id:      msgRow?.id,
+        conversacion_id: conversacion.id,
+        usuario_id:      conversacion.usuario_id,
+        empresa_id:      empresaId,
+        mensaje:         texto,
+        tipo:            'text',
+        remitente:       'bot',
+        fecha:           new Date(),
+      });
+    }
 
     // Cerrar la conversación: próximo mensaje del cliente = sesión nueva
     await db.query(

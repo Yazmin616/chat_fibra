@@ -15,18 +15,15 @@ const mensajeRepo          = require('../../repositories/mensaje.repository');
 const { parseAutoservicio }  = require('../parsers');
 const { ESTADOS, DEPARTAMENTOS } = require('../constants');
 const { ConversacionMeta }   = require('../conversacion.meta');
-const {
-  AREAS,
-  TIPO_IDENTIFICACION,
-  getAutoservicioKeyboard,
-  getOtraConsultaKeyboard,
-  generarTecladoServicios,
-} = require('../keyboards');
+const keyboards = require('../keyboards');
+const { detectarTodasCoincidentes } = require('../nlu');
+
+const INTENTOS_MAX = 3;
 
 async function handle(mensaje, conversacion) {
   const opcion = parseAutoservicio(mensaje);
   const meta   = new ConversacionMeta(conversacion.metadata);
-  const teclado = getAutoservicioKeyboard(meta.toJSON());
+  const teclado = await keyboards.getAutoservicioKeyboard(meta.toJSON(), conversacion.empresa_id);
 
   if (opcion === 'consulta_ajena') {
     await conversacionRepo.updateMetadata(conversacion.id, {
@@ -37,7 +34,7 @@ async function handle(mensaje, conversacion) {
     return {
       respuesta:   '👥 De acuerdo. ¿Con qué dato identifico a la persona?',
       nuevoEstado: ESTADOS.IDENTIFICACION_DATOS,
-      teclado:     TIPO_IDENTIFICACION,
+      teclado: await keyboards.get('TIPO_IDENTIFICACION', conversacion.empresa_id),
     };
   }
 
@@ -47,13 +44,65 @@ async function handle(mensaje, conversacion) {
     return {
       respuesta:   `🔄 ¿Cuál servicio deseas consultar?\n\n${listaTexto}`,
       nuevoEstado: ESTADOS.SELECCION_SERVICIO,
-      teclado:     generarTecladoServicios(servicios),
+      teclado:     keyboards.generarTecladoServicios(servicios),
     };
   }
 
   if (!opcion) {
+    // NLU: analizar texto libre antes de declarar la opción como no reconocida
+    const empresa_id   = conversacion.empresa_id || '__todas__';
+    const coincidentes = await detectarTodasCoincidentes(mensaje, empresa_id);
+
+    if (coincidentes.length === 1) {
+      const { intencion } = coincidentes[0];
+      if (intencion === 'asesor') {
+        return {
+          respuesta:   '🧑‍💼 ¿Con qué área deseas hablar?',
+          nuevoEstado: ESTADOS.SELECCION_AREA,
+          teclado: await keyboards.get('AREAS', conversacion.empresa_id),
+        };
+      }
+      if (intencion === 'soporte') {
+        return _escalar(conversacion, DEPARTAMENTOS.SOPORTE,
+          `🔧 Entendí que tienes un problema técnico.\n\nTe conectamos con *${DEPARTAMENTOS.SOPORTE}*. Describe tu problema y un asesor te atenderá pronto. 🙏`
+        );
+      }
+      if (intencion === 'cobranza') {
+        return _escalar(conversacion, DEPARTAMENTOS.COBRANZA,
+          `💰 Entendí que tu consulta es sobre pagos o saldos.\n\nTe conectamos con *${DEPARTAMENTOS.COBRANZA}*. Un asesor te atenderá en breve. 🙏`
+        );
+      }
+      if (intencion === 'ventas') {
+        return _escalar(conversacion, DEPARTAMENTOS.VENTAS,
+          `🆕 Entendí que quieres información sobre planes o contratos.\n\nTe conectamos con *${DEPARTAMENTOS.VENTAS}*. ¡Pronto un asesor te contactará! 🙏`
+        );
+      }
+    }
+
+    if (coincidentes.length >= 2) {
+      const areas    = coincidentes.filter(i => i.intencion !== 'asesor');
+      const paraMenu = areas.length >= 2 ? areas : coincidentes;
+      return {
+        respuesta:   '🤔 Tu mensaje puede referirse a varias cosas. ¿Con cuál puedo ayudarte?',
+        nuevoEstado: conversacion.estado,
+        teclado:     keyboards.generarTecladoAmbiguo(paraMenu),
+      };
+    }
+
+    // Sin coincidencias: contar intentos y escalar tras INTENTOS_MAX
+    meta.intentos_fallidos = (meta.intentos_fallidos || 0) + 1;
+    await conversacionRepo.updateMetadata(conversacion.id, meta.toJSON());
+
+    if (meta.intentos_fallidos >= INTENTOS_MAX) {
+      return {
+        respuesta:   '🧑‍💼 Parece que necesitas ayuda con algo específico. Te conecto con un asesor.\n\n¿Con qué área quieres hablar?',
+        nuevoEstado: ESTADOS.SELECCION_AREA,
+        teclado: await keyboards.get('AREAS', conversacion.empresa_id),
+      };
+    }
+
     return {
-      respuesta:   '⚠️ Opción no reconocida. ¿En qué puedo ayudarte?',
+      respuesta:   '⚠️ No entendí. ¿En qué puedo ayudarte?\n\nToca una opción o escríbeme tu consulta.',
       nuevoEstado: conversacion.estado,
       teclado,
     };
@@ -75,7 +124,7 @@ async function handle(mensaje, conversacion) {
     return {
       respuesta:   '🧑‍💼 ¿Con qué área deseas hablar?',
       nuevoEstado: ESTADOS.SELECCION_AREA,
-      teclado:     AREAS,
+      teclado: await keyboards.get('AREAS', conversacion.empresa_id),
     };
   }
 
@@ -85,7 +134,7 @@ async function handle(mensaje, conversacion) {
     return {
       respuesta:   _formatDeuda(servicio) + '\n\n¿Deseas realizar otra consulta?',
       nuevoEstado: ESTADOS.OTRA_CONSULTA,
-      teclado:     getOtraConsultaKeyboard(meta.toJSON()),
+      teclado:     await keyboards.getOtraConsultaKeyboard(meta.toJSON(), conversacion.empresa_id),
     };
   }
 
@@ -93,7 +142,7 @@ async function handle(mensaje, conversacion) {
     return {
       respuesta:   _formatPago(servicio) + '\n\n¿Deseas realizar otra consulta?',
       nuevoEstado: ESTADOS.OTRA_CONSULTA,
-      teclado:     getOtraConsultaKeyboard(meta.toJSON()),
+      teclado:     await keyboards.getOtraConsultaKeyboard(meta.toJSON(), conversacion.empresa_id),
     };
   }
 }

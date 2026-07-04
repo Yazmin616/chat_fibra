@@ -534,10 +534,18 @@ async function _procesarWhatsapp(payload, io) {
 
       for (const msg of value.messages || []) {
         const contact = value.contacts?.find(c => c.wa_id === msg.from) || {};
+        
+        // FIX: En México, WhatsApp Webhooks inserta un '1' extra (521...)
+        // Removemos el '1' para evitar el error 131030 en números de prueba
+        if (msg.from && msg.from.startsWith('521') && msg.from.length === 13) {
+          msg.from = '52' + msg.from.substring(3);
+        }
+
         const nombre  = contact.profile?.name || msg.from;
 
         let mensajeTexto   = null;
         let mensajeDisplay = null;
+        let tipo           = 'text';
 
         if (msg.type === 'text') {
           mensajeTexto = msg.text?.body || '';
@@ -550,9 +558,11 @@ async function _procesarWhatsapp(payload, io) {
           if (ir.type === 'button_reply') {
             mensajeTexto   = ir.button_reply.id;
             mensajeDisplay = ir.button_reply.title;
+            tipo           = 'button';
           } else if (ir.type === 'list_reply') {
             mensajeTexto   = ir.list_reply.id;
             mensajeDisplay = ir.list_reply.title;
+            tipo           = 'list';
           }
 
         } else if (msg.type === 'location') {
@@ -678,6 +688,7 @@ async function _procesarWhatsapp(payload, io) {
           empresa_id,
           mensaje:         mensajeTexto,
           mensaje_display: mensajeDisplay,
+          tipo,
           wamid_entrante:  msg.id,          // ID del mensaje del cliente → para read receipts
         }, io);
       }
@@ -728,15 +739,18 @@ async function _procesarMessenger(payload, io) {
       const psid = event.sender.id;
       let mensajeTexto   = null;
       let mensajeDisplay = null;
+      let tipo           = 'text';
 
       if (event.message?.quick_reply?.payload) {
         // Usuario tocó un quick reply
         mensajeTexto   = event.message.quick_reply.payload;
         mensajeDisplay = event.message.text;
+        tipo           = 'button';
       } else if (event.postback?.payload) {
         // Usuario tocó un botón postback
         mensajeTexto   = event.postback.payload;
         mensajeDisplay = event.postback.title;
+        tipo           = 'button';
       } else if (event.message?.text) {
         mensajeTexto = event.message.text;
       } else if (event.message?.attachments?.[0]?.type === 'location') {
@@ -776,6 +790,7 @@ async function _procesarMessenger(payload, io) {
         empresa_id,
         mensaje:         mensajeTexto,
         mensaje_display: mensajeDisplay,
+        tipo,
       }, io);
     }
   }
@@ -972,6 +987,7 @@ async function _enviarAlBot(input, io) {
       const nuevaConvId   = resultado.conversacion_id;
       const nuevaDepto    = resultado.departamento;
       if (nuevaDepto && nuevaConvId && Number(nuevaConvId) !== Number(conversacion.id)) {
+        logger.info(`[META] Emitiendo conversacion_actualizada para nuevaConvId=${nuevaConvId} a depto=${nuevaDepto}`);
         emitToConv(io, nuevaDepto, 'conversacion_actualizada', {
           id:         nuevaConvId,
           empresa_id: conversacion.empresa_id,
@@ -983,6 +999,17 @@ async function _enviarAlBot(input, io) {
 
     if (texto) {
       await enviarMensajeMeta(input.canal, input.user_id, texto, input.empresa_id, teclado);
+      if (io) {
+        // Emitimos la respuesta del bot para que el CRM (admin o ventas) la vea en tiempo real
+        const dept = resultado.departamento || conversacion.departamento;
+        emitToConv(io, dept, 'nuevo_mensaje', {
+          conversacion_id: resultado.conversacion_id,
+          mensaje:         texto,
+          tipo:            'text',
+          remitente:       'bot',
+          fecha:           new Date(),
+        });
+      }
     }
   } catch (err) {
     logger.error(`[META/${input.canal.toUpperCase()}] Error procesando mensaje:`, { error: err.message });
@@ -1103,4 +1130,135 @@ async function enviarStickerMeta(external_id, empresa_id, fileBuffer, pack, file
   return _sendSticker(mediaId);
 }
 
-module.exports = { iniciarMeta, enviarMensajeMeta, enviarAccionEscribiendoMeta, resolveWaMediaUrl, enviarStickerMeta };
+// ── Envío de media saliente (imagen / documento) ────────────────────────────
+
+/**
+ * Envía un archivo (imagen o documento) al cliente por WhatsApp, Messenger o Instagram.
+ *
+ * WhatsApp: sube el buffer al Media API → obtiene media_id → envía mensaje con media_id.
+ * Messenger / Instagram: sube el buffer como adjunto multipart al Messenger Platform.
+ *
+ * @param {'whatsapp'|'facebook'|'instagram'} canal
+ * @param {string} external_id
+ * @param {Buffer} buffer
+ * @param {'image'|'document'} tipo
+ * @param {string} caption           - Pie de foto (vacío = sin caption).
+ * @param {string} empresa_id
+ * @param {string} [filename]        - Nombre de archivo para el destinatario.
+ * @param {string} [mimetype]        - MIME del buffer (se infiere del tipo si falta).
+ * @returns {Promise<{ok: boolean}>}
+ */
+async function enviarMediaMeta(canal, external_id, buffer, tipo, caption, empresa_id, filename = 'archivo', mimetype = '') {
+  const cfg = META_CONFIG[empresa_id];
+  if (!cfg?.access_token) {
+    logger.warn(`[META MEDIA OUT] Sin credenciales para empresa="${empresa_id}" canal="${canal}"`);
+    return { ok: false };
+  }
+
+  // Inferir MIME si no viene explícito
+  const mime = mimetype || (tipo === 'document' ? 'application/octet-stream' : 'image/jpeg');
+
+  try {
+    // ── WhatsApp ───────────────────────────────────────────────────────────────
+    if (canal === 'whatsapp') {
+      if (!cfg.whatsapp_phone_id) {
+        logger.warn(`[META MEDIA OUT/WA] Sin whatsapp_phone_id para empresa="${empresa_id}"`);
+        return { ok: false };
+      }
+
+      // 1. Subir buffer al Media API
+      const uploadForm = new FormData();
+      uploadForm.append('messaging_product', 'whatsapp');
+      uploadForm.append('type', mime);
+      uploadForm.append('file', new Blob([buffer], { type: mime }), filename);
+
+      const uploadRes = await fetch(`${GRAPH_URL}/${cfg.whatsapp_phone_id}/media`, {
+        method:  'POST',
+        headers: { 'Authorization': `Bearer ${cfg.access_token}` },
+        body:    uploadForm,
+      });
+
+      if (!uploadRes.ok) {
+        const err = await uploadRes.json().catch(() => ({}));
+        logger.error(`[META MEDIA OUT/WA] Upload falló ${uploadRes.status}:`, err?.error?.message || err);
+        return { ok: false };
+      }
+
+      const { id: media_id } = await uploadRes.json().catch(() => ({}));
+      if (!media_id) {
+        logger.error('[META MEDIA OUT/WA] Upload no devolvió media_id');
+        return { ok: false };
+      }
+
+      // 2. Enviar mensaje con media_id
+      const waType  = tipo === 'document' ? 'document' : 'image';
+      const waMedia = {
+        id: media_id,
+        ...(caption                            ? { caption }   : {}),
+        ...(tipo === 'document' && filename    ? { filename }  : {}),
+      };
+
+      const sendRes = await fetch(`${GRAPH_URL}/${cfg.whatsapp_phone_id}/messages`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${cfg.access_token}` },
+        body:    JSON.stringify({
+          messaging_product: 'whatsapp',
+          to:                external_id,
+          type:              waType,
+          [waType]:          waMedia,
+        }),
+      });
+
+      if (!sendRes.ok) {
+        const err = await sendRes.json().catch(() => ({}));
+        logger.error(`[META MEDIA OUT/WA] Send falló ${sendRes.status}:`, err?.error?.message || err);
+        return { ok: false };
+      }
+
+      return { ok: true };
+    }
+
+    // ── Messenger / Instagram ──────────────────────────────────────────────────
+    const token = (canal === 'instagram' && cfg.instagram_access_token)
+      ? cfg.instagram_access_token
+      : cfg.page_access_token;
+
+    if (!token) {
+      logger.warn(`[META MEDIA OUT] Sin token para canal="${canal}" empresa="${empresa_id}"`);
+      return { ok: false };
+    }
+
+    const attType = tipo === 'document' ? 'file' : 'image';
+
+    const msgForm = new FormData();
+    msgForm.append('recipient', JSON.stringify({ id: external_id }));
+    msgForm.append('message',   JSON.stringify({
+      attachment: { type: attType, payload: { is_reusable: true } },
+    }));
+    msgForm.append('filedata', new Blob([buffer], { type: mime }), filename);
+
+    const msgRes = await fetch(`${GRAPH_URL}/me/messages`, {
+      method:  'POST',
+      headers: { 'Authorization': `Bearer ${token}` },
+      body:    msgForm,
+    });
+
+    if (!msgRes.ok) {
+      const err = await msgRes.json().catch(() => ({}));
+      logger.error(`[META MEDIA OUT/${canal.toUpperCase()}] Error ${msgRes.status}:`, err?.error?.message || err);
+      return { ok: false };
+    }
+
+    // Caption como mensaje de texto siguiente (Messenger no admite caption en adjunto)
+    if (caption) {
+      await enviarMensajeMeta(canal, external_id, caption, empresa_id).catch(() => {});
+    }
+
+    return { ok: true };
+  } catch (err) {
+    logger.error('[META MEDIA OUT] Excepción:', { error: err.message });
+    return { ok: false };
+  }
+}
+
+module.exports = { iniciarMeta, enviarMensajeMeta, enviarAccionEscribiendoMeta, resolveWaMediaUrl, enviarStickerMeta, enviarMediaMeta };

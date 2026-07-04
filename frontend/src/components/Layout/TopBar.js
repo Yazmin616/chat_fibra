@@ -1,8 +1,8 @@
 import React, { useRef, useState } from 'react';
-import { Menu, User, ChevronDown, Building2, Camera } from 'lucide-react';
+import { Menu, User, ChevronDown, Building2, Camera, Moon, Sun } from 'lucide-react';
 import { resolveAvatar, apiService } from '../../services/api';
 
-const TopBar = ({ sidebarVisible, setSidebarVisible, empresaId, setEmpresaId, user }) => {
+const TopBar = ({ sidebarVisible, setSidebarVisible, empresaId, setEmpresaId, user, darkMode, setDarkMode }) => {
   const [subiendo, setSubiendo] = useState(false);
   const fotoRef = useRef(null);
 
@@ -44,6 +44,13 @@ const TopBar = ({ sidebarVisible, setSidebarVisible, empresaId, setEmpresaId, us
       </div>
 
       <div className="top-right">
+        <button
+          className="icon-btn dark-toggle-btn"
+          onClick={() => setDarkMode(d => !d)}
+          title={darkMode ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
+        >
+          {darkMode ? <Sun size={18} /> : <Moon size={18} />}
+        </button>
         <div className="user-profile">
           <div
             className={`user-avatar topbar-avatar${subiendo ? ' uploading' : ''}`}

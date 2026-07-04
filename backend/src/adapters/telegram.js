@@ -24,7 +24,6 @@ const usuarioRepo      = require('../repositories/usuario.repository');
 const conversacionRepo = require('../repositories/conversacion.repository');
 const logger           = require('../config/logger');
 const { emitToConv }   = require('../utils/rooms');
-const maintenance      = require('../maintenance');
 
 /** empresa_id → instancia de Telegraf */
 const bots = new Map();
@@ -182,6 +181,34 @@ async function enviarFotoTelegram(external_id, buffer, caption, empresa_id) {
 }
 
 /**
+ * Envía un documento (PDF u otro archivo) al cliente vía Telegram desde un Buffer.
+ * @param {string} external_id
+ * @param {Buffer} buffer
+ * @param {string} caption
+ * @param {string} empresa_id
+ * @param {string} [filename]
+ * @returns {Promise<{ok: boolean, file_id: string|null}>}
+ */
+async function enviarDocumentoTelegram(external_id, buffer, caption, empresa_id, filename = 'documento') {
+  const bot = bots.get(empresa_id);
+  if (!bot) {
+    logger.warn(`[TELEGRAM DOC] No hay bot activo para "${empresa_id}"`);
+    return { ok: false, file_id: null };
+  }
+  try {
+    const msg = await bot.telegram.sendDocument(
+      external_id,
+      { source: buffer, filename },
+      caption ? { caption } : {}
+    );
+    return { ok: true, file_id: msg.document.file_id };
+  } catch (err) {
+    logger.error(`[TELEGRAM DOC ERROR] empresa=${empresa_id}:`, { error: err.message });
+    return { ok: false, file_id: null };
+  }
+}
+
+/**
  * Envía un mensaje de voz al cliente vía Telegram desde un Buffer en memoria.
  * @param {string} external_id
  * @param {Buffer} buffer      - Bytes del audio (webm/ogg/mp4).
@@ -322,12 +349,6 @@ async function _iniciarBotWebhook(empresa_id, token, io, app, webhookBase) {
  */
 async function _procesarMensaje(ctx, type, io, empresa_id) {
   try {
-    // Durante mantenimiento: informar al cliente y no procesar
-    if (maintenance.isActive()) {
-      await ctx.reply('⚙️ El sistema se encuentra en mantenimiento temporalmente. Por favor intenta más tarde.');
-      return;
-    }
-
     let mensajeTexto = '';
     let tipo         = 'text';
     let urlMedia     = null;
@@ -490,11 +511,6 @@ function _getLabelDelBoton(ctx, data) {
  */
 async function _procesarCallback(ctx, io, empresa_id) {
   try {
-    if (maintenance.isActive()) {
-      await ctx.answerCbQuery('Sistema en mantenimiento. Por favor intenta más tarde.');
-      return;
-    }
-
     const data = ctx.callbackQuery?.data;
     if (!data) return;
 
@@ -633,4 +649,4 @@ async function resolveFileLink(file_id, empresa_id) {
 process.once('SIGINT',  () => bots.forEach(bot => bot.stop('SIGINT')));
 process.once('SIGTERM', () => bots.forEach(bot => bot.stop('SIGTERM')));
 
-module.exports = { iniciarTelegram, enviarMensajeTelegram, enviarAccionEscribiendo, resolveFileLink, enviarFotoTelegram, enviarVozTelegram, enviarReaccionTelegram };
+module.exports = { iniciarTelegram, enviarMensajeTelegram, enviarAccionEscribiendo, resolveFileLink, enviarFotoTelegram, enviarVozTelegram, enviarDocumentoTelegram, enviarReaccionTelegram };

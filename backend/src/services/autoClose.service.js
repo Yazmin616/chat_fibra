@@ -16,6 +16,7 @@ const {
   minutosLaboralesTurnos,
   TZ_DEFAULT,
 } = require('../utils/turnosHorarios');
+const { interpolarVars } = require('../utils/vars');
 
 /** Minutos sin heartbeat para considerar a un agente como inactivo. */
 const INACTIVIDAD_AGENTE_MIN = 15;
@@ -43,14 +44,14 @@ const MSG_DEFAULTS = {
 
 /**
  * Sustituye las variables de plantilla por los valores reales de la conversación.
- * Variables soportadas: {nombre_cliente}, {area}, {empresa}, {nombre_agente}
  */
 function _sustituirVariables(plantilla, conv) {
-  return (plantilla || '')
-    .replace(/\{nombre_cliente\}/g, conv.cliente_nombre  || 'Cliente')
-    .replace(/\{area\}/g,           conv.departamento    || '')
-    .replace(/\{empresa\}/g,        conv.empresa_id      || '')
-    .replace(/\{nombre_agente\}/g,  conv.agente_nombre   || 'nuestro asesor');
+  return interpolarVars(plantilla, {
+    nombre_cliente: conv.cliente_nombre || '',
+    area:           conv.departamento   || '',
+    empresa:        conv.empresa_id     || '',
+    nombre_agente:  conv.agente_nombre  || '',
+  });
 }
 
 function iniciarAutoCierre(io) {
@@ -403,8 +404,11 @@ async function _cerrarHumano(conv, io, configMap = null) {
   const surveyText = _sustituirVariables(plantilla, conv);
 
   await db.query(
-    'UPDATE conversaciones SET estado=$1, es_humano=false, updated_at=NOW() WHERE id=$2',
-    [ESTADOS.ENCUESTA_AGENTE, conv.id]
+    `UPDATE conversaciones
+     SET estado=$1, es_humano=false,
+         tipo_cierre='automatico', comentario_cierre=$2, cerrado_en=NOW(), updated_at=NOW()
+     WHERE id=$3`,
+    [ESTADOS.ENCUESTA_AGENTE, 'Cerrado automáticamente por inactividad del cliente', conv.id]
   );
   await mensajeRepo.create(conv.id, 'sistema_success', bannerMsg);
   await mensajeRepo.create(conv.id, 'bot', surveyText);

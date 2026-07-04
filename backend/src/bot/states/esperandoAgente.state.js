@@ -11,7 +11,7 @@
  * @param {object} conversacion
  * @returns {{ respuesta: string, nuevoEstado: string }}
  */
-function handle(_mensaje, conversacion) {
+async function handle(_mensaje, conversacion) {
   const area = conversacion.departamento || 'nuestro equipo';
   return {
     respuesta:   `⏳ Tu solicitud está en la fila de *${area}*.\n\nNo te preocupes, un asesor revisará todos tus mensajes al conectarse. Por favor no cierres esta conversación.`,
