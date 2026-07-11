@@ -12,9 +12,11 @@ const { parsePuntuacion } = require('../parsers');
 const { ESTADOS }         = require('../constants');
 
 const RESPUESTAS = {
-  Bien:       '¡Gracias por tu calificación! 😊 Nos alegra haber podido ayudarte. ¡Que tengas un excelente día!',
-  Regular:    'Gracias por tu opinión 🙏. Tomaremos nota para seguir mejorando nuestro servicio. ¡Hasta pronto!',
-  Mal:        'Lamentamos no haber cumplido tus expectativas 😔. Tu comentario es muy valioso y nos ayuda a mejorar. ¡Gracias por respondernos!',
+  '5': '¡Muchas gracias por tu calificación! 🌟 Nos alegra mucho saber que tu experiencia fue excelente. ¡Que tengas un gran día!',
+  '4': '¡Gracias por tu calificación! 😊 Nos alegra haber podido ayudarte. ¡Que tengas un excelente día!',
+  '3': 'Gracias por tu opinión 🙏. Tomaremos nota para seguir mejorando nuestro servicio. ¡Hasta pronto!',
+  '2': 'Lamentamos no haber cumplido tus expectativas 😔. Tu comentario es muy valioso y nos ayuda a mejorar. ¡Gracias por respondernos!',
+  '1': 'Lamentamos mucho tu mala experiencia 😔. Trabajaremos duro para mejorar. ¡Gracias por respondernos!',
   Desconocida: 'Gracias por tu respuesta. ¡Hasta pronto! 👋',
 };
 

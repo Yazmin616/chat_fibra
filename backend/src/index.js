@@ -14,7 +14,7 @@
  * los controllers puedan acceder a ella via `req.app.get('io')` sin acoplamiento global.
  */
 
-require('dotenv').config();
+require('dotenv').config(); // Trigger nodemon
 const path        = require('path');
 const fs          = require('fs');
 const express     = require('express');
@@ -47,6 +47,8 @@ const permisosRoutes         = require('./routes/permisos.routes');
 const rolTemplateRoutes      = require('./routes/rolTemplate.routes');
 const palabrasClaveRoutes    = require('./routes/palabrasClave.routes');
 const flujoRoutes            = require('./routes/flujo.routes');
+const plantillasMetaRoutes   = require('./routes/plantillasMeta.routes');
+const areasSolucionesRoutes  = require('./routes/areasSoluciones.routes');
 
 const app    = express();
 const server = http.createServer(app);
@@ -151,7 +153,8 @@ app.use((req, res, next) => {
              || req.path === '/'
              || req.path === '/health'
              || req.path.startsWith('/ti/')
-             || req.path.startsWith('/meta/webhook'); // webhooks siguen vivos durante mantenimiento
+             || req.path.startsWith('/meta/webhook')
+             || req.path.startsWith('/telegram/webhook'); // webhooks siguen vivos durante mantenimiento
   if (libre) return next();
   res.status(503).json({ error: 'Sistema en mantenimiento. Por favor espere.', mantenimiento: true });
 });
@@ -161,17 +164,54 @@ io.on('connection', (socket) => {
   logger.info('Cliente conectado', { socketId: socket.id });
 
   // El agente emite este evento al iniciar sesión para unirse a su sala
-  socket.on('agente:join', ({ rol, area, id }) => {
+  socket.on('agente:join', async ({ rol, area, id }) => {
     if (id) {
       socket.agenteId = id;
       require('./services/pollingService').setAgentOnline(id);
+      
+      try {
+        const { rows } = await require('./repositories/agente.repository').findById(id);
+        if (rows.length > 0) {
+          const agente = rows[0];
+          if (agente.rol === 'admin') {
+            socket.join('admin');
+            logger.info(`Socket ${socket.id} (Agent ${id}) joined room: admin`);
+          } else {
+            const permisosRepo = require('./repositories/permisos.repository');
+            const permisos = await permisosRepo.getPermisos(id);
+            if (permisos && permisos.areas && permisos.areas.length > 0) {
+              // Extraer todas las áreas únicas de todas las empresas a las que tiene acceso
+              const allAreas = new Set();
+              permisos.areas.forEach(p => {
+                if (p.areas) p.areas.forEach(a => allAreas.add(a));
+              });
+              allAreas.forEach(a => {
+                socket.join(`area:${a}`);
+                logger.info(`Socket ${socket.id} (Agent ${id}) joined room: area:${a}`);
+              });
+              // Si tiene acceso a __todas__ las áreas, unirse también como admin
+              if (allAreas.has('__todas__')) {
+                socket.join('admin');
+                logger.info(`Socket ${socket.id} (Agent ${id}) joined room: admin (via __todas__)`);
+              }
+            } else if (agente.area) {
+              // Fallback legacy
+              socket.join(`area:${agente.area}`);
+              logger.info(`Socket ${socket.id} (Agent ${id}) joined room: area:${agente.area} (legacy)`);
+            }
+          }
+        }
+      } catch (err) {
+        logger.error(`Error joining rooms for agent ${id}:`, err);
+      }
+    } else {
+      // Legacy fallback si no hay ID
+      if (rol === 'admin') {
+        socket.join('admin');
+      } else if (area) {
+        socket.join(`area:${area}`);
+      }
     }
-    if (rol === 'admin') {
-      socket.join('admin');
-    } else if (area) {
-      socket.join(`area:${area}`);
-    }
-    logger.info(`Socket ${socket.id} joined room: ${rol === 'admin' ? 'admin' : 'area:' + area}`);
   });
 
   socket.on('disconnect', () => {
@@ -197,6 +237,8 @@ app.use('/permisos',         apiLimiter, permisosRoutes);
 app.use('/rol-template',     apiLimiter, rolTemplateRoutes);
 app.use('/palabras-clave',   apiLimiter, palabrasClaveRoutes);
 app.use('/flujos',           apiLimiter, flujoRoutes);
+app.use('/plantillas-meta',  apiLimiter, plantillasMetaRoutes);
+app.use('/areas-soluciones', apiLimiter, areasSolucionesRoutes);
 // Los webhooks de Telegram usan el webhookLimiter; Meta se registra en iniciarMeta()
 app.use('/telegram',       webhookLimiter);
 

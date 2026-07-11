@@ -32,10 +32,10 @@ const MenuButtonEditor = ({ value, onChange, onSave, onCancel, saving }) => {
         />
         <button
           onClick={() => setShowPicker(!showPicker)}
-          style={{ background: '#f1f5f9', border: '1px solid #cbd5e1', padding: '8px', borderRadius: '4px', cursor: 'pointer', color: '#475569' }}
+          style={{ background: '#f1f5f9', border: '1px solid #cbd5e1', color: '#334155', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '4px', padding: '6px 12px', borderRadius: '4px', cursor: 'pointer', fontSize: '13px' }}
           title="Añadir Emoji"
         >
-          <Smile size={18} />
+          <Smile size={14} /> Añadir Emoji
         </button>
         
         {showPicker && (

@@ -1,15 +1,21 @@
 import React from 'react';
-import { ThumbsUp, Minus, ThumbsDown } from 'lucide-react';
+import { Smile, Meh, Frown, Minus } from 'lucide-react';
 
 const CONFIG = {
-  Bien:    { bg: '#22c55e22', color: '#22c55e', Icon: ThumbsUp   },
-  Regular: { bg: '#f9731622', color: '#f97316', Icon: Minus      },
-  Mal:     { bg: '#ef444422', color: '#ef4444', Icon: ThumbsDown },
+  '5': { bg: '#dcfce7', color: '#16a34a', Icon: Smile, label: 'Excelente' },
+  '4': { bg: '#fef9c3', color: '#ca8a04', Icon: Meh, label: 'Bien' },
+  '3': { bg: '#ffedd5', color: '#f97316', Icon: Frown, label: 'Regular' },
+  '2': { bg: '#fee2e2', color: '#ef4444', Icon: Frown, label: 'Malo' },
+  '1': { bg: '#fef2f2', color: '#dc2626', Icon: Frown, label: 'Muy Malo' },
+  // Backward compatibility
+  Bien:    { bg: '#dcfce7', color: '#16a34a', Icon: Smile, label: 'Bien'   },
+  Regular: { bg: '#ffedd5', color: '#f97316', Icon: Meh, label: 'Regular'      },
+  Mal:     { bg: '#fee2e2', color: '#ef4444', Icon: Frown, label: 'Mal' },
 };
 
 const RatingBadge = ({ puntuacion }) => {
-  const cfg = CONFIG[puntuacion] || { bg: '#64748b22', color: '#64748b', Icon: Minus };
-  const { Icon } = cfg;
+  const cfg = CONFIG[puntuacion] || { bg: '#64748b22', color: '#64748b', Icon: Minus, label: puntuacion };
+  const { Icon, label } = cfg;
   return (
     <span style={{
       background:   cfg.bg,
@@ -24,7 +30,7 @@ const RatingBadge = ({ puntuacion }) => {
       gap:          4,
     }}>
       <Icon size={11} />
-      {puntuacion}
+      {label}
     </span>
   );
 };

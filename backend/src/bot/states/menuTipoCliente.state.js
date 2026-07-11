@@ -20,16 +20,18 @@ const { ESTADOS, DEPARTAMENTOS }    = require('../constants');
 const keyboards = require('../keyboards');
 const { ConversacionMeta }          = require('../conversacion.meta');
 const { normalizar, detectarTodasCoincidentes } = require('../nlu');
+const { getAreasSolucionesText }    = require('../../utils/areasSolucionesHelper');
 
 const INTENTOS_MAX = 3;
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 /** Ejecuta la acción correspondiente a una intención ya confirmada. */
-async function ejecutarIntencion({ intencion, depto }, conversacion) {
+async function ejecutarIntencion({ intencion, depto }, conversacion, io) {
   if (intencion === 'asesor') {
+    const areasInfo = await getAreasSolucionesText(conversacion.empresa_id);
     return {
-      respuesta:   '🧑‍💼 Claro, te ayudo a conectar con un asesor.\n\n¿Con qué área quieres hablar?',
+      respuesta:   `🧑‍💼 Claro, te ayudo a conectar con un asesor.\n\n¿Con qué área quieres hablar?${areasInfo}`,
       nuevoEstado: ESTADOS.SELECCION_AREA,
       teclado: await keyboards.get('AREAS', conversacion.empresa_id),
     };
@@ -44,6 +46,10 @@ async function ejecutarIntencion({ intencion, depto }, conversacion) {
       DEPARTAMENTOS.VENTAS,
     );
     const nuevaConvId = rows[0].id;
+
+    const { aplicarRoundRobin } = require('../../services/asignacion.service');
+    await aplicarRoundRobin(nuevaConvId, conversacion.empresa_id, DEPARTAMENTOS.VENTAS, io);
+
     await mensajeRepo.create(nuevaConvId, 'sistema_info', `CLIENTE EN ESPERA — ${DEPARTAMENTOS.VENTAS}`);
     await mensajeRepo.create(nuevaConvId, 'bot', confirmacion);
     return { earlyReturn: true, resultado: { texto: confirmacion, conversacion_id: nuevaConvId, departamento: DEPARTAMENTOS.VENTAS } };
@@ -60,7 +66,7 @@ async function ejecutarIntencion({ intencion, depto }, conversacion) {
 
 // ── Handler principal ─────────────────────────────────────────────────────────
 
-async function handle(mensaje, conversacion) {
+async function handle(mensaje, conversacion, usuario, io) {
   const meta = new ConversacionMeta(conversacion.metadata);
 
   // ── Etapa 1: confirmación pendiente ──────────────────────────────────────
@@ -78,7 +84,7 @@ async function handle(mensaje, conversacion) {
       meta.intencion_pendiente = null;
       meta.intentos_fallidos   = 0;
       await conversacionRepo.updateMetadata(conversacion.id, meta.toJSON());
-      return ejecutarIntencion(pending, conversacion);
+      return ejecutarIntencion(pending, conversacion, io);
     }
 
     if (esRechazar) {
@@ -108,15 +114,16 @@ async function handle(mensaje, conversacion) {
       ventas:   DEPARTAMENTOS.VENTAS,
       asesor:   null,
     };
-    return ejecutarIntencion({ intencion, depto: DEPTO_MAP[intencion] ?? null }, conversacion);
+    return ejecutarIntencion({ intencion, depto: DEPTO_MAP[intencion] ?? null }, conversacion, io);
   }
 
   // ── Etapa 3: botones del menú (parseTipoCliente) ─────────────────────────
   const tipo = parseTipoCliente(mensaje);
 
   if (tipo === 'asesor') {
+    const areasInfo = await getAreasSolucionesText(conversacion.empresa_id);
     return {
-      respuesta:   '🧑‍💼 Claro, te ayudo a conectar con un asesor.\n\n¿Con qué área quieres hablar?',
+      respuesta:   `🧑‍💼 Claro, te ayudo a conectar con un asesor.\n\n¿Con qué área quieres hablar?${areasInfo}`,
       nuevoEstado: ESTADOS.SELECCION_AREA,
       teclado: await keyboards.get('AREAS', conversacion.empresa_id),
     };
@@ -131,7 +138,7 @@ async function handle(mensaje, conversacion) {
   }
 
   if (tipo === 'contratar') {
-    return ejecutarIntencion({ intencion: 'ventas', depto: DEPARTAMENTOS.VENTAS }, conversacion);
+    return ejecutarIntencion({ intencion: 'ventas', depto: DEPARTAMENTOS.VENTAS }, conversacion, io);
   }
 
   // ── Etapa 4: NLU por texto libre ─────────────────────────────────────────
@@ -142,8 +149,9 @@ async function handle(mensaje, conversacion) {
     const match = coincidentes[0];
 
     if (match.intencion === 'asesor') {
+      const areasInfo = await getAreasSolucionesText(conversacion.empresa_id);
       return {
-        respuesta:   '🧑‍💼 Entendido, quieres hablar con un asesor.\n\n¿Con qué área quieres hablar?',
+        respuesta:   `🧑‍💼 Entendido, quieres hablar con un asesor.\n\n¿Con qué área quieres hablar?${areasInfo}`,
         nuevoEstado: ESTADOS.SELECCION_AREA,
         teclado: await keyboards.get('AREAS', conversacion.empresa_id),
       };
@@ -179,8 +187,9 @@ async function handle(mensaje, conversacion) {
   await conversacionRepo.updateMetadata(conversacion.id, meta.toJSON());
 
   if (meta.intentos_fallidos >= INTENTOS_MAX) {
+    const areasInfo = await getAreasSolucionesText(conversacion.empresa_id);
     return {
-      respuesta:   '🧑‍💼 Parece que tienes dudas. Te pongo en contacto con un asesor.\n\n¿Con qué área quieres hablar?',
+      respuesta:   `🧑‍💼 Parece que tienes dudas. Te pongo en contacto con un asesor.\n\n¿Con qué área quieres hablar?${areasInfo}`,
       nuevoEstado: ESTADOS.SELECCION_AREA,
       teclado: await keyboards.get('AREAS', conversacion.empresa_id),
     };

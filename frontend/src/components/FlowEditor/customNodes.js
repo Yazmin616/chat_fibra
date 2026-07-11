@@ -1,122 +1,256 @@
 import React from 'react';
 import { Handle, Position } from 'reactflow';
-import { MessageSquare, HelpCircle, GitBranch, Zap, Brain, Flag } from 'lucide-react';
+import {
+  MessageSquare, List, Clock, AlarmClock, GitBranch,
+  Globe, Tag, Tags, MoveRight, Users, Bell,
+  Trash2, XCircle, Shield, Zap, Flag, Brain,
+} from 'lucide-react';
 
+/**
+ * Catálogo de tipos de nodo disponibles en el editor.
+ * Cada tipo define: icono, etiqueta, descripción, color de cabecera,
+ * y categoría (para agrupar en la paleta).
+ */
 export const TIPO_CONFIG = {
+  // ── Mensajería ──────────────────────────────────────────
   mensaje: {
-    icon: MessageSquare, label: 'Mensaje',   cls: 'mensaje',
-    desc: 'Envía texto al cliente',
-    color: '#4f46e5', lightBg: '#eef2ff', border: '#a5b4fc', ring: 'rgba(99,102,241,0.2)',
+    icon: MessageSquare, label: 'Mensaje',
+    desc: 'Envía mensaje al cliente',
+    color: '#0d9488', headerBg: '#0d9488', bodyBg: '#fff',
+    border: '#0d9488', cat: 'Mensajería',
   },
-  pregunta: {
-    icon: HelpCircle,    label: 'Pregunta',  cls: 'pregunta',
-    desc: 'Presenta opciones al cliente',
-    color: '#16a34a', lightBg: '#f0fdf4', border: '#86efac', ring: 'rgba(22,163,74,0.2)',
+  lista_opciones: {
+    icon: List, label: 'Lista de opciones',
+    desc: 'Muestra opciones al usuario',
+    color: '#0d9488', headerBg: '#0d9488', bodyBg: '#fff',
+    border: '#0d9488', cat: 'Mensajería',
+  },
+
+  // ── Lógica de flujo ─────────────────────────────────────
+  esperar: {
+    icon: Clock, label: 'Esperar',
+    desc: 'Pausa el flujo un tiempo',
+    color: '#f59e0b', headerBg: '#f59e0b', bodyBg: '#fff',
+    border: '#f59e0b', cat: 'Lógica',
+  },
+  esperar_mensaje: {
+    icon: AlarmClock, label: 'Esperar mensaje',
+    desc: 'Espera un mensaje del usuario',
+    color: '#f59e0b', headerBg: '#f59e0b', bodyBg: '#fff',
+    border: '#f59e0b', cat: 'Lógica',
   },
   condicion: {
-    icon: GitBranch,     label: 'Condición', cls: 'condicion',
-    desc: 'Bifurca según una condición',
-    color: '#d97706', lightBg: '#fffbeb', border: '#fcd34d', ring: 'rgba(217,119,6,0.2)',
-  },
-  accion: {
-    icon: Zap,           label: 'Acción',    cls: 'accion',
-    desc: 'Ejecuta una acción del sistema',
-    color: '#dc2626', lightBg: '#fff1f2', border: '#fca5a5', ring: 'rgba(220,38,38,0.2)',
+    icon: GitBranch, label: 'Condiciones',
+    desc: 'Evalúa condiciones y ramifica',
+    color: '#8b5cf6', headerBg: '#8b5cf6', bodyBg: '#fff',
+    border: '#8b5cf6', cat: 'Lógica',
   },
   intencion: {
-    icon: Brain,         label: 'Intención', cls: 'intencion',
+    icon: Brain, label: 'Detectar Intención',
     desc: 'Detecta intención por texto libre',
-    color: '#7c3aed', lightBg: '#faf5ff', border: '#c4b5fd', ring: 'rgba(124,58,237,0.2)',
+    color: '#8b5cf6', headerBg: '#8b5cf6', bodyBg: '#fff',
+    border: '#8b5cf6', cat: 'Lógica',
+  },
+
+  // ── Integraciones ───────────────────────────────────────
+  api_request: {
+    icon: Globe, label: 'Api request',
+    desc: 'Petición HTTP a API externa',
+    color: '#3b82f6', headerBg: '#3b82f6', bodyBg: '#fff',
+    border: '#3b82f6', cat: 'Integraciones',
+  },
+
+  // ── CRM ─────────────────────────────────────────────────
+  etiquetar: {
+    icon: Tag, label: 'Etiquetar',
+    desc: 'Agrega etiqueta al contacto',
+    color: '#64748b', headerBg: '#64748b', bodyBg: '#fff',
+    border: '#64748b', cat: 'CRM',
+  },
+  desetiquetar: {
+    icon: Tags, label: 'Desetiquetar',
+    desc: 'Quita etiqueta al contacto',
+    color: '#64748b', headerBg: '#64748b', bodyBg: '#fff',
+    border: '#64748b', cat: 'CRM',
+  },
+  mover_etapa: {
+    icon: MoveRight, label: 'Mover a etapa',
+    desc: 'Avanza a otra etapa del flujo',
+    color: '#64748b', headerBg: '#64748b', bodyBg: '#fff',
+    border: '#64748b', cat: 'CRM',
+  },
+  asignar_equipo: {
+    icon: Users, label: 'Asignar Equipo',
+    desc: 'Asigna el contacto a un equipo',
+    color: '#dc2626', headerBg: '#dc2626', bodyBg: '#fff',
+    border: '#dc2626', cat: 'CRM',
+  },
+  notificacion_chat: {
+    icon: Bell, label: 'Notificación de Chat',
+    desc: 'Agrega una notificación al chat',
+    color: '#64748b', headerBg: '#64748b', bodyBg: '#fff',
+    border: '#64748b', cat: 'CRM',
+  },
+  eliminar_contacto: {
+    icon: Trash2, label: 'Eliminar contacto',
+    desc: 'Elimina el contacto del sistema',
+    color: '#dc2626', headerBg: '#dc2626', bodyBg: '#fff',
+    border: '#dc2626', cat: 'CRM',
+  },
+  cerrar_conversacion: {
+    icon: XCircle, label: 'Cerrar conversación',
+    desc: 'Cierra la conversación actual',
+    color: '#475569', headerBg: '#475569', bodyBg: '#fff',
+    border: '#475569', cat: 'CRM',
+  },
+
+  // ── Validaciones ────────────────────────────────────────
+  validar_banxico: {
+    icon: Shield, label: 'Validar Banxico',
+    desc: 'Valida el comprobante con Banxico',
+    color: '#0369a1', headerBg: '#0369a1', bodyBg: '#fff',
+    border: '#0369a1', cat: 'Validaciones',
+  },
+
+  // ── Especiales ──────────────────────────────────────────
+  accion: {
+    icon: Zap, label: 'Acción',
+    desc: 'Ejecuta una acción del sistema',
+    color: '#dc2626', headerBg: '#dc2626', bodyBg: '#fff',
+    border: '#dc2626', cat: 'CRM',
   },
   fin: {
-    icon: Flag,          label: 'Fin',       cls: 'fin',
-    desc: 'Cierra la conversación',
-    color: '#475569', lightBg: '#f1f5f9', border: '#cbd5e1', ring: 'rgba(71,85,105,0.2)',
+    icon: Flag, label: 'Fin',
+    desc: 'Cierra la conversación del bot',
+    color: '#475569', headerBg: '#475569', bodyBg: '#fff',
+    border: '#475569', cat: 'CRM',
   },
 };
 
+/* ── Componente genérico de nodo ─────────────────────────────────────────── */
 function FlowNode({ data, selected, tipo }) {
   const cfg    = TIPO_CONFIG[tipo] || TIPO_CONFIG.mensaje;
   const Icon   = cfg.icon;
-  const preview = data.texto || data.descripcion || data.accion || null;
-  const opciones = data.opciones || [];
+  const opciones = Array.isArray(data.opciones) ? data.opciones : [];
+  const tieneOpciones = (tipo === 'lista_opciones' || tipo === 'condicion') && opciones.length > 0;
 
   return (
     <div
-      className={`flow-node flow-node-${cfg.cls}${selected ? ' selected' : ''}`}
-      style={selected ? {
-        borderColor: cfg.color,
-        boxShadow: `0 0 0 3px ${cfg.ring}, 0 4px 16px rgba(0,0,0,0.12)`,
-      } : undefined}
+      className={`fn-card${selected ? ' fn-card--selected' : ''}`}
+      style={{
+        '--fn-color': cfg.color,
+        boxShadow: selected
+          ? `0 0 0 2px ${cfg.color}, 0 8px 24px rgba(0,0,0,0.14)`
+          : '0 2px 10px rgba(0,0,0,0.10)',
+      }}
     >
-      <Handle type="target" position={Position.Top} id="in" className="flow-handle" />
+      {/* Conector de entrada — lado izquierdo */}
+      <Handle
+        type="target"
+        position={Position.Left}
+        id="in"
+        className="fn-handle fn-handle--in"
+        style={{ top: '50%' }}
+      />
 
-      <div className="flow-node-top">
-        <div
-          className="flow-node-icon"
-          style={{ background: cfg.color }}
-        >
-          <Icon size={14} strokeWidth={2} />
+      {/* Cabecera de color */}
+      <div className="fn-header" style={{ background: cfg.color }}>
+        <div className="fn-header-icon">
+          <Icon size={14} strokeWidth={2.2} color="#fff" />
         </div>
-        <div className="flow-node-titles">
-          <span className="flow-node-type" style={{ color: cfg.color }}>
-            {cfg.label}
-          </span>
-          <span className="flow-node-label">
-            {data.label || cfg.label}
-          </span>
-        </div>
+        <span className="fn-header-label">{cfg.label}</span>
       </div>
 
-      {preview && (
-        <div className="flow-node-preview">{preview}</div>
-      )}
+      {/* Cuerpo */}
+      <div className="fn-body">
+        <div className="fn-title">{data.label || cfg.label}</div>
 
-      {tipo === 'pregunta' && opciones.length > 0 && (
-        <div className="flow-node-chips">
-          {opciones.slice(0, 3).map((op, i) => (
-            <span key={i} className="flow-node-chip">
-              {op.texto || op.valor || `Opción ${i + 1}`}
-            </span>
-          ))}
-          {opciones.length > 3 && (
-            <span className="flow-node-chip flow-node-chip-more">
-              +{opciones.length - 3}
-            </span>
-          )}
-        </div>
-      )}
+        {data.texto && (
+          <div className="fn-preview">{data.texto}</div>
+        )}
 
-      {tipo === 'pregunta' && opciones.length > 0 ? (
-        opciones.map((op, i) => (
+        {tieneOpciones ? (
+          <div className="fn-options">
+            {opciones.map((op, i) => (
+              <div key={op.valor || i} className="fn-option-row">
+                <span className="fn-option-dot" />
+                <span className="fn-option-text">
+                  {op.texto || op.valor || `Opción ${i + 1}`}
+                </span>
+                {/* Conector de salida por cada opción */}
+                <Handle
+                  type="source"
+                  position={Position.Right}
+                  id={op.valor || String(i)}
+                  className="fn-handle fn-handle--out"
+                  style={{ top: 'auto', position: 'static', transform: 'none' }}
+                />
+              </div>
+            ))}
+          </div>
+        ) : (
+          /* Conector de salida único */
           <Handle
-            key={op.valor || i}
             type="source"
-            position={Position.Bottom}
-            id={op.valor || String(i)}
-            className="flow-handle"
-            style={{ left: `${((i + 1) / (opciones.length + 1)) * 100}%` }}
+            position={Position.Right}
+            id="out"
+            className="fn-handle fn-handle--out fn-handle--single"
           />
-        ))
-      ) : (
-        <Handle type="source" position={Position.Bottom} id="out" className="flow-handle" />
-      )}
+        )}
+
+        {/* Campo adicional para acción / espera */}
+        {tipo === 'accion' && data.accion && (
+          <div className="fn-tag">⚡ {data.accion}</div>
+        )}
+        {tipo === 'esperar' && data.segundos && (
+          <div className="fn-tag">⏱ {data.segundos}s</div>
+        )}
+        {tipo === 'asignar_equipo' && data.equipo && (
+          <div className="fn-tag">👥 {data.equipo}</div>
+        )}
+        {tipo === 'api_request' && data.url && (
+          <div className="fn-tag fn-tag--url">🔗 {data.url}</div>
+        )}
+      </div>
     </div>
   );
 }
 
-export const MensajeNode   = (p) => <FlowNode {...p} tipo="mensaje"   />;
-export const PreguntaNode  = (p) => <FlowNode {...p} tipo="pregunta"  />;
-export const CondicionNode = (p) => <FlowNode {...p} tipo="condicion" />;
-export const AccionNode    = (p) => <FlowNode {...p} tipo="accion"    />;
-export const IntencionNode = (p) => <FlowNode {...p} tipo="intencion" />;
-export const FinNode       = (p) => <FlowNode {...p} tipo="fin"       />;
+/* ── Exportación de tipos ────────────────────────────────────────────────── */
+export const MensajeNode         = (p) => <FlowNode {...p} tipo="mensaje"            />;
+export const ListaOpcionesNode   = (p) => <FlowNode {...p} tipo="lista_opciones"     />;
+export const EsperarNode         = (p) => <FlowNode {...p} tipo="esperar"            />;
+export const EsperarMensajeNode  = (p) => <FlowNode {...p} tipo="esperar_mensaje"    />;
+export const CondicionNode       = (p) => <FlowNode {...p} tipo="condicion"          />;
+export const IntencionNode       = (p) => <FlowNode {...p} tipo="intencion"          />;
+export const ApiRequestNode      = (p) => <FlowNode {...p} tipo="api_request"        />;
+export const EtiquetarNode       = (p) => <FlowNode {...p} tipo="etiquetar"          />;
+export const DesetiquetarNode    = (p) => <FlowNode {...p} tipo="desetiquetar"       />;
+export const MoverEtapaNode      = (p) => <FlowNode {...p} tipo="mover_etapa"        />;
+export const AsignarEquipoNode   = (p) => <FlowNode {...p} tipo="asignar_equipo"     />;
+export const NotificacionChatNode= (p) => <FlowNode {...p} tipo="notificacion_chat"  />;
+export const EliminarContactoNode= (p) => <FlowNode {...p} tipo="eliminar_contacto"  />;
+export const CerrarConvNode      = (p) => <FlowNode {...p} tipo="cerrar_conversacion"/>;
+export const ValidarBanxicoNode  = (p) => <FlowNode {...p} tipo="validar_banxico"    />;
+export const AccionNode          = (p) => <FlowNode {...p} tipo="accion"             />;
+export const FinNode             = (p) => <FlowNode {...p} tipo="fin"                />;
 
 export const nodeTypes = {
-  mensaje:   MensajeNode,
-  pregunta:  PreguntaNode,
-  condicion: CondicionNode,
-  accion:    AccionNode,
-  intencion: IntencionNode,
-  fin:       FinNode,
+  mensaje:             MensajeNode,
+  lista_opciones:      ListaOpcionesNode,
+  esperar:             EsperarNode,
+  esperar_mensaje:     EsperarMensajeNode,
+  condicion:           CondicionNode,
+  intencion:           IntencionNode,
+  api_request:         ApiRequestNode,
+  etiquetar:           EtiquetarNode,
+  desetiquetar:        DesetiquetarNode,
+  mover_etapa:         MoverEtapaNode,
+  asignar_equipo:      AsignarEquipoNode,
+  notificacion_chat:   NotificacionChatNode,
+  eliminar_contacto:   EliminarContactoNode,
+  cerrar_conversacion: CerrarConvNode,
+  validar_banxico:     ValidarBanxicoNode,
+  accion:              AccionNode,
+  fin:                 FinNode,
 };

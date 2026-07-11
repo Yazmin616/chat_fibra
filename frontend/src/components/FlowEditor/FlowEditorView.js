@@ -13,8 +13,7 @@ import 'reactflow/dist/style.css';
 
 import {
   Save, RotateCcw, GitBranch, Building2, Globe,
-  Loader2, CheckCircle2, AlertCircle,
-  MessageSquare, HelpCircle, Zap, Brain, Flag,
+  Loader2, CheckCircle2, AlertCircle, ChevronDown,
 } from 'lucide-react';
 
 import { nodeTypes, TIPO_CONFIG } from './customNodes';
@@ -23,20 +22,38 @@ import { apiService } from '../../services/api';
 import '../../styles/flow-editor.css';
 
 /* ── Constantes ─────────────────────────────────────────────────────────── */
-const TIPO_ORDEN = ['mensaje', 'pregunta', 'condicion', 'accion', 'intencion', 'fin'];
-const TIPO_ICONS_UI = {
-  mensaje: MessageSquare, pregunta: HelpCircle, condicion: GitBranch,
-  accion:  Zap,          intencion: Brain,      fin:       Flag,
+const EDGE_DEFAULTS = {
+  type:                'smoothstep',          // líneas ortogonales — mucho más limpias
+  markerEnd:           { type: MarkerType.ArrowClosed, color: '#cbd5e1', width: 14, height: 14 },
+  style:               { stroke: '#cbd5e1', strokeWidth: 1.5 },
+  animated:            false,
+  labelStyle:          { fill: '#64748b', fontSize: 10, fontWeight: 600 },
+  labelBgStyle:        { fill: '#ffffff', fillOpacity: 0.95 },
+  labelBgPadding:      [5, 2],
+  labelBgBorderRadius: 4,
 };
 
-const EDGE_DEFAULTS = {
-  markerEnd:           { type: MarkerType.ArrowClosed, color: '#64748b' },
-  style:               { stroke: '#64748b', strokeWidth: 2 },
-  labelStyle:          { fill: '#374151', fontSize: 11, fontWeight: 600 },
-  labelBgStyle:        { fill: '#ffffff', fillOpacity: 1 },
-  labelBgPadding:      [6, 3],
-  labelBgBorderRadius: 5,
-};
+// Grupos de paleta: cada grupo tiene una categoría y una lista de tipos
+const PALETTE_GROUPS = [
+  {
+    cat: 'Mensajería',
+    tipos: ['mensaje', 'lista_opciones'],
+  },
+  {
+    cat: 'Lógica',
+    tipos: ['esperar', 'esperar_mensaje', 'condicion', 'intencion'],
+  },
+  {
+    cat: 'Integraciones',
+    tipos: ['api_request'],
+  },
+  {
+    cat: 'CRM',
+    tipos: [
+      'asignar_equipo', 'notificacion_chat', 'cerrar_conversacion', 'fin',
+    ],
+  },
+];
 
 /* ── Conversión BD ↔ React Flow ─────────────────────────────────────────── */
 function dbNodosToRF(nodos) {
@@ -54,6 +71,7 @@ function dbConexionesToRF(conexiones) {
     source:       c.source,
     target:       c.target,
     sourceHandle: c.sourceHandle || null,
+    targetHandle: c.targetHandle || null,
     label:        c.label || '',
     ...EDGE_DEFAULTS,
   }));
@@ -74,6 +92,7 @@ function rfEdgesToDb(rfEdges) {
     source:       e.source,
     target:       e.target,
     sourceHandle: e.sourceHandle || null,
+    targetHandle: e.targetHandle || null,
     label:        e.label || '',
   }));
 }
@@ -81,8 +100,51 @@ function rfEdgesToDb(rfEdges) {
 let nodeCounter = 1000;
 function newNodeId() { return `node_${++nodeCounter}`; }
 
-/* ── Componente principal ─────────────────────────────────────────────── */
+/* ── Componente: grupo de paleta colapsable ──────────────────────────────── */
+function PaletteGroup({ cat, tipos, onDragStart }) {
+  const [open, setOpen] = useState(true);
+  return (
+    <div className="fp-group">
+      <button className="fp-group-title" onClick={() => setOpen(o => !o)}>
+        {cat}
+        <ChevronDown size={12} style={{ transform: open ? 'none' : 'rotate(-90deg)', transition: 'transform .2s' }} />
+      </button>
+      {open && tipos.map(tipo => {
+        const cfg  = TIPO_CONFIG[tipo];
+        if (!cfg) return null;
+        const Icon = cfg.icon;
+        return (
+          <div
+            key={tipo}
+            className="fp-item"
+            draggable
+            onDragStart={e => onDragStart(e, tipo)}
+            title={cfg.desc}
+          >
+            <div className="fp-item-icon" style={{ background: cfg.color }}>
+              <Icon size={13} strokeWidth={2.2} color="#fff" />
+            </div>
+            <div className="fp-item-text">
+              <span className="fp-item-label">{cfg.label}</span>
+              <span className="fp-item-desc">{cfg.desc}</span>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/* ── Componente principal ──────────────────────────────────────────────── */
 export default function FlowEditorView({ empresaId, user }) {
+  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
+
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth <= 768);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
   const [nodes,    setNodes,   onNodesChange] = useNodesState([]);
   const [edges,    setEdges,   onEdgesChange] = useEdgesState([]);
   const [selected, setSelected]               = useState(null);
@@ -92,26 +154,25 @@ export default function FlowEditorView({ empresaId, user }) {
   const [dirty,    setDirty]                  = useState(false);
   const [status,   setStatus]                 = useState(null);
 
+  const [activo, setActivo] = useState(false);
+  const [flujoId, setFlujoId] = useState(null);
   const rfWrapper     = useRef(null);
   const rfInstanceRef = useRef(null);
 
-  const onInit = useCallback((instance) => {
-    rfInstanceRef.current = instance;
-  }, []);
+  const onInit = useCallback(instance => { rfInstanceRef.current = instance; }, []);
 
-  /* ── Carga el flujo ───────────────────────────────────────────────── */
+  /* ── Carga ──────────────────────────────────────────────────────── */
   const cargar = useCallback(async (eid) => {
     setLoading(true);
     try {
       const data = await apiService.getFlujo(eid || empresa);
       setNodes(dbNodosToRF(data.nodos));
       setEdges(dbConexionesToRF(data.conexiones));
+      setActivo(!!data.activo);
+      setFlujoId(data.id || null);
       setDirty(false);
       setSelected(null);
-      // Fit view después de que React renderiza los nodos
-      setTimeout(() => {
-        rfInstanceRef.current?.fitView({ padding: 0.18, duration: 400 });
-      }, 120);
+      setTimeout(() => rfInstanceRef.current?.fitView({ padding: 0.18, duration: 400 }), 150);
     } catch (e) {
       showStatus('err', 'Error al cargar flujo: ' + e.message);
     } finally {
@@ -121,12 +182,27 @@ export default function FlowEditorView({ empresaId, user }) {
 
   useEffect(() => { cargar(empresaId || empresa); }, []); // eslint-disable-line
 
-  const handleEmpresaChange = (e) => {
+  const handleToggleActivo = async () => {
+    if (!flujoId) return;
+    const nuevoEstado = !activo;
+    setLoading(true);
+    try {
+      await apiService.toggleFlujoActivo(flujoId, nuevoEstado);
+      setActivo(nuevoEstado);
+      showStatus('ok', nuevoEstado ? 'Flujo visual HABILITADO.' : 'Flujo visual DESHABILITADO. Se usa bot tradicional.');
+    } catch (e) {
+      showStatus('err', 'Error al cambiar estado: ' + e.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleEmpresaChange = e => {
     setEmpresa(e.target.value);
     cargar(e.target.value);
   };
 
-  /* ── Guardar ──────────────────────────────────────────────────────── */
+  /* ── Guardar ────────────────────────────────────────────────────── */
   const guardar = async () => {
     setSaving(true);
     try {
@@ -150,58 +226,61 @@ export default function FlowEditorView({ empresaId, user }) {
     setTimeout(() => setStatus(null), 3800);
   }
 
-  /* ── Interacciones del canvas ────────────────────────────────────── */
-  const onConnect = useCallback((params) => {
+  /* ── Canvas events ──────────────────────────────────────────────── */
+  const onConnect = useCallback(params => {
     setEdges(prev => addEdge({ ...params, ...EDGE_DEFAULTS }, prev));
     setDirty(true);
   }, [setEdges]);
 
-  const onNodeClick = useCallback((_e, node) => setSelected(node), []);
-  const onPaneClick = useCallback(() => setSelected(null), []);
+  const onNodeClick    = useCallback((_e, node) => setSelected(node), []);
+  const onPaneClick    = useCallback(() => setSelected(null), []);
 
-  const onEditChange = (newData) => {
-    setNodes(prev => prev.map(n =>
-      n.id === selected.id ? { ...n, data: newData } : n
-    ));
+  const onEditChange = newData => {
+    setNodes(prev => prev.map(n => n.id === selected.id ? { ...n, data: newData } : n));
     setSelected(prev => ({ ...prev, data: newData }));
     setDirty(true);
   };
 
-  const onDeleteNode = (id) => {
+  const onDeleteNode = id => {
     setNodes(prev => prev.filter(n => n.id !== id));
     setEdges(prev => prev.filter(e => e.source !== id && e.target !== id));
     setSelected(null);
     setDirty(true);
   };
 
-  const onNodesChangeWrapped = useCallback((changes) => {
+  const onNodesChangeWrapped = useCallback(changes => {
     onNodesChange(changes);
-    // Solo marcar dirty en movimientos, no en selección/deselección
-    const hasMoves = changes.some(c => c.type === 'position' || c.type === 'remove');
-    if (hasMoves) setDirty(true);
+    if (changes.some(c => c.type === 'position' || c.type === 'remove')) setDirty(true);
   }, [onNodesChange]);
 
-  /* ── Drag & Drop desde paleta ────────────────────────────────────── */
+  /* ── Drag & Drop desde paleta ───────────────────────────────────── */
   const onDragStart = (e, tipo) => {
     e.dataTransfer.setData('application/reactflow-tipo', tipo);
     e.dataTransfer.effectAllowed = 'move';
   };
 
-  const onDragOver = useCallback((e) => {
+  const onDragOver = useCallback(e => {
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
   }, []);
 
-  const onDrop = useCallback((e) => {
+  const onDrop = useCallback(e => {
     e.preventDefault();
     const tipo = e.dataTransfer.getData('application/reactflow-tipo');
     if (!tipo || !rfWrapper.current) return;
 
     const bounds   = rfWrapper.current.getBoundingClientRect();
-    const position = {
-      x: e.clientX - bounds.left - 105,
-      y: e.clientY - bounds.top  - 50,
-    };
+    const rfInst   = rfInstanceRef.current;
+    let position   = { x: e.clientX - bounds.left - 110, y: e.clientY - bounds.top - 40 };
+
+    // Si tenemos acceso al viewport de ReactFlow, proyectamos correctamente
+    if (rfInst && rfInst.project) {
+      position = rfInst.project({
+        x: e.clientX - bounds.left - 110,
+        y: e.clientY - bounds.top  - 40,
+      });
+    }
+
     const cfg = TIPO_CONFIG[tipo] || TIPO_CONFIG.mensaje;
     const id  = newNodeId();
 
@@ -210,11 +289,9 @@ export default function FlowEditorView({ empresaId, user }) {
       type: tipo,
       position,
       data: {
-        label:       cfg.label,
-        texto:       '',
-        opciones:    tipo === 'pregunta'                        ? [] : undefined,
-        accion:      tipo === 'accion'                         ? 'escalar_agente' : undefined,
-        descripcion: (tipo === 'intencion' || tipo === 'fin')  ? '' : undefined,
+        label:   cfg.label,
+        texto:   '',
+        opciones: (tipo === 'lista_opciones' || tipo === 'condicion' || tipo === 'intencion') ? [] : undefined,
       },
     }]);
     setDirty(true);
@@ -223,109 +300,105 @@ export default function FlowEditorView({ empresaId, user }) {
   const isAdmin = user?.rol === 'admin';
   const busy    = loading || saving;
 
+  if (isMobile) {
+    return (
+      <div style={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        height: '100%',
+        width: '100%',
+        padding: '32px',
+        textAlign: 'center',
+        background: '#ffffff',
+        boxSizing: 'border-box'
+      }}>
+        <img 
+          src="/fibri.png" 
+          alt="Fibri" 
+          style={{ 
+            width: '150px', 
+            height: 'auto', 
+            marginBottom: '24px',
+            animation: 'float 3s ease-in-out infinite' 
+          }} 
+        />
+        <style>{`
+          @keyframes float {
+            0% { transform: translateY(0px); }
+            50% { transform: translateY(-10px); }
+            100% { transform: translateY(0px); }
+          }
+        `}</style>
+        <h2 style={{ fontSize: '20px', fontWeight: '700', color: '#1e293b', marginBottom: '12px' }}>
+          Flujo del Bot
+        </h2>
+        <p style={{ fontSize: '14px', color: '#64748b', lineHeight: '1.6', maxWidth: '320px', margin: '0 auto' }}>
+          Para editar y organizar el flujo del bot, te recomendamos iniciar sesión desde una computadora.
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="flow-editor-root">
-      {/* ── Toolbar ─────────────────────────────────────────────────── */}
+
+      {/* ── Toolbar ──────────────────────────────────────────────── */}
       <div className="flow-toolbar">
         <div className="flow-toolbar-title">
-          <GitBranch size={17} color="#6366f1" strokeWidth={2} />
+          <GitBranch size={17} color="#0d9488" strokeWidth={2} />
           <h2>Editor de Flujo del Bot</h2>
         </div>
 
-        {/* Selector de empresa */}
-        <div className="flow-empresa-wrap">
-          {empresa === '__todas__' ? <Globe size={13} /> : <Building2 size={13} />}
-          {isAdmin ? (
+        {isAdmin && (
+          <div className="flow-empresa-wrap">
+            {empresa === '__todas__' ? <Globe size={13} /> : <Building2 size={13} />}
             <select value={empresa} onChange={handleEmpresaChange} disabled={busy}>
               <option value="fibratec">fibratec</option>
               <option value="compusemmm">compusemmm</option>
             </select>
-          ) : (
-            <span>{empresa}</span>
-          )}
-        </div>
+          </div>
+        )}
 
-        <div className="flow-toolbar-sep" />
+        <div style={{ flex: 1 }} />
 
-        <button
-          className="flow-btn flow-btn-secondary"
-          onClick={() => cargar(empresa)}
-          disabled={busy}
-          title="Recargar flujo desde la base de datos"
-        >
+        {dirty && !saving && (
+          <div className="flow-dirty-badge">
+            <span className="flow-dirty-dot" /> Sin guardar
+          </div>
+        )}
+
+        <button className="flow-btn flow-btn-secondary" onClick={() => cargar(empresa)} disabled={busy}>
           <RotateCcw size={14} className={loading ? 'flow-spin' : ''} />
           Recargar
         </button>
 
-        <button
-          className="flow-btn flow-btn-primary"
-          onClick={guardar}
-          disabled={busy || !dirty}
-          title={!dirty ? 'Sin cambios por guardar' : 'Guardar y activar flujo'}
-        >
-          {saving
-            ? <Loader2 size={14} className="flow-spin" />
-            : <Save size={14} />
-          }
+        <button className="flow-btn flow-btn-primary" onClick={guardar} disabled={busy || !dirty}>
+          {saving ? <Loader2 size={14} className="flow-spin" /> : <Save size={14} />}
           {saving ? 'Guardando…' : 'Guardar flujo'}
         </button>
-
-        {dirty && !saving && (
-          <div className="flow-dirty-badge">
-            <span className="flow-dirty-dot" />
-            Sin guardar
-          </div>
-        )}
       </div>
 
-      {/* ── Body: paleta + canvas + panel ────────────────────────────── */}
+      {/* ── Body ──────────────────────────────────────────────────── */}
       <div className="flow-body">
 
-        {/* Paleta de nodos */}
+        {/* Paleta */}
         <div className="flow-palette">
-          <div className="flow-palette-section">Tipos de nodo</div>
-
-          {TIPO_ORDEN.map(tipo => {
-            const cfg  = TIPO_CONFIG[tipo];
-            const Icon = TIPO_ICONS_UI[tipo] || MessageSquare;
-            return (
-              <div
-                key={tipo}
-                className="flow-palette-item"
-                data-tipo={tipo}
-                draggable
-                onDragStart={e => onDragStart(e, tipo)}
-                title={cfg.desc}
-              >
-                <div
-                  className="flow-node-icon"
-                  style={{ background: cfg.color, width: 30, height: 30, borderRadius: 7 }}
-                >
-                  <Icon size={14} strokeWidth={2} />
-                </div>
-                <div className="flow-palette-text">
-                  <span className="flow-palette-label">{cfg.label}</span>
-                  <span className="flow-palette-desc">{cfg.desc}</span>
-                </div>
-              </div>
-            );
-          })}
+          <div className="fp-header">Tipos de nodo</div>
+          {PALETTE_GROUPS.map(g => (
+            <PaletteGroup key={g.cat} cat={g.cat} tipos={g.tipos} onDragStart={onDragStart} />
+          ))}
         </div>
 
         {/* Canvas */}
-        <div
-          className="flow-canvas"
-          ref={rfWrapper}
-          onDragOver={onDragOver}
-          onDrop={onDrop}
-        >
+        <div className="flow-canvas" ref={rfWrapper} onDragOver={onDragOver} onDrop={onDrop}>
           {loading && (
             <div className="flow-canvas-loading">
-              <Loader2 size={18} className="flow-spin" color="#6366f1" />
+              <Loader2 size={18} className="flow-spin" color="#0d9488" />
               Cargando flujo…
             </div>
           )}
-
           <ReactFlow
             nodes={nodes}
             edges={edges}
@@ -340,25 +413,14 @@ export default function FlowEditorView({ empresaId, user }) {
             fitViewOptions={{ padding: 0.18 }}
             deleteKeyCode="Delete"
             defaultEdgeOptions={EDGE_DEFAULTS}
-            minZoom={0.3}
-            maxZoom={1.8}
+            minZoom={0.25}
+            maxZoom={2}
           >
-            <Background
-              variant={BackgroundVariant.Dots}
-              color="#cbd5e1"
-              gap={22}
-              size={1.2}
-            />
+            <Background variant={BackgroundVariant.Dots} color="#d1d5db" gap={20} size={1.2} />
             <Controls showInteractive={false} />
             <MiniMap
-              nodeColor={n => {
-                const colors = {
-                  mensaje: '#6366f1', pregunta: '#22c55e', condicion: '#f59e0b',
-                  accion:  '#ef4444', intencion: '#8b5cf6', fin:       '#64748b',
-                };
-                return colors[n.type] || '#94a3b8';
-              }}
-              maskColor="rgba(248,250,252,0.7)"
+              nodeColor={n => TIPO_CONFIG[n.type]?.color || '#94a3b8'}
+              maskColor="rgba(248,250,252,0.75)"
               style={{ width: 160, height: 100 }}
             />
           </ReactFlow>
@@ -375,13 +437,10 @@ export default function FlowEditorView({ empresaId, user }) {
         />
       </div>
 
-      {/* Toast de estado */}
+      {/* Toast */}
       {status && (
         <div className={`flow-status flow-status-${status.tipo}`}>
-          {status.tipo === 'ok'
-            ? <CheckCircle2 size={15} />
-            : <AlertCircle size={15} />
-          }
+          {status.tipo === 'ok' ? <CheckCircle2 size={15} /> : <AlertCircle size={15} />}
           {status.msg}
         </div>
       )}

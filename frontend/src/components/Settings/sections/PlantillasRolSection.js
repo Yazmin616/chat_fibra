@@ -14,16 +14,29 @@ function RolCard({ rol, activo, onClick }) {
   return (
     <button
       type="button"
-      className={`plt-rol-card${activo ? ' plt-rol-card--active' : ''}`}
       onClick={onClick}
-      style={{ '--rol-color': rol.color, '--rol-bg': rol.bg }}
+      style={{
+        display: 'flex', alignItems: 'center', gap: '12px',
+        padding: '16px 20px', width: '100%', cursor: 'pointer',
+        textAlign: 'left', background: activo ? '#f8fafc' : 'transparent',
+        border: 'none',
+        borderBottom: activo ? 'none' : '1px solid #e2e8f0',
+        transition: 'background 0.2s',
+      }}
     >
-      <span className="plt-rol-dot" />
-      <div className="plt-rol-info">
-        <span className="plt-rol-label">{rol.label}</span>
-        <span className="plt-rol-desc">{rol.desc}</span>
+      <div style={{
+        width: '10px', height: '10px', borderRadius: '50%', flexShrink: 0,
+        background: rol.color
+      }} />
+      <div style={{ flex: 1 }}>
+        <span style={{ display: 'block', fontSize: '15px', fontWeight: '600', color: activo ? '#0f172a' : '#334155' }}>
+          {rol.label}
+        </span>
+        <span style={{ display: 'block', fontSize: '13px', color: '#64748b', marginTop: '2px' }}>
+          {rol.desc}
+        </span>
       </div>
-      <ChevronRight size={16} className="plt-rol-arrow" />
+      <ChevronRight size={18} style={{ color: '#94a3b8', transform: activo ? 'rotate(90deg)' : 'none', transition: 'transform 0.2s' }} />
     </button>
   );
 }
@@ -121,7 +134,11 @@ const PlantillasRolSection = ({ config, onSave }) => {
 
             {/* Editor inline del rol activo */}
             {rolActivo === rol.id && (
-              <div className="plt-editor">
+              <div style={{
+                padding: '20px',
+                background: '#f8fafc',
+                borderBottom: '1px solid #e2e8f0',
+              }}>
                 {loading ? (
                   <div className="pe-loading"><RefreshCw size={15} className="pe-spin" /> Cargando plantilla…</div>
                 ) : (
@@ -131,14 +148,18 @@ const PlantillasRolSection = ({ config, onSave }) => {
                     {error   && <div className="pe-error"><AlertCircle size={14} /> {error}</div>}
                     {success && <div className="pe-ok"><Check size={14} /> {success}</div>}
 
-                    <div className="plt-actions">
+                    <div style={{
+                      display: 'flex', gap: '10px', flexWrap: 'wrap',
+                      marginTop: '20px', paddingTop: '20px', borderTop: '1px solid #cbd5e1'
+                    }}>
                       <button
                         type="button"
-                        className="pe-btn-save"
+                        className="btn-save"
                         onClick={guardar}
                         disabled={saving || applying}
+                        style={{ margin: 0 }}
                       >
-                        {saving ? 'Guardando…' : <><Save size={14} /> Guardar plantilla</>}
+                        {saving ? 'Guardando…' : <><Save size={14} style={{ marginRight: '6px' }} /> Guardar plantilla</>}
                       </button>
                       <button
                         type="button"
@@ -146,11 +167,12 @@ const PlantillasRolSection = ({ config, onSave }) => {
                         onClick={aplicarATodos}
                         disabled={saving || applying}
                         title="Aplica esta plantilla a los usuarios existentes con este rol (sobrescribe sus permisos actuales)"
+                        style={{ background: 'white', border: '1px solid #cbd5e1', color: '#475569' }}
                       >
                         {applying ? 'Aplicando…' : <><Users size={14} /> Aplicar a usuarios actuales del rol</>}
                       </button>
                     </div>
-                    <p className="plt-apply-hint">
+                    <p className="plt-apply-hint" style={{ marginTop: '12px', fontSize: '12px' }}>
                       "Guardar plantilla" solo afecta a agentes nuevos. "Aplicar a usuarios actuales" también
                       actualiza los permisos de los agentes existentes con este rol.
                     </p>

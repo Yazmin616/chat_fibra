@@ -35,7 +35,7 @@ const listar = async (req, res, next) => {
 const marcarLeido = async (req, res, next) => {
   try {
     const io = req.app.get('io');
-    await conversacionService.marcarLeido(req.params.id, io);
+    await conversacionService.marcarLeido(req.params.id, req.agente, io);
     res.json({ ok: true });
   } catch (err) { next(err); }
 };

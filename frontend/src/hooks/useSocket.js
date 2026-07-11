@@ -94,7 +94,9 @@ export function useSocket({
         if (newMsg.id && prev.some(m => m.id === newMsg.id)) return prev;
         return [...prev, newMsg];
       });
-      apiService.marcarLeido(convActivaRef.current?.id);
+      if (convActivaRef.current?.agente_id && Number(convActivaRef.current.agente_id) === Number(userRef.current?.id)) {
+        apiService.marcarLeido(convActivaRef.current.id).catch(() => {});
+      }
     };
 
     // ─── conversacion_leida ──────────────────────────────────────────
@@ -118,19 +120,33 @@ export function useSocket({
 
       // 1. Actualizar en memoria el estado de la conversación afectada
       if (convId && payload?.estado) {
-        setConversaciones(prev => prev.map(c =>
-          Number(c.id) === convId
-            ? { ...c, estado: payload.estado, es_humano: payload.es_humano ?? c.es_humano }
-            : c
-        ));
+        setConversaciones(prev => prev.map(c => {
+          if (Number(c.id) === convId) {
+            const updateData = { 
+              estado: payload.estado, 
+              es_humano: payload.es_humano ?? c.es_humano 
+            };
+            if (payload.agente_id !== undefined) updateData.agente_id = payload.agente_id;
+            if (payload.agente_nombre !== undefined) updateData.agente_nombre = payload.agente_nombre;
+            return { ...c, ...updateData };
+          }
+          return c;
+        }));
 
-        // Si es la conversación abierta, actualizar también conversacionActiva
-        const convActiva = convActivaRef.current;
-        if (convActiva && Number(convActiva.id) === convId) {
-          setConversacionActiva(prev =>
-            prev ? { ...prev, estado: payload.estado, es_humano: payload.es_humano ?? prev.es_humano } : prev
-          );
-        }
+      // Si es la conversación abierta, actualizar también conversacionActiva
+      const convActiva = convActivaRef.current;
+      if (convActiva && Number(convActiva.id) === convId) {
+        setConversacionActiva(prev => {
+          if (!prev) return prev;
+          const updateData = { 
+            estado: payload.estado, 
+            es_humano: payload.es_humano ?? prev.es_humano 
+          };
+          if (payload.agente_id !== undefined) updateData.agente_id = payload.agente_id;
+          if (payload.agente_nombre !== undefined) updateData.agente_nombre = payload.agente_nombre;
+          return { ...prev, ...updateData };
+        });
+      }
       }
 
       // 2. Refetch completo + sincronizar conversacionActiva con datos del server

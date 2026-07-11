@@ -1,3 +1,4 @@
+const db   = require('../config/db');
 const repo = require('../repositories/categoriaCierre.repository');
 
 // GET /categorias-cierre?empresa_id=fibratec|todas[&q=texto][&area=...]
@@ -19,10 +20,25 @@ async function listar(req, res, next) {
         ? await repo.search(empresa_id, busqueda, areaFiltro)
         : await repo.list(empresa_id, areaFiltro));
     } else {
-      const areaAgente = agente?.area || null;
-      ({ rows } = busqueda
-        ? await repo.searchForAgent(empresa_id, busqueda, areaAgente)
-        : await repo.listForAgent(empresa_id, areaAgente));
+      let targetEmpresas = [empresa_id];
+      if (empresa_id === 'todas') {
+        const { rows: empRows } = await db.query("SELECT id AS empresa_id FROM public.empresas");
+        targetEmpresas = empRows.map(r => r.empresa_id);
+      }
+      
+      if (targetEmpresas.length === 0) {
+        rows = [];
+      } else {
+        const fetchRows = busqueda
+          ? await repo.searchForAgentMulti(targetEmpresas, q, agente?.area || null)
+          : await repo.listForAgentMulti(targetEmpresas, agente?.area || null);
+        rows = fetchRows.rows;
+      }
+      
+      // Filtro para Coordinadores: si el usuario es coordinador, solo ve lo de sus áreas y lo general
+      if (req.agente.coordinadorAreas && req.agente.coordinadorAreas.length > 0) {
+        rows = rows.filter(r => !r.area || req.agente.coordinadorAreas.includes(r.area));
+      }
     }
     res.json(rows);
   } catch (e) { next(e); }

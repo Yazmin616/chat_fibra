@@ -86,6 +86,43 @@ const searchForAgent = (empresa_id, q, area) =>
     [empresa_id, `%${q}%`, area]
   );
 
+const listForAgentMulti = (empresas, area) => {
+  const ph = empresas.map((_, i) => `$${i + 1}`).join(', ');
+  const queryStr = `
+    ${SEL}
+    WHERE (
+      e.empresa_id IN (${ph})
+      OR EXISTS (
+        SELECT 1 FROM etiqueta_empresas x
+        WHERE x.etiqueta_id = e.id AND (x.empresa_id IN (${ph}) OR x.empresa_id = '__todas__')
+      )
+    )
+    AND (e.area IS NULL OR e.area = $${empresas.length + 1})
+    GROUP BY e.id
+    ${ORDER}
+  `;
+  return db.query(queryStr, [...empresas, area]);
+};
+
+const searchForAgentMulti = (empresas, q, area) => {
+  const ph = empresas.map((_, i) => `$${i + 1}`).join(', ');
+  const queryStr = `
+    ${SEL}
+    WHERE (
+      e.empresa_id IN (${ph})
+      OR EXISTS (
+        SELECT 1 FROM etiqueta_empresas x
+        WHERE x.etiqueta_id = e.id AND (x.empresa_id IN (${ph}) OR x.empresa_id = '__todas__')
+      )
+    )
+    AND e.nombre ILIKE $${empresas.length + 1}
+    AND (e.area IS NULL OR e.area = $${empresas.length + 2})
+    GROUP BY e.id
+    ${ORDER}
+  `;
+  return db.query(queryStr, [...empresas, `%${q}%`, area]);
+};
+
 // ── CRUD ──────────────────────────────────────────────────────────────────────
 
 const create = async (empresa_id, nombre, descripcion, color, area, empresas) => {
@@ -138,7 +175,7 @@ const unassign = (conversacion_id, etiqueta_id) =>
   );
 
 module.exports = {
-  listAll, list, search, listForAgent, searchForAgent,
+  listAll, list, search, listForAgent, searchForAgent, listForAgentMulti, searchForAgentMulti,
   create, update, remove,
   getByConversacion, assign, unassign,
 };

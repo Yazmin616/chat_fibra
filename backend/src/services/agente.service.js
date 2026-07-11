@@ -11,6 +11,7 @@
 
 const bcrypt     = require('bcryptjs');
 const jwt        = require('jsonwebtoken');
+const db         = require('../config/db');
 const agenteRepo      = require('../repositories/agente.repository');
 const conversacionRepo = require('../repositories/conversacion.repository');
 
@@ -49,15 +50,22 @@ async function login(email, password) {
 
   await agenteRepo.setOnline(agente.id, true);
 
+  // Consultar si es coordinador
+  const { rows: isCoord } = await db.query(
+    "SELECT 1 FROM public.areas_soluciones WHERE coordinador_id = $1 LIMIT 1",
+    [agente.id]
+  );
+  const esCoordinador = isCoord.length > 0;
+
   const token = jwt.sign(
-    { id: agente.id, nombre: agente.nombre, rol: agente.rol, area: agente.area },
+    { id: agente.id, nombre: agente.nombre, rol: agente.rol, area: agente.area, es_coordinador: esCoordinador, foto_perfil: agente.foto_perfil },
     JWT_SECRET,
     { expiresIn: JWT_EXPIRY }
   );
 
   return {
     token,
-    agente: { id: agente.id, nombre: agente.nombre, rol: agente.rol, area: agente.area }
+    agente: { id: agente.id, nombre: agente.nombre, rol: agente.rol, area: agente.area, es_coordinador: esCoordinador, foto_perfil: agente.foto_perfil }
   };
 }
 

@@ -48,6 +48,7 @@ export function useConversaciones(user, empresaId) {
   const [conversacionActiva,   setConversacionActiva]   = useState(null);
   const [mensajes,             setMensajes]             = useState([]);
   const [config,               setConfig]               = useState({ tiempo_inactividad: 10 });
+  const [configLoading,        setConfigLoading]        = useState(true);
   const requestIdRef = useRef(0);
 
   /**
@@ -67,11 +68,16 @@ export function useConversaciones(user, empresaId) {
     }
     if (user.rol === 'admin') {
       try {
+        setConfigLoading(true);
         const confs = await apiService.getConfigs(empresaId);
         setConfig(confs && typeof confs === 'object' && !Array.isArray(confs) ? confs : { tiempo_inactividad: 10 });
       } catch (err) {
         console.error('[useConversaciones] cargar config:', err);
+      } finally {
+        setConfigLoading(false);
       }
+    } else {
+      setConfigLoading(false);
     }
   }, [user, empresaId]);
 
@@ -102,11 +108,15 @@ export function useConversaciones(user, empresaId) {
     }
 
     if (conversacionId) {
-      // Fire-and-forget: no bloquea ni recarga toda la lista
-      apiService.marcarLeido(conversacionId).catch(() => {});
-      setConversaciones(prev =>
-        prev.map(c => c.id === conversacionId ? { ...c, no_leidos: 0 } : c)
-      );
+      setConversaciones(prev => {
+        const conv = prev.find(c => Number(c.id) === Number(conversacionId));
+        if (conv) {
+          // Fire-and-forget: no bloquea ni recarga toda la lista
+          apiService.marcarLeido(conversacionId).catch(() => {});
+          return prev.map(c => Number(c.id) === Number(conversacionId) ? { ...c, no_leidos: 0 } : c);
+        }
+        return prev;
+      });
     }
   }, [user]);
 
@@ -162,6 +172,7 @@ export function useConversaciones(user, empresaId) {
     conversacionActiva, setConversacionActiva,
     mensajes,          setMensajes,
     config,            setConfig,
+    configLoading,
     cargar,
     cargarMensajes,
     enviarMensaje,

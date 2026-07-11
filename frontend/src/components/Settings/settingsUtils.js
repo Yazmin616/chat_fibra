@@ -42,13 +42,13 @@ export function unitEquiv(min) {
 // ── Variables de plantilla ────────────────────────────────────────────────────
 
 export const VARS = [
-  { key: '{nombre_cliente}',   demo: 'Carlos López'                                                        },
-  { key: '{area}',             demo: 'Soporte Técnico'                                                     },
-  { key: '{empresa}',          demo: 'Fibratec'                                                            },
-  { key: '{nombre_agente}',    demo: 'María García'                                                        },
-  { key: '{horarios_atencion}',demo: 'Lun-Vie 9am-6pm, Sáb 9am-8pm'                                      },
-  { key: '{proximo_dia_habil}',demo: 'lunes 9/6'                                                          },
-  { key: '{telefonos_areas}',  demo: '🔧 Soporte Técnico: 555-0001\n💼 Ventas: 555-0002\n💰 Cobranza: 555-0003' },
+  { key: '{nombre_cliente}',   demo: 'Carlos López'                                                                                                                             },
+  { key: '{area}',             demo: 'Soporte Técnico'                                                                                                                          },
+  { key: '{empresa}',          demo: 'Fibratec'                                                                                                                                 },
+  { key: '{nombre_agente}',    demo: 'María García'                                                                                                                             },
+  { key: '{horarios_atencion}',demo: 'Lun-Vie 9am-6pm, Sáb 9am-8pm'                                                                                                             },
+  { key: '{proximo_dia_habil}',demo: 'lunes 9/6'                                                                                                                                },
+  { key: '{telefonos_areas}',  demo: '📞 Teléfono Principal: 55 1234-5678\n\nExtensiones:\n🔹 Soporte Técnico: Ext. 101\n🔹 Ventas: Ext. 102\n🔹 Cobranza: Ext. 103' },
 ];
 
 export function applyVars(text) {
@@ -66,7 +66,7 @@ export const DEFAULTS = {
   inactividad_cierre_min: '240',
   inactividad_msg_aviso1: '¿Sigues ahí? 👋 Seguimos disponibles para ayudarte cuando quieras.',
   inactividad_msg_aviso2: 'Hola, si no continúas la conversación la cerraremos pronto. ¡Escríbenos cuando quieras! 😊',
-  inactividad_msg_cierre: '¿Cómo calificarías la atención de {nombre_agente} hoy? 🌟\n\n1️⃣  Mala\n2️⃣  Regular\n3️⃣  Buena\n\nEscribe el número de tu calificación.',
+  inactividad_msg_cierre: 'La conversación ha sido cerrada automáticamente por inactividad. ¡Escríbenos cuando necesites ayuda de nuevo! 👋',
   jornada_inicio: '09:00',
   jornada_fin:    '18:00',
   jornada_dias:   '1,2,3,4,5',
@@ -161,8 +161,8 @@ export function MessageField({ id, value, onChange }) {
               </button>
             ))}
             <div style={{ marginLeft: 'auto', position: 'relative' }}>
-              <button type="button" className="sc-var-chip" onClick={() => setShowPicker(!showPicker)} title="Añadir Emoji">
-                <Smile size={14} style={{ verticalAlign: 'middle' }} />
+              <button type="button" className="sc-var-chip sc-emoji-btn" onClick={() => setShowPicker(!showPicker)} title="Añadir Emoji" style={{ background: '#f1f5f9', border: '1px solid #cbd5e1', color: '#334155', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '4px', padding: '4px 8px' }}>
+                <Smile size={14} /> Añadir Emoji
               </button>
               {showPicker && (
                 <div style={{ position: 'absolute', bottom: '30px', right: 0, zIndex: 1000, boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)' }}>
@@ -183,9 +183,10 @@ export function MessageField({ id, value, onChange }) {
 }
 
 export function SectionStatus({ state }) {
-  if (state === 'saving') return <span className="sc-status sc-status--saving">Guardando…</span>;
+  if (state === 'saving') return <span className="sc-status sc-status--saving">Guardando...</span>;
   if (state === 'saved')  return <span className="sc-status sc-status--ok">✓ Guardado</span>;
   if (state === 'error')  return <span className="sc-status sc-status--err">✗ Error al guardar</span>;
+  if (typeof state === 'string' && state.startsWith('error: ')) return <span className="sc-status sc-status--err">✗ {state}</span>;
   return null;
 }
 

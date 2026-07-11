@@ -21,6 +21,7 @@ const { parseTipoIdentificacion } = require('../parsers');
 const { ESTADOS, DEPARTAMENTOS }  = require('../constants');
 const { ConversacionMeta }        = require('../conversacion.meta');
 const keyboards = require('../keyboards');
+const { getTexto } = require('../../services/plantillas.service');
 
 const MAX_INTENTOS = 3;
 
@@ -34,7 +35,7 @@ const LABELS_TIPO = {
   cedula:     'cédula',
 };
 
-async function handle(mensaje, conversacion) {
+async function handle(mensaje, conversacion, usuario, io) {
   const meta = new ConversacionMeta(conversacion.metadata);
   const m    = mensaje.trim().toLowerCase();
 
@@ -43,11 +44,11 @@ async function handle(mensaje, conversacion) {
     const tipo = parseTipoIdentificacion(mensaje);
 
     if (tipo === 'asesor' || m.includes('asesor')) {
-      return _escalarASoporte(conversacion, '🧑‍💼 Te conectamos con un asesor. En breve alguien te atenderá. 🙏');
+      const confirmacion = await getTexto('escalar_soporte', conversacion.empresa_id, { departamento: DEPARTAMENTOS.SOPORTE });
+      return _escalarASoporte(conversacion, confirmacion);
     }
 
     if (!tipo) {
-      const { getTexto } = require('../../services/plantillas.service');
       const respuesta = await getTexto('identificacion_tipo', conversacion.empresa_id);
       return {
         respuesta,
@@ -57,15 +58,17 @@ async function handle(mensaje, conversacion) {
     }
 
     await conversacionRepo.updateMetadata(conversacion.id, { ...meta.toJSON(), tipo_identificacion: tipo });
+    const respuesta = await getTexto('identificacion_pedir_dato', conversacion.empresa_id, { tipo_dato: LABELS_TIPO[tipo] });
     return {
-      respuesta:   `📝 Por favor escribe tu *${LABELS_TIPO[tipo]}*:`,
+      respuesta,
       nuevoEstado: conversacion.estado,
     };
   }
 
   // --- FASE 2: recepción del valor e intento de identificación ---
   if (m === 'asesor' || m.includes('asesor')) {
-    return _escalarASoporte(conversacion, '🧑‍💼 Te conectamos con un asesor. En breve alguien te atenderá. 🙏');
+    const confirmacion = await getTexto('escalar_soporte', conversacion.empresa_id, { departamento: DEPARTAMENTOS.SOPORTE });
+    return _escalarASoporte(conversacion, confirmacion);
   }
 
   const cliente = wisp.buscar(mensaje, conversacion.empresa_id);
@@ -81,24 +84,27 @@ async function handle(mensaje, conversacion) {
     await conversacionRepo.updateMetadata(conversacion.id, metaActualizada.toJSON());
 
     if (meta.consulta_ajena) {
-      const nombre = cliente.nombre.split(' ')[0];
+      const nombre = cliente.nombre;
       if (metaActualizada.esMultiServicio) {
         const listaTexto = cliente.servicios.map((s, i) => `${i + 1}️⃣  ${s.etiqueta}`).join('\n');
+        const respuesta = await getTexto('cuenta_encontrada_ajena_multi', conversacion.empresa_id, { nombre, lista_servicios: listaTexto });
         return {
-          respuesta:   `✅ Cuenta de *${nombre}* encontrada.\n\n¿Cuál servicio deseas consultar?\n\n${listaTexto}`,
+          respuesta,
           nuevoEstado: ESTADOS.SELECCION_SERVICIO,
           teclado:     keyboards.generarTecladoServicios(cliente.servicios),
         };
       }
+      const respuesta = await getTexto('cuenta_encontrada_ajena', conversacion.empresa_id, { nombre });
       return {
-        respuesta:   `✅ Cuenta de *${nombre}* encontrada.\n\n¿En qué puedo ayudarte?`,
+        respuesta,
         nuevoEstado: ESTADOS.MENU_AUTOSERVICIO,
         teclado:     await keyboards.getAutoservicioKeyboard(metaActualizada.toJSON(), conversacion.empresa_id),
       };
     }
 
+    const respuesta = await getTexto('cuenta_encontrada_mia', conversacion.empresa_id, { nombre: cliente.nombre });
     return {
-      respuesta:   `✅ Encontramos la cuenta de *${cliente.nombre}*.\n\n¿Es tu cuenta?`,
+      respuesta,
       nuevoEstado: ESTADOS.CONFIRMAR_CUENTA,
       teclado: await keyboards.get('CONFIRMAR_CUENTA', conversacion.empresa_id),
     };
@@ -107,10 +113,8 @@ async function handle(mensaje, conversacion) {
   // No encontrado
   const nuevosIntentos = meta.intentos_identificacion + 1;
   if (nuevosIntentos >= MAX_INTENTOS) {
-    return _escalarASoporte(conversacion,
-      `⚠️ No pudimos identificarte con los datos proporcionados.\n\n` +
-      `Te conectamos con un asesor para que pueda ayudarte directamente. 🙏`
-    );
+    const confirmacion = await getTexto('identificacion_fallida_final', conversacion.empresa_id);
+    return _escalarASoporte(conversacion, confirmacion, io);
   }
 
   await conversacionRepo.updateMetadata(conversacion.id, {
@@ -120,20 +124,24 @@ async function handle(mensaje, conversacion) {
   });
 
   const restantes = MAX_INTENTOS - nuevosIntentos;
+  const respuesta = await getTexto('identificacion_no_encontrado', conversacion.empresa_id, { intentos: restantes });
   return {
-    respuesta:   `❌ No encontramos ningún servicio con ese dato.\n\n` +
-                 `Intenta con otro tipo de identificación _(${restantes} intento${restantes !== 1 ? 's' : ''} restante${restantes !== 1 ? 's' : ''})_:`,
+    respuesta,
     nuevoEstado: conversacion.estado,
     teclado: await keyboards.get('TIPO_IDENTIFICACION', conversacion.empresa_id),
   };
 }
 
-async function _escalarASoporte(conversacion, confirmacion) {
+async function _escalarASoporte(conversacion, confirmacion, io) {
   await conversacionRepo.updateEstado(conversacion.id, ESTADOS.CERRADA);
   const { rows } = await conversacionRepo.createEsperando(
     conversacion.usuario_id, conversacion.empresa_id, DEPARTAMENTOS.SOPORTE
   );
   const nuevaConvId = rows[0].id;
+
+  const { aplicarRoundRobin } = require('../../services/asignacion.service');
+  await aplicarRoundRobin(nuevaConvId, conversacion.empresa_id, DEPARTAMENTOS.SOPORTE, io);
+
   await mensajeRepo.create(nuevaConvId, 'sistema_info', `CLIENTE EN ESPERA — ${DEPARTAMENTOS.SOPORTE}`);
   await mensajeRepo.create(nuevaConvId, 'bot', confirmacion);
   return { earlyReturn: true, resultado: { texto: confirmacion, conversacion_id: nuevaConvId, departamento: DEPARTAMENTOS.SOPORTE } };

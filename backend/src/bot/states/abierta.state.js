@@ -15,6 +15,7 @@ const wisp             = require('../../services/wisp.service');
 const { ESTADOS }      = require('../constants');
 const { ConversacionMeta } = require('../conversacion.meta');
 const keyboards = require('../keyboards');
+const { getTexto } = require('../../services/plantillas.service');
 
 const NOMBRES_EMPRESA = {
   fibratec:   'Fibratec',
@@ -25,8 +26,9 @@ async function handle(_mensaje, conversacion, usuario, _io, empresaPreconfigurad
   const nombre = (usuario?.nombre || 'cliente').split(' ')[0];
 
   if (!empresaPreconfigurada) {
+    const respuesta = await getTexto('seleccion_empresa', conversacion.empresa_id, { nombre });
     return {
-      respuesta:   `👋 ¡Hola, ${nombre}! Bienvenido/a.\n\n¿A cuál de nuestras empresas deseas comunicarte?`,
+      respuesta,
       nuevoEstado: ESTADOS.SELECCION_EMPRESA,
       teclado: await keyboards.get('EMPRESAS', conversacion.empresa_id),
     };
@@ -39,6 +41,33 @@ async function handle(_mensaje, conversacion, usuario, _io, empresaPreconfigurad
     conversacion.empresa_id
   );
   const esRecurrente = cerradas.length > 0;
+
+  // NLU en el primer mensaje
+  if (_mensaje && _mensaje.trim().match(/[a-zA-Z]/)) {
+    const { detectarTodasCoincidentes } = require('../nlu');
+    const coincidentes = await detectarTodasCoincidentes(_mensaje, conversacion.empresa_id || '__todas__');
+    
+    if (coincidentes.length > 0) {
+      if (esRecurrente) {
+        const wispGuardado = usuario?.wisp_data?.empresa_id === conversacion.empresa_id
+          ? usuario.wisp_data
+          : null;
+        const clienteWisp = wispGuardado || wisp.buscarPorExternalId(usuario?.external_id, conversacion.empresa_id);
+        
+        if (clienteWisp) {
+          const yaIdentificado = !!wispGuardado;
+          const meta = new ConversacionMeta({ cliente: clienteWisp, servicio_idx: 0, identificado_via_wisp: yaIdentificado });
+          await conversacionRepo.updateMetadata(conversacion.id, meta.toJSON());
+          conversacion.metadata = meta.toJSON();
+          conversacion.estado = ESTADOS.MENU_AUTOSERVICIO;
+          return require('./menuAutoservicio.state').handle(_mensaje, conversacion, usuario, _io);
+        }
+      }
+      
+      conversacion.estado = ESTADOS.MENU_TIPO_CLIENTE;
+      return require('./menuTipoCliente.state').handle(_mensaje, conversacion, usuario, _io);
+    }
+  }
 
   if (esRecurrente) {
     const wispGuardado = usuario?.wisp_data?.empresa_id === conversacion.empresa_id
@@ -53,32 +82,34 @@ async function handle(_mensaje, conversacion, usuario, _io, empresaPreconfigurad
 
       if (meta.esMultiServicio) {
         const listaTexto = clienteWisp.servicios.map((s, i) => `${i + 1}️⃣  ${s.etiqueta}`).join('\n');
+        const respuesta = await getTexto('saludo_recurrente_multiservicio', conversacion.empresa_id, {
+          nombre: clienteWisp.nombre.split(' ')[0],
+          empresa,
+          lista_servicios: listaTexto
+        });
         return {
-          respuesta:   `👋 ¡Hola de nuevo, ${clienteWisp.nombre.split(' ')[0]}! Bienvenido/a a ${empresa}.\n\n` +
-                       `Tienes varios servicios registrados. ¿Cuál deseas consultar?\n\n${listaTexto}`,
+          respuesta,
           nuevoEstado: ESTADOS.SELECCION_SERVICIO,
           teclado:     keyboards.generarTecladoServicios(clienteWisp.servicios),
         };
       }
 
       const teclado = await keyboards.getAutoservicioKeyboard(meta, conversacion.empresa_id);
+      const respuesta = await getTexto('saludo_recurrente_autoservicio', conversacion.empresa_id, {
+        nombre: clienteWisp.nombre.split(' ')[0],
+        empresa
+      });
       return {
-        respuesta:   `👋 ¡Hola de nuevo, ${clienteWisp.nombre.split(' ')[0]}! Bienvenido/a a ${empresa}.\n\n¿En qué puedo ayudarte hoy?`,
+        respuesta,
         nuevoEstado: ESTADOS.MENU_AUTOSERVICIO,
         teclado,
       };
     }
-
-    return {
-      respuesta:   `👋 ¡Hola de nuevo, ${nombre}! Bienvenido/a a ${empresa}.\n\n` +
-                   `Para consultar tu servicio, necesito verificar tus datos. ¿Con qué te identificas?`,
-      nuevoEstado: ESTADOS.IDENTIFICACION_DATOS,
-      teclado: await keyboards.get('TIPO_IDENTIFICACION', conversacion.empresa_id),
-    };
   }
 
+  const respuesta = await getTexto('saludo_inicial', conversacion.empresa_id, { nombre, empresa });
   return {
-    respuesta:   `👋 ¡Hola, ${nombre}! Bienvenido/a a ${empresa}.\n\n¿Cómo puedo ayudarte? Toca una opción o escribe tu consulta.\n\n_Para hablar directamente con un asesor, escribe "asesor"._`,
+    respuesta,
     nuevoEstado: ESTADOS.MENU_TIPO_CLIENTE,
     teclado: await keyboards.get('TIPO_CLIENTE', conversacion.empresa_id),
   };

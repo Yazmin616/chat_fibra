@@ -2,7 +2,7 @@ const db = require('../config/db');
 
 async function getFlujo(empresa_id) {
   const { rows } = await db.query(
-    'SELECT * FROM flujos_bot WHERE empresa_id=$1 AND activo=TRUE ORDER BY id LIMIT 1',
+    'SELECT * FROM flujos_bot WHERE empresa_id=$1 ORDER BY id LIMIT 1',
     [empresa_id]
   );
   return rows[0] || null;

@@ -11,7 +11,17 @@ async function listar(agente_id, empresa_id) {
   if (agente_id) {
     const { rows } = await agenteRepo.findById(agente_id);
     if (rows.length > 0 && rows[0].rol !== 'admin') {
-      departamento = rows[0].area;
+      // Si es asesor, verificar si es coordinador de algún área
+      const db = require('../config/db');
+      const { rows: coordinatedAreas } = await db.query(
+        "SELECT nombre_area FROM public.areas_soluciones WHERE coordinador_id = $1",
+        [agente_id]
+      );
+      if (coordinatedAreas.length > 0) {
+        departamento = coordinatedAreas.map(r => r.nombre_area);
+      } else {
+        departamento = [rows[0].area];
+      }
     }
   }
   const { rows } = await infraccionRepo.findAll(empresa_id, departamento);
@@ -26,7 +36,17 @@ async function contarHoy(agente_id, empresa_id) {
   if (agente_id) {
     const { rows } = await agenteRepo.findById(agente_id);
     if (rows.length > 0 && rows[0].rol !== 'admin') {
-      departamento = rows[0].area;
+      // Si es asesor, verificar si es coordinador de algún área
+      const db = require('../config/db');
+      const { rows: coordinatedAreas } = await db.query(
+        "SELECT nombre_area FROM public.areas_soluciones WHERE coordinador_id = $1",
+        [agente_id]
+      );
+      if (coordinatedAreas.length > 0) {
+        departamento = coordinatedAreas.map(r => r.nombre_area);
+      } else {
+        departamento = [rows[0].area];
+      }
     }
   }
   const { rows } = await infraccionRepo.countToday(empresa_id, departamento);

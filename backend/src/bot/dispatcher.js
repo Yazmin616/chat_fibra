@@ -16,31 +16,35 @@ const otraConsulta        = require('./states/otraConsulta.state');
 const seleccionArea       = require('./states/seleccionArea.state');
 const esperandoAgente     = require('./states/esperandoAgente.state');
 const encuestaState       = require('./states/encuesta.state');
+const flowEngine          = require('./flowEngine/flowEngine');
 
 const { ESTADOS } = require('./constants');
 
 /** @type {Record<string, { handle: Function }>} */
 const HANDLERS = {
-  // Estados de inicio
+  // ── Motor visual (flujo dibujado en el canvas) ──────────────────────────
+  [flowEngine.ESTADO_FLOW]:      flowEngine,
+
+  // ── Estados de inicio ──────────────────────────────────────────────────
   [ESTADOS.INICIO]:               abiertaState,
   [ESTADOS.ABIERTA]:              abiertaState,
 
-  // Flujo de identificación
+  // ── Flujo de identificación ─────────────────────────────────────────────
   [ESTADOS.SELECCION_EMPRESA]:    seleccionEmpresa,
   [ESTADOS.MENU_TIPO_CLIENTE]:    menuTipoCliente,
   [ESTADOS.IDENTIFICACION_DATOS]: identificacionDatos,
   [ESTADOS.CONFIRMAR_CUENTA]:     confirmarCuenta,
   [ESTADOS.SELECCION_SERVICIO]:   seleccionServicio,
 
-  // Autoservicio
+  // ── Autoservicio ────────────────────────────────────────────────────────
   [ESTADOS.MENU_AUTOSERVICIO]:    menuAutoservicio,
   [ESTADOS.OTRA_CONSULTA]:        otraConsulta,
 
-  // Atención humana
+  // ── Atención humana (siempre legacy — no se mueven al motor visual) ──────
   [ESTADOS.SELECCION_AREA]:       seleccionArea,
   [ESTADOS.ESPERANDO_AGENTE]:     esperandoAgente,
 
-  // Encuesta y cierre
+  // ── Encuesta y cierre ───────────────────────────────────────────────────
   [ESTADOS.ENCUESTA_AGENTE]:      encuestaState,
   [ESTADOS.ENCUESTA_BOT]:         encuestaState,
 };
@@ -55,3 +59,4 @@ function getHandler(estado) {
 }
 
 module.exports = { getHandler };
+

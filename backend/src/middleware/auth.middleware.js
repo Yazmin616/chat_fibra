@@ -95,4 +95,31 @@ const requireTI = (req, res, next) => {
   next();
 };
 
-module.exports = { verifyToken, requireAdmin, requireAsesor, requireTI };
+/**
+ * Verifica que el agente autenticado sea Administrador o Coordinador de algún área.
+ */
+const requireAdminOrCoordinator = async (req, res, next) => {
+  if (!req.agente) return res.status(401).json({ error: 'Unauthorized' });
+  if (req.agente.rol === 'admin') {
+    req.agente.coordinadorAreas = [];
+    return next();
+  }
+
+  try {
+    const db = require('../config/db');
+    const { rows } = await db.query(
+      "SELECT nombre_area FROM public.areas_soluciones WHERE coordinador_id = $1",
+      [req.agente.id]
+    );
+    if (rows.length > 0) {
+      req.agente.coordinadorAreas = rows.map(r => r.nombre_area);
+      return next();
+    }
+  } catch (err) {
+    return next(err);
+  }
+
+  return res.status(403).json({ error: 'Access forbidden: Admin or Coordinator required' });
+};
+
+module.exports = { verifyToken, requireAdmin, requireAsesor, requireTI, requireAdminOrCoordinator };

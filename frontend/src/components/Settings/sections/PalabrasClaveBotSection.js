@@ -6,6 +6,7 @@ import {
   Info, Zap,
 } from 'lucide-react';
 import { apiService } from '../../../services/api';
+import { EMPRESAS_DEF } from '../../../hooks/usePermisos';
 
 // ── Definición de intenciones conocidas ──────────────────────────────────────
 // icon: componente Lucide  |  color/bg: paleta de la badge
@@ -104,7 +105,7 @@ function PalabrasClaveBotSection({ setDirty }) {
   const [loading,   setLoading]   = useState(true);
   const [guardando, setGuardando] = useState(null);
   const [editando,  setEditando]  = useState({});
-  const [nueva,     setNueva]     = useState({ empresa_id: EMPRESA_TODAS, intencion: 'asesor', palabras: '' });
+  const [nueva,     setNueva]     = useState({ empresa_id: EMPRESA_TODAS, intencion: 'asesor', intencionCustom: '', palabras: '' });
   const [msg,       setMsg]       = useState(null);
 
   const cargar = useCallback(async () => {
@@ -126,25 +127,32 @@ function PalabrasClaveBotSection({ setDirty }) {
     setTimeout(() => setMsg(null), 3500);
   };
 
-  const handleGuardar = async (regla) => {
-    const textoEditado = editando[regla.id];
-    if (textoEditado === undefined) return;
-    const palabras = textoEditado.split(',').map(p => p.trim()).filter(Boolean);
-    if (!palabras.length) return mostrarMsg('error', 'Escribe al menos una palabra clave.');
-
-    setGuardando(regla.id);
+  const handleGuardarTodas = async () => {
+    const reglasEditadas = Object.keys(editando);
+    if (reglasEditadas.length === 0) return;
+    
+    setGuardando('todas');
     try {
-      await apiService.actualizarPalabraClave(regla.id, { palabras, activo: regla.activo });
-      setEditando(prev => { const n = { ...prev }; delete n[regla.id]; return n; });
+      for (const id of reglasEditadas) {
+        const reglaOriginal = reglas.find(r => r.id === id);
+        const textoEditado = editando[id];
+        const palabras = textoEditado.split(',').map(p => p.trim()).filter(Boolean);
+        if (palabras.length > 0) {
+          await apiService.actualizarPalabraClave(id, { palabras, activo: reglaOriginal.activo });
+        }
+      }
+      setEditando({});
       await cargar();
-      mostrarMsg('ok', 'Regla actualizada');
+      mostrarMsg('ok', 'Reglas actualizadas');
       setDirty && setDirty(false);
     } catch {
-      mostrarMsg('error', 'Error al guardar');
+      mostrarMsg('error', 'Error al guardar algunas reglas');
     } finally {
       setGuardando(null);
     }
   };
+
+  const isDirty = Object.keys(editando).length > 0;
 
   const handleToggle = async (regla) => {
     try {
@@ -173,9 +181,16 @@ function PalabrasClaveBotSection({ setDirty }) {
     e.preventDefault();
     const palabras = nueva.palabras.split(',').map(p => p.trim()).filter(Boolean);
     if (!palabras.length) return mostrarMsg('error', 'Escribe al menos una palabra clave.');
+    
+    let intencionFinal = nueva.intencion;
+    if (intencionFinal === 'custom') {
+      intencionFinal = nueva.intencionCustom.trim().toLowerCase();
+      if (!intencionFinal) return mostrarMsg('error', 'Escribe el nombre de la intención personalizada.');
+    }
+
     try {
-      await apiService.crearPalabraClave({ ...nueva, palabras });
-      setNueva({ empresa_id: EMPRESA_TODAS, intencion: 'asesor', palabras: '' });
+      await apiService.crearPalabraClave({ ...nueva, intencion: intencionFinal, palabras });
+      setNueva({ empresa_id: EMPRESA_TODAS, intencion: 'asesor', intencionCustom: '', palabras: '' });
       await cargar();
       mostrarMsg('ok', 'Regla creada');
     } catch (err) {
@@ -215,7 +230,7 @@ function PalabrasClaveBotSection({ setDirty }) {
         <>
           {/* ── Reglas existentes agrupadas por empresa ── */}
           {Object.entries(porEmpresa).map(([eid, lista]) => (
-            <div key={eid} className="plt-editor" style={{ marginBottom: 24 }}>
+            <div key={eid} style={{ marginBottom: 40, borderTop: '1px solid #e2e8f0', paddingTop: 20 }}>
 
               <h3 style={{ fontSize: 13, fontWeight: 600, color: '#374151', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
                 {eid === EMPRESA_TODAS
@@ -269,16 +284,6 @@ function PalabrasClaveBotSection({ setDirty }) {
                               : <><XCircle      size={12} /> Inactiva</>
                             }
                           </button>
-
-                          {/* Eliminar */}
-                          <button
-                            className="agent-edit-tab"
-                            style={{ padding: '3px 8px' }}
-                            title="Eliminar regla"
-                            onClick={() => handleEliminar(regla.id)}
-                          >
-                            <Trash2 size={13} />
-                          </button>
                         </div>
                       </div>
 
@@ -289,12 +294,13 @@ function PalabrasClaveBotSection({ setDirty }) {
                           style={{
                             flex:       1,
                             fontSize:   13,
-                            padding:    '6px 8px',
-                            border:     `1px solid ${editado ? '#94a3b8' : '#d1d5db'}`,
+                            padding:    '8px 12px',
+                            border:     `1px solid ${editado ? '#94a3b8' : '#e2e8f0'}`,
                             borderRadius: 6,
                             resize:     'vertical',
                             fontFamily: 'inherit',
                             background: '#fff',
+                            transition: 'border-color 0.2s',
                           }}
                           value={textoActual}
                           onChange={e => {
@@ -303,16 +309,6 @@ function PalabrasClaveBotSection({ setDirty }) {
                           }}
                           placeholder="falla, sin internet, problema, ..."
                         />
-                        {editado && (
-                          <button
-                            className="btn-save"
-                            style={{ alignSelf: 'flex-start', padding: '6px 12px', display: 'flex', alignItems: 'center', gap: 4 }}
-                            disabled={guardando === regla.id}
-                            onClick={() => handleGuardar(regla)}
-                          >
-                            {guardando === regla.id ? '...' : <><Save size={13} /> Guardar</>}
-                          </button>
-                        )}
                       </div>
                       <p style={{ fontSize: 11, color: '#9ca3af', marginTop: 4 }}>
                         Separa con comas. El bot detecta la intención si el mensaje <em>contiene</em> alguna de estas palabras (sin importar acentos o mayúsculas).
@@ -325,7 +321,7 @@ function PalabrasClaveBotSection({ setDirty }) {
           ))}
 
           {/* ── Crear nueva regla ── */}
-          <div className="plt-editor" style={{ marginTop: 8 }}>
+          <div style={{ marginBottom: 40, borderTop: '1px solid #e2e8f0', paddingTop: 30 }}>
             <h3 style={{ fontSize: 13, fontWeight: 600, color: '#374151', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
               <Plus size={13} /> Nueva regla
             </h3>
@@ -333,12 +329,16 @@ function PalabrasClaveBotSection({ setDirty }) {
               <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
                 <div style={{ flex: 1, minWidth: 160 }}>
                   <label style={{ fontSize: 12, color: '#6b7280', display: 'block', marginBottom: 4 }}>Empresa</label>
-                  <input
+                  <select
                     style={{ width: '100%', padding: '6px 8px', border: '1px solid #d1d5db', borderRadius: 6, fontSize: 13 }}
                     value={nueva.empresa_id}
                     onChange={e => setNueva(p => ({ ...p, empresa_id: e.target.value }))}
-                    placeholder="__todas__ o id-empresa"
-                  />
+                  >
+                    <option value={EMPRESA_TODAS}>Todas las empresas (Global)</option>
+                    {EMPRESAS_DEF.map(emp => (
+                      <option key={emp.id} value={emp.id}>{emp.label}</option>
+                    ))}
+                  </select>
                 </div>
                 <div style={{ flex: 1, minWidth: 160 }}>
                   <label style={{ fontSize: 12, color: '#6b7280', display: 'block', marginBottom: 4 }}>Intención</label>
@@ -352,6 +352,15 @@ function PalabrasClaveBotSection({ setDirty }) {
                     ))}
                     <option value="custom">Personalizada…</option>
                   </select>
+                  {nueva.intencion === 'custom' && (
+                    <input
+                      style={{ width: '100%', padding: '6px 8px', border: '1px solid #6366f1', borderRadius: 6, fontSize: 13, marginTop: 8 }}
+                      value={nueva.intencionCustom}
+                      onChange={e => setNueva(p => ({ ...p, intencionCustom: e.target.value }))}
+                      placeholder="Ej: despedida"
+                      required
+                    />
+                  )}
                 </div>
               </div>
               <div>
@@ -423,6 +432,19 @@ function PalabrasClaveBotSection({ setDirty }) {
           </div>
         </>
       )}
+
+      <div className="sc-footer">
+        {isDirty && <span style={{ color: '#d97706', fontSize: '13px', fontWeight: '500', marginRight: 'auto' }}>
+          ⚠️ Tienes cambios sin guardar. Haz clic en "Guardar cambios" para aplicarlos.
+        </span>}
+        <button
+          className="btn-save"
+          disabled={guardando === 'todas' || !isDirty}
+          onClick={handleGuardarTodas}
+        >
+          {guardando === 'todas' ? 'Guardando...' : 'Guardar cambios'}
+        </button>
+      </div>
     </div>
   );
 }

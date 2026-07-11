@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { User, Zap, Trash2, Send, MessageCircle, Activity, Info, X, ArrowLeft, Smile, Check, CheckCheck, ArrowRightLeft, CheckCircle2, BookOpen, Briefcase, DollarSign, Wrench } from 'lucide-react';
+import { User, Zap, Trash2, Send, MessageCircle, Activity, Info, X, ArrowLeft, Smile, Check, CheckCheck, ArrowRightLeft, CheckCircle2, BookOpen, Briefcase, DollarSign, Wrench, Clock } from 'lucide-react';
 import Picker from '@emoji-mart/react';
 import data from '@emoji-mart/data';
 import { apiService, resolveMedia } from '../../services/api';
@@ -17,13 +17,29 @@ import '../../styles/quick-replies.css';
 
 /** Convierte URLs en el texto en elementos <a> clicables */
 const URL_REGEX = /(https?:\/\/[^\s<>"']+)/gi;
+
+function formatWhatsAppStyle(texto) {
+  if (typeof texto !== 'string') return texto;
+  const regex = /(\*[^*]+\*|_[^_]+_)/g;
+  const partes = texto.split(regex);
+  return partes.map((parte, i) => {
+    if (parte.startsWith('*') && parte.endsWith('*')) {
+      return <strong key={i}>{parte.slice(1, -1)}</strong>;
+    }
+    if (parte.startsWith('_') && parte.endsWith('_')) {
+      return <em key={i}>{parte.slice(1, -1)}</em>;
+    }
+    return parte;
+  });
+}
+
 function renderTexto(texto) {
   if (!texto) return null;
   const partes = texto.split(URL_REGEX);
   return partes.map((parte, i) =>
     URL_REGEX.test(parte)
       ? <a key={i} href={parte} target="_blank" rel="noopener noreferrer" className="msg-link">{parte}</a>
-      : parte
+      : formatWhatsAppStyle(parte)
   );
 }
 
@@ -519,17 +535,7 @@ const ChatWindow = ({
   const displayName  = nombreReal || telefonoFmt || canalFallback || conversacionActiva?.username || '—';
   const subtitleLine = nombreReal ? (telefonoFmt || null) : null;
 
-  // Para Caso 2 (transferencia entre equipos): filtrar mensajes anteriores a la transferencia
-  // Los admins ven el historial completo; los asesores solo ven desde la transferencia.
-  const mensajesFiltrados = (() => {
-    const conv = conversacionActiva;
-    if (!conv?.transferida_en || user?.rol === 'admin') return mensajes;
-    const corte = new Date(conv.transferida_en).getTime();
-    return mensajes.filter(m => {
-      const t = new Date(m.created_at || m.fecha).getTime();
-      return t >= corte || m.remitente?.startsWith('sistema');
-    });
-  })();
+  const mensajesFiltrados = mensajes;
 
   // Precomputar info de agrupamiento
   const groupInfo = computeGroupInfo(mensajesFiltrados);
@@ -580,7 +586,12 @@ const ChatWindow = ({
             />
           </div>
         </div>
-        <div className="header-actions">
+        <div className="header-actions" style={{ display: 'flex', alignItems: 'center' }}>
+          {conversacionActiva.agente_nombre && (
+            <span style={{ fontSize: '0.85rem', fontWeight: '500', color: 'var(--text-secondary)', marginRight: '12px', display: 'flex', alignItems: 'center' }}>
+              Atendido por: <span style={{ color: 'var(--primary)', marginLeft: '4px' }}>{conversacionActiva.agente_nombre}</span>
+            </span>
+          )}
           <button
             className={`icon-btn-gray info-panel-toggle${showInfoPanel ? ' active' : ''}`}
             onClick={() => setShowInfoPanel(s => !s)}
@@ -638,14 +649,31 @@ const ChatWindow = ({
 
           if (m.remitente === 'sistema' || m.remitente === 'sistema_info' || m.remitente === 'sistema_success') {
             const typeClass = m.remitente === 'sistema_info' ? 'info' : (m.remitente === 'sistema_success' ? 'success' : '');
+            
+            const renderSystemIcon = (msg) => {
+              const textLower = msg.texto.toLowerCase();
+              if (textLower.includes('espera')) return <Clock size={15} style={{ marginRight: '8px', flexShrink: 0 }} />;
+              if (textLower.includes('recurrente')) return <Activity size={15} style={{ marginRight: '8px', flexShrink: 0 }} />;
+              if (msg.remitente === 'sistema_success') return <CheckCircle2 size={15} style={{ marginRight: '8px', flexShrink: 0 }} />;
+              if (textLower.includes('directamente')) return <User size={15} style={{ marginRight: '8px', flexShrink: 0 }} />;
+              if (textLower.includes('transferencia') || textLower.includes('transferido') || textLower.includes('devuelto a cola')) return <ArrowRightLeft size={15} style={{ marginRight: '8px', flexShrink: 0 }} />;
+              return <Info size={15} style={{ marginRight: '8px', flexShrink: 0 }} />;
+            };
+
+            let textoVisible = m.texto;
+            if (m.remitente === 'sistema_info' && user?.nombre) {
+              const strTarget = `asignó este chat a ${user.nombre}`;
+              if (textoVisible.includes(strTarget)) {
+                textoVisible = textoVisible.replace(strTarget, 'te asignó este chat');
+              }
+            }
+
             return (
               <React.Fragment key={idx}>
                 {mostrarSep && <div className="day-separator"><span>{formatDaySeparator(fechaMsg)}</span></div>}
                 <div className={`message-system ${typeClass}`}>
-                  {m.remitente === 'sistema_info'
-                    ? <Activity size={14} style={{ marginRight: '8px' }} />
-                    : <Zap      size={14} style={{ marginRight: '8px' }} />}
-                  {m.texto}
+                  {renderSystemIcon(m)}
+                  <span>{textoVisible}</span>
                 </div>
               </React.Fragment>
             );

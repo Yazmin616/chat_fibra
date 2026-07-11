@@ -1,31 +1,43 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
-  X, Plus, Trash2,
-  MessageSquare, HelpCircle, GitBranch, Zap, Brain, Flag,
-  MousePointer2, Info,
+  X, Plus, Trash2, MousePointer2, Info,
+  MessageSquare, List, Clock, AlarmClock, GitBranch,
+  Globe, Tag, Tags, MoveRight, Users, Bell,
+  XCircle, Shield, Zap, Flag, Brain,
 } from 'lucide-react';
 import { TIPO_CONFIG } from './customNodes';
+import { apiService } from '../../services/api';
 
-const TIPO_ICONS = {
-  mensaje: MessageSquare, pregunta: HelpCircle, condicion: GitBranch,
-  accion:  Zap,          intencion: Brain,      fin:       Flag,
-};
-const TIPO_ORDEN = ['mensaje', 'pregunta', 'condicion', 'accion', 'intencion', 'fin'];
-
-/* ── Field helpers ───────────────────────────────────────────────────────── */
+/* ── Helpers ─────────────────────────────────────────────────────────────── */
 function Field({ label, hint, children }) {
   return (
-    <div className="flow-field">
+    <div className="fep-field">
       <label>
         {label}
-        {hint && <span className="flow-field-hint">{hint}</span>}
+        {hint && <span className="fep-hint">{hint}</span>}
       </label>
       {children}
     </div>
   );
 }
 
-function FieldInput({ label, hint, value, onChange, placeholder, multiline }) {
+function FieldInput({ label, hint, value, onChange, placeholder, multiline, type = 'text', showVariables }) {
+  const insertVariable = (variable) => {
+    const textToInsert = `{{${variable}}}`;
+    onChange((value || '') + textToInsert);
+  };
+
+  const VARIABLES_DISPONIBLES = [
+    { label: '👤 Nombre', value: 'nombre' },
+    { label: '🏢 Empresa', value: 'empresa' },
+    { label: '📋 Servicio', value: 'servicio_etiqueta' },
+    { label: '💵 Deuda', value: 'servicio_deuda' },
+    { label: '📅 Vencimiento', value: 'servicio_vencimiento' },
+    { label: '📶 Estado', value: 'servicio_estado' },
+    { label: '🔗 Portal de Pago', value: 'servicio_portal_pago' },
+    { label: '📍 Dirección', value: 'servicio_direccion' }
+  ];
+
   return (
     <Field label={label} hint={hint}>
       {multiline ? (
@@ -33,46 +45,107 @@ function FieldInput({ label, hint, value, onChange, placeholder, multiline }) {
           value={value || ''}
           onChange={e => onChange(e.target.value)}
           placeholder={placeholder}
+          rows={3}
         />
       ) : (
         <input
+          type={type}
           value={value || ''}
           onChange={e => onChange(e.target.value)}
           placeholder={placeholder}
         />
       )}
+      {showVariables && (
+        <div className="fep-variables-picker">
+          <span className="fep-variables-picker-title">Variables rápidas:</span>
+          <div className="fep-variables-badges">
+            {VARIABLES_DISPONIBLES.map(v => (
+              <button
+                key={v.value}
+                type="button"
+                className="fep-var-badge"
+                onClick={() => insertVariable(v.value)}
+                title={`Insertar ${v.label}`}
+              >
+                {v.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
     </Field>
   );
 }
 
-function OpcionesEditor({ opciones = [], onChange }) {
-  const add    = () => onChange([...opciones, { texto: '', valor: '' }]);
+function FieldSelect({ label, hint, value, onChange, children }) {
+  return (
+    <Field label={label} hint={hint}>
+      <select value={value || ''} onChange={e => onChange(e.target.value)}>
+        {children}
+      </select>
+    </Field>
+  );
+}
+
+function OpcionesEditor({ opciones = [], onChange, isIntencion }) {
+  const add    = () => onChange([...opciones, { texto: '', valor: isIntencion ? '' : `op_${Date.now()}` }]);
   const remove = (i) => onChange(opciones.filter((_, idx) => idx !== i));
   const update = (i, key, val) =>
     onChange(opciones.map((op, idx) => idx === i ? { ...op, [key]: val } : op));
 
+  const [availableIntentions, setAvailableIntentions] = React.useState([
+    'asesor', 'soporte', 'cobranza', 'ventas', 'menu'
+  ]);
+
+  React.useEffect(() => {
+    if (isIntencion) {
+      apiService.getPalabrasClave().then(data => {
+        const custom = Array.from(new Set(data.map(d => d.intencion)));
+        const all = Array.from(new Set(['asesor', 'soporte', 'cobranza', 'ventas', 'menu', ...custom]));
+        setAvailableIntentions(all);
+      }).catch(e => console.error(e));
+    }
+  }, [isIntencion]);
+
   return (
-    <Field label="Opciones / botones" hint="Cada opción crea una salida en el nodo">
-      <div className="flow-options-list">
+    <Field label="Opciones / botones" hint="Cada opción crea una salida">
+      <div className="fep-options-list">
         {opciones.map((op, i) => (
-          <div key={i} className="flow-option-row">
-            <input
-              value={op.texto || ''}
-              placeholder="Texto del botón"
-              onChange={e => update(i, 'texto', e.target.value)}
-            />
-            <input
-              value={op.valor || ''}
-              placeholder="clave"
-              className="flow-option-key"
-              onChange={e => update(i, 'valor', e.target.value)}
-            />
-            <button className="flow-option-remove" onClick={() => remove(i)} title="Eliminar opción">
+          <div key={i} className="fep-option-row">
+            <div className="fep-option-dot-line" />
+            <div className="fep-option-inputs">
+              <input
+                value={op.texto || ''}
+                placeholder={isIntencion ? "Nombre visual de la rama" : "Texto del botón"}
+                onChange={e => update(i, 'texto', e.target.value)}
+              />
+              {isIntencion ? (
+                <select
+                  value={op.valor || ''}
+                  className="fep-option-key"
+                  onChange={e => update(i, 'valor', e.target.value)}
+                  style={{ width: '100%', padding: '6px 8px', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '12px' }}
+                >
+                  <option value="" disabled>Selecciona intención...</option>
+                  {availableIntentions.map(int => (
+                    <option key={int} value={int}>{int}</option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  value={op.valor || ''}
+                  placeholder="clave_interna"
+                  className="fep-option-key"
+                  onChange={e => update(i, 'valor', e.target.value)}
+                />
+              )}
+            </div>
+            <button className="fep-option-remove" onClick={() => remove(i)} title="Eliminar">
               <Trash2 size={12} />
             </button>
           </div>
         ))}
-        <button className="flow-add-option-btn" onClick={add}>
+        <button className="fep-add-btn" onClick={add}>
           <Plus size={13} /> Agregar opción
         </button>
       </div>
@@ -80,131 +153,101 @@ function OpcionesEditor({ opciones = [], onChange }) {
   );
 }
 
-function AccionSelect({ value, onChange }) {
-  return (
-    <Field label="Tipo de acción">
-      <select value={value || 'escalar_agente'} onChange={e => onChange(e.target.value)}>
-        <option value="escalar_agente">Escalar a agente humano</option>
-        <option value="identificar_cliente">Identificar cliente (BD)</option>
-        <option value="mostrar_deuda">Mostrar deuda</option>
-        <option value="mostrar_pago">Mostrar formas de pago</option>
-      </select>
-    </Field>
-  );
-}
-
-/* ── Empty state: resumen del flujo ─────────────────────────────────────── */
+/* ── Resumen (sin nodo seleccionado) ─────────────────────────────────────── */
 function EmptyState({ nodes = [], edges = [] }) {
-  const total = nodes.length;
-  const counts = TIPO_ORDEN.reduce((acc, t) => {
-    acc[t] = nodes.filter(n => n.type === t).length;
-    return acc;
-  }, {});
-  const hasNodes = total > 0;
+  const counts = {};
+  nodes.forEach(n => { counts[n.type] = (counts[n.type] || 0) + 1; });
 
   return (
-    <div className="flow-edit-panel">
-      <div className="flow-edit-panel-empty-header">
-        <MousePointer2 size={16} color="#64748b" />
+    <div className="fep-root fep-empty">
+      <div className="fep-empty-header">
+        <MousePointer2 size={15} />
         <span>Propiedades del nodo</span>
       </div>
-
-      <div className="flow-edit-panel-empty-body">
-        {hasNodes ? (
+      <div className="fep-empty-body">
+        {nodes.length > 0 ? (
           <>
-            <div className="flow-empty-summary-title">Resumen del flujo</div>
-            <div className="flow-empty-counts-row">
-              <span className="flow-empty-total">{total}</span>
-              <span className="flow-empty-total-label">nodos</span>
-              <span className="flow-empty-sep">·</span>
-              <span className="flow-empty-total">{edges.length}</span>
-              <span className="flow-empty-total-label">conexiones</span>
+            <div className="fep-summary-title">Resumen del flujo</div>
+            <div className="fep-summary-counters">
+              <div className="fep-counter">
+                <span className="fep-counter-num">{nodes.length}</span>
+                <span className="fep-counter-lbl">nodos</span>
+              </div>
+              <div className="fep-counter-sep" />
+              <div className="fep-counter">
+                <span className="fep-counter-num">{edges.length}</span>
+                <span className="fep-counter-lbl">conexiones</span>
+              </div>
             </div>
-
-            <div className="flow-empty-breakdown">
-              {TIPO_ORDEN.map(tipo => {
-                if (!counts[tipo]) return null;
+            <div className="fep-breakdown">
+              {Object.entries(counts).map(([tipo, cnt]) => {
                 const cfg  = TIPO_CONFIG[tipo];
-                const Icon = TIPO_ICONS[tipo];
+                if (!cfg) return null;
+                const Icon = cfg.icon;
                 return (
-                  <div key={tipo} className="flow-empty-type-row">
-                    <div
-                      className="flow-node-icon"
-                      style={{ background: cfg.color, width: 20, height: 20, borderRadius: 4, flexShrink: 0 }}
-                    >
-                      <Icon size={11} strokeWidth={2} />
+                  <div key={tipo} className="fep-breakdown-row">
+                    <div className="fep-breakdown-icon" style={{ background: cfg.color }}>
+                      <Icon size={11} strokeWidth={2} color="#fff" />
                     </div>
-                    <span className="flow-empty-type-name">{cfg.label}</span>
-                    <span className="flow-empty-type-count">{counts[tipo]}</span>
+                    <span className="fep-breakdown-label">{cfg.label}</span>
+                    <span className="fep-breakdown-count">{cnt}</span>
                   </div>
                 );
               })}
             </div>
           </>
         ) : (
-          <div className="flow-empty-no-nodes">
-            <Info size={18} color="#cbd5e1" strokeWidth={1.5} />
+          <div className="fep-no-nodes">
+            <Info size={20} strokeWidth={1.5} />
             <span>El flujo está vacío</span>
           </div>
         )}
-
-        <div className="flow-empty-hint">
-          <div className="flow-empty-hint-step">
-            <span className="flow-empty-hint-num">1</span>
-            Arrastra un tipo de nodo desde la paleta izquierda al canvas
-          </div>
-          <div className="flow-empty-hint-step">
-            <span className="flow-empty-hint-num">2</span>
-            Conecta los nodos arrastrando desde el punto inferior al punto superior
-          </div>
-          <div className="flow-empty-hint-step">
-            <span className="flow-empty-hint-num">3</span>
-            Haz clic en cualquier nodo para editar su contenido aquí
-          </div>
+        <div className="fep-hint-box">
+          {[
+            'Arrastra un tipo de nodo desde la paleta izquierda al canvas',
+            'Conecta los nodos arrastrando desde el punto derecho al punto izquierdo',
+            'Haz clic en cualquier nodo para editar su contenido aquí',
+          ].map((txt, i) => (
+            <div key={i} className="fep-hint-step">
+              <span className="fep-hint-num">{i + 1}</span>
+              {txt}
+            </div>
+          ))}
         </div>
       </div>
     </div>
   );
 }
 
-/* ── Panel con nodo seleccionado ─────────────────────────────────────────── */
+/* ── Panel principal ─────────────────────────────────────────────────────── */
 export default function EditPanel({ node, nodes, edges, onClose, onChange, onDelete }) {
   if (!node) return <EmptyState nodes={nodes} edges={edges} />;
 
   const tipo  = node.type;
   const datos = node.data || {};
   const cfg   = TIPO_CONFIG[tipo] || TIPO_CONFIG.mensaje;
-  const Icon  = TIPO_ICONS[tipo]  || MessageSquare;
+  const Icon  = cfg.icon;
 
   const set = (key, val) => onChange({ ...datos, [key]: val });
 
   return (
-    <div className="flow-edit-panel">
-      {/* Header coloreado según tipo */}
-      <div
-        className="flow-edit-panel-header"
-        style={{ background: cfg.lightBg, borderBottomColor: cfg.border }}
-      >
-        <div
-          className="flow-node-icon"
-          style={{ background: cfg.color, width: 30, height: 30, borderRadius: 7, flexShrink: 0 }}
-        >
-          <Icon size={15} strokeWidth={2} />
+    <div className="fep-root">
+      {/* Header */}
+      <div className="fep-header" style={{ background: cfg.color }}>
+        <div className="fep-header-icon">
+          <Icon size={16} strokeWidth={2} color="#fff" />
         </div>
-        <div className="flow-edit-panel-header-text">
-          <span className="flow-edit-type-badge" style={{ color: cfg.color }}>
-            {cfg.label}
-          </span>
-          <h3 className="flow-edit-node-name">
-            {datos.label || cfg.label}
-          </h3>
+        <div className="fep-header-text">
+          <span className="fep-header-type">{cfg.label}</span>
+          <span className="fep-header-name">{datos.label || cfg.label}</span>
         </div>
-        <button className="flow-edit-close-btn" onClick={onClose} title="Cerrar panel">
-          <X size={16} />
+        <button className="fep-close-btn" onClick={onClose} title="Cerrar">
+          <X size={15} color="#fff" />
         </button>
       </div>
 
-      <div className="flow-edit-panel-body">
+      {/* Body */}
+      <div className="fep-body">
         <FieldInput
           label="Nombre del nodo"
           hint="Visible en el canvas"
@@ -213,6 +256,7 @@ export default function EditPanel({ node, nodes, edges, onClose, onChange, onDel
           placeholder={cfg.label}
         />
 
+        {/* ── MENSAJE ── */}
         {tipo === 'mensaje' && (
           <FieldInput
             label="Texto del mensaje"
@@ -221,10 +265,12 @@ export default function EditPanel({ node, nodes, edges, onClose, onChange, onDel
             onChange={v => set('texto', v)}
             placeholder="Escribe el mensaje que enviará el bot..."
             multiline
+            showVariables
           />
         )}
 
-        {tipo === 'pregunta' && (
+        {/* ── LISTA OPCIONES ── */}
+        {tipo === 'lista_opciones' && (
           <>
             <FieldInput
               label="Texto de la pregunta"
@@ -232,6 +278,7 @@ export default function EditPanel({ node, nodes, edges, onClose, onChange, onDel
               onChange={v => set('texto', v)}
               placeholder="¿En qué puedo ayudarte?"
               multiline
+              showVariables
             />
             <OpcionesEditor
               opciones={datos.opciones || []}
@@ -240,6 +287,30 @@ export default function EditPanel({ node, nodes, edges, onClose, onChange, onDel
           </>
         )}
 
+        {/* ── ESPERAR ── */}
+        {tipo === 'esperar' && (
+          <FieldInput
+            label="Segundos de espera"
+            type="number"
+            value={datos.segundos}
+            onChange={v => set('segundos', v)}
+            placeholder="5"
+          />
+        )}
+
+        {/* ── ESPERAR MENSAJE ── */}
+        {tipo === 'esperar_mensaje' && (
+          <FieldInput
+            label="Tiempo máximo (segundos)"
+            hint="Si no responde, continúa"
+            type="number"
+            value={datos.timeout}
+            onChange={v => set('timeout', v)}
+            placeholder="120"
+          />
+        )}
+
+        {/* ── CONDICIÓN ── */}
         {tipo === 'condicion' && (
           <>
             <FieldInput
@@ -251,28 +322,128 @@ export default function EditPanel({ node, nodes, edges, onClose, onChange, onDel
             />
             <FieldInput
               label="Valor esperado"
-              hint="Comparación exacta"
               value={datos.valor}
               onChange={v => set('valor', v)}
               placeholder="activo"
             />
+            <OpcionesEditor
+              opciones={datos.opciones || []}
+              onChange={v => set('opciones', v)}
+            />
           </>
         )}
 
-        {tipo === 'accion' && (
+        {/* ── INTENCIÓN ── */}
+        {tipo === 'intencion' && (
           <>
-            <AccionSelect value={datos.accion} onChange={v => set('accion', v)} />
-            {datos.accion === 'escalar_agente' && (
-              <FieldInput
-                label="Departamento destino"
-                value={datos.departamento}
-                onChange={v => set('departamento', v)}
-                placeholder="Soporte Técnico"
-              />
-            )}
+            <FieldInput
+              label="Descripción"
+              hint="Documentación interna"
+              value={datos.descripcion}
+              onChange={v => set('descripcion', v)}
+              placeholder="Detecta intención de soporte / cobranza..."
+              multiline
+            />
+            <OpcionesEditor
+              opciones={datos.opciones || []}
+              onChange={v => set('opciones', v)}
+              isIntencion={true}
+            />
+          </>
+        )}
+
+        {/* ── API REQUEST ── */}
+        {tipo === 'api_request' && (
+          <>
+            <FieldInput
+              label="URL del endpoint"
+              value={datos.url}
+              onChange={v => set('url', v)}
+              placeholder="https://api.ejemplo.com/consulta"
+              showVariables
+            />
+            <FieldSelect
+              label="Método HTTP"
+              value={datos.metodo || 'GET'}
+              onChange={v => set('metodo', v)}
+            >
+              <option value="GET">GET</option>
+              <option value="POST">POST</option>
+              <option value="PUT">PUT</option>
+              <option value="DELETE">DELETE</option>
+            </FieldSelect>
+            <FieldInput
+              label="Body (JSON)"
+              hint="Solo para POST/PUT"
+              value={datos.body}
+              onChange={v => set('body', v)}
+              placeholder='{"clave": "valor"}'
+              multiline
+              showVariables
+            />
+          </>
+        )}
+
+        {/* ── ETIQUETAR / DESETIQUETAR ── */}
+        {(tipo === 'etiquetar' || tipo === 'desetiquetar') && (
+          <FieldInput
+            label="Nombre de la etiqueta"
+            value={datos.etiqueta}
+            onChange={v => set('etiqueta', v)}
+            placeholder="VIP, pendiente-pago, etc."
+          />
+        )}
+
+        {/* ── MOVER ETAPA ── */}
+        {tipo === 'mover_etapa' && (
+          <FieldInput
+            label="Nombre de la etapa destino"
+            value={datos.etapa}
+            onChange={v => set('etapa', v)}
+            placeholder="Calificado, Cerrado, etc."
+          />
+        )}
+
+        {/* ── ASIGNAR EQUIPO ── */}
+        {tipo === 'asignar_equipo' && (
+          <>
+            <FieldSelect
+              label="Equipo / Área"
+              value={datos.equipo}
+              onChange={v => set('equipo', v)}
+            >
+              <option value="">— Seleccionar —</option>
+              <option value="Soporte Técnico">Soporte Técnico</option>
+              <option value="Cobranza">Cobranza</option>
+              <option value="Ventas">Ventas</option>
+            </FieldSelect>
             <FieldInput
               label="Mensaje de confirmación"
-              hint="Texto al cliente al ejecutar"
+              hint="Texto que verá el cliente"
+              value={datos.mensaje}
+              onChange={v => set('mensaje', v)}
+              placeholder="Te conectamos con un asesor..."
+              multiline
+              showVariables
+            />
+          </>
+        )}
+
+        {/* ── ACCIÓN (legado) ── */}
+        {tipo === 'accion' && (
+          <>
+            <FieldSelect
+              label="Tipo de acción"
+              value={datos.accion || 'escalar_agente'}
+              onChange={v => set('accion', v)}
+            >
+              <option value="escalar_agente">Escalar a agente humano</option>
+              <option value="identificar_cliente">Identificar cliente (WISP)</option>
+              <option value="mostrar_deuda">Mostrar deuda</option>
+              <option value="mostrar_pago">Mostrar formas de pago</option>
+            </FieldSelect>
+            <FieldInput
+              label="Mensaje de confirmación"
               value={datos.mensaje}
               onChange={v => set('mensaje', v)}
               placeholder="Te conectamos con un asesor..."
@@ -281,33 +452,42 @@ export default function EditPanel({ node, nodes, edges, onClose, onChange, onDel
           </>
         )}
 
-        {tipo === 'intencion' && (
+        {/* ── FIN ── */}
+        {tipo === 'fin' && (
           <FieldInput
             label="Descripción"
-            hint="Documentación interna"
+            hint="Estado final"
             value={datos.descripcion}
             onChange={v => set('descripcion', v)}
-            placeholder="Detecta intención de soporte / cobranza / ventas por palabras clave del cliente..."
+            placeholder="Conversación cerrada..."
+          />
+        )}
+
+        {/* ── VALIDAR BANXICO ── */}
+        {tipo === 'validar_banxico' && (
+          <FieldInput
+            label="Variable de comprobante"
+            hint="Campo donde está el CLABE/referencia"
+            value={datos.variable}
+            onChange={v => set('variable', v)}
+            placeholder="{{comprobante_clabe}}"
+          />
+        )}
+
+        {/* ── NOTIFICACIÓN CHAT ── */}
+        {tipo === 'notificacion_chat' && (
+          <FieldInput
+            label="Texto de la notificación"
+            value={datos.texto}
+            onChange={v => set('texto', v)}
+            placeholder="Cliente esperando en cola..."
             multiline
           />
         )}
 
-        {tipo === 'fin' && (
-          <FieldInput
-            label="Descripción"
-            hint="Estado final de la conversación"
-            value={datos.descripcion}
-            onChange={v => set('descripcion', v)}
-            placeholder="Conversación cerrada / en espera de agente..."
-          />
-        )}
-
-        <div className="flow-edit-panel-footer">
-          <button
-            className="flow-btn flow-btn-danger"
-            style={{ width: '100%' }}
-            onClick={() => onDelete(node.id)}
-          >
+        {/* ── Eliminar nodo ── */}
+        <div className="fep-footer">
+          <button className="fep-delete-btn" onClick={() => onDelete(node.id)}>
             <Trash2 size={14} /> Eliminar nodo
           </button>
         </div>

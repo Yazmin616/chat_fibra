@@ -9,6 +9,22 @@ async function getPermisos(usuario_id) {
     db.query('SELECT modulo FROM usuario_modulos WHERE usuario_id=$1 ORDER BY modulo', [usuario_id]),
   ]);
 
+  // Si el usuario es el coordinador de algún área, le permitimos acceder a ciertos módulos de supervisión automáticamente
+  const { rows: isCoord } = await db.query(
+    "SELECT 1 FROM public.areas_soluciones WHERE coordinador_id = $1 LIMIT 1",
+    [usuario_id]
+  );
+
+  const modulosArray = mod.rows.map(r => r.modulo);
+  if (isCoord.length > 0) {
+    const modulosSupervisor = ['dashboard', 'nps', 'infracciones', 'notas_cierre', 'contactos'];
+    modulosSupervisor.forEach(m => {
+      if (!modulosArray.includes(m)) {
+        modulosArray.push(m);
+      }
+    });
+  }
+
   // Agrupar áreas por empresa
   const areasPorEmpresa = {};
   for (const row of are.rows) {
@@ -19,7 +35,8 @@ async function getPermisos(usuario_id) {
   return {
     empresas: emp.rows.map(r => r.empresa_id),
     areas:    Object.entries(areasPorEmpresa).map(([empresa_id, areas]) => ({ empresa_id, areas })),
-    modulos:  mod.rows.map(r => r.modulo),
+    modulos:  modulosArray,
+    es_coordinador: isCoord.length > 0,
   };
 }
 
@@ -97,6 +114,18 @@ async function tieneEmpresa(usuario_id, empresa_id) {
 }
 
 async function tieneModulo(usuario_id, modulo) {
+  // Si el usuario es el coordinador de algún área, le permitimos acceder a ciertos módulos de supervisión automáticamente
+  const { rows: isCoord } = await db.query(
+    "SELECT 1 FROM public.areas_soluciones WHERE coordinador_id = $1 LIMIT 1",
+    [usuario_id]
+  );
+  if (isCoord.length > 0) {
+    const modulosSupervisor = ['dashboard', 'nps', 'infracciones', 'notas_cierre', 'contactos'];
+    if (modulosSupervisor.includes(modulo)) {
+      return true;
+    }
+  }
+
   const { rows } = await db.query(
     `SELECT 1 FROM usuario_modulos WHERE usuario_id=$1 AND modulo=$2`,
     [usuario_id, modulo]

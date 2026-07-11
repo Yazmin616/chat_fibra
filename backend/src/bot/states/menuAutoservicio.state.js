@@ -17,10 +17,12 @@ const { ESTADOS, DEPARTAMENTOS } = require('../constants');
 const { ConversacionMeta }   = require('../conversacion.meta');
 const keyboards = require('../keyboards');
 const { detectarTodasCoincidentes } = require('../nlu');
+const { getTexto } = require('../../services/plantillas.service');
+const { getAreasSolucionesText } = require('../../utils/areasSolucionesHelper');
 
 const INTENTOS_MAX = 3;
 
-async function handle(mensaje, conversacion) {
+async function handle(mensaje, conversacion, usuario, io) {
   const opcion = parseAutoservicio(mensaje);
   const meta   = new ConversacionMeta(conversacion.metadata);
   const teclado = await keyboards.getAutoservicioKeyboard(meta.toJSON(), conversacion.empresa_id);
@@ -56,26 +58,24 @@ async function handle(mensaje, conversacion) {
     if (coincidentes.length === 1) {
       const { intencion } = coincidentes[0];
       if (intencion === 'asesor') {
+        const areasInfo = await getAreasSolucionesText(conversacion.empresa_id);
         return {
-          respuesta:   '🧑‍💼 ¿Con qué área deseas hablar?',
+          respuesta:   `🧑‍💼 ¿Con qué área deseas hablar?${areasInfo}`,
           nuevoEstado: ESTADOS.SELECCION_AREA,
           teclado: await keyboards.get('AREAS', conversacion.empresa_id),
         };
       }
       if (intencion === 'soporte') {
-        return _escalar(conversacion, DEPARTAMENTOS.SOPORTE,
-          `🔧 Entendí que tienes un problema técnico.\n\nTe conectamos con *${DEPARTAMENTOS.SOPORTE}*. Describe tu problema y un asesor te atenderá pronto. 🙏`
-        );
+        const confirmacion = await getTexto('escalar_soporte', conversacion.empresa_id, { departamento: DEPARTAMENTOS.SOPORTE });
+        return _escalar(conversacion, DEPARTAMENTOS.SOPORTE, confirmacion);
       }
       if (intencion === 'cobranza') {
-        return _escalar(conversacion, DEPARTAMENTOS.COBRANZA,
-          `💰 Entendí que tu consulta es sobre pagos o saldos.\n\nTe conectamos con *${DEPARTAMENTOS.COBRANZA}*. Un asesor te atenderá en breve. 🙏`
-        );
+        const confirmacion = await getTexto('escalar_cobranza', conversacion.empresa_id, { departamento: DEPARTAMENTOS.COBRANZA });
+        return _escalar(conversacion, DEPARTAMENTOS.COBRANZA, confirmacion);
       }
       if (intencion === 'ventas') {
-        return _escalar(conversacion, DEPARTAMENTOS.VENTAS,
-          `🆕 Entendí que quieres información sobre planes o contratos.\n\nTe conectamos con *${DEPARTAMENTOS.VENTAS}*. ¡Pronto un asesor te contactará! 🙏`
-        );
+        const confirmacion = await getTexto('escalar_ventas', conversacion.empresa_id, { departamento: DEPARTAMENTOS.VENTAS });
+        return _escalar(conversacion, DEPARTAMENTOS.VENTAS, confirmacion);
       }
     }
 
@@ -94,8 +94,9 @@ async function handle(mensaje, conversacion) {
     await conversacionRepo.updateMetadata(conversacion.id, meta.toJSON());
 
     if (meta.intentos_fallidos >= INTENTOS_MAX) {
+      const areasInfo = await getAreasSolucionesText(conversacion.empresa_id);
       return {
-        respuesta:   '🧑‍💼 Parece que necesitas ayuda con algo específico. Te conecto con un asesor.\n\n¿Con qué área quieres hablar?',
+        respuesta:   `🧑‍💼 Parece que necesitas ayuda con algo específico. Te conecto con un asesor.\n\n¿Con qué área quieres hablar?${areasInfo}`,
         nuevoEstado: ESTADOS.SELECCION_AREA,
         teclado: await keyboards.get('AREAS', conversacion.empresa_id),
       };
@@ -109,20 +110,19 @@ async function handle(mensaje, conversacion) {
   }
 
   if (opcion === 'falla') {
-    return _escalar(conversacion, DEPARTAMENTOS.SOPORTE,
-      `🔧 Te conectamos con *${DEPARTAMENTOS.SOPORTE}*.\n\nDescribe tu problema y un asesor te atenderá pronto. 🙏`
-    );
+    const confirmacion = await getTexto('escalar_soporte', conversacion.empresa_id, { departamento: DEPARTAMENTOS.SOPORTE });
+    return _escalar(conversacion, DEPARTAMENTOS.SOPORTE, confirmacion, io);
   }
 
   if (opcion === 'comprobante') {
-    return _escalar(conversacion, DEPARTAMENTOS.COBRANZA,
-      `✅ Te conectamos con *${DEPARTAMENTOS.COBRANZA}* para validar tu comprobante.\n\nPor favor envía la imagen de tu comprobante. 🙏`
-    );
+    const confirmacion = await getTexto('escalar_cobranza', conversacion.empresa_id, { departamento: DEPARTAMENTOS.COBRANZA });
+    return _escalar(conversacion, DEPARTAMENTOS.COBRANZA, confirmacion, io);
   }
 
   if (opcion === 'asesor') {
+    const areasInfo = await getAreasSolucionesText(conversacion.empresa_id);
     return {
-      respuesta:   '🧑‍💼 ¿Con qué área deseas hablar?',
+      respuesta:   `🧑‍💼 ¿Con qué área deseas hablar?${areasInfo}`,
       nuevoEstado: ESTADOS.SELECCION_AREA,
       teclado: await keyboards.get('AREAS', conversacion.empresa_id),
     };
@@ -131,51 +131,60 @@ async function handle(mensaje, conversacion) {
   const servicio = meta.servicio;
 
   if (opcion === 'deuda') {
+    const textoDeuda = await _formatDeuda(servicio, conversacion.empresa_id);
+    const textoConsulta = await getTexto('menu_otra_consulta', conversacion.empresa_id);
     return {
-      respuesta:   _formatDeuda(servicio) + '\n\n¿Deseas realizar otra consulta?',
+      respuesta:   textoDeuda + '\n\n' + textoConsulta,
       nuevoEstado: ESTADOS.OTRA_CONSULTA,
       teclado:     await keyboards.getOtraConsultaKeyboard(meta.toJSON(), conversacion.empresa_id),
     };
   }
 
   if (opcion === 'pago') {
+    const textoPago = await _formatPago(servicio, conversacion.empresa_id);
+    const textoConsulta = await getTexto('menu_otra_consulta', conversacion.empresa_id);
     return {
-      respuesta:   _formatPago(servicio) + '\n\n¿Deseas realizar otra consulta?',
+      respuesta:   textoPago + '\n\n' + textoConsulta,
       nuevoEstado: ESTADOS.OTRA_CONSULTA,
       teclado:     await keyboards.getOtraConsultaKeyboard(meta.toJSON(), conversacion.empresa_id),
     };
   }
 }
 
-function _formatDeuda(servicio) {
+async function _formatDeuda(servicio, empresa_id) {
   if (!servicio) {
-    return '⚠️ No se pudo obtener información de tu cuenta. Por favor intenta de nuevo o escribe *asesor*.';
+    return await getTexto('error_general', empresa_id);
   }
   if (servicio.deuda > 0) {
     const estadoIcon = servicio.estado === 'suspendido' ? '🔴 Suspendido' : '🟢 Activo';
-    return `💰 *Estado de cuenta*\n\n` +
-           `📋 ${servicio.etiqueta}\n` +
-           `💵 Saldo pendiente: *$${servicio.deuda.toFixed(2)} MXN*\n` +
-           `📅 Fecha límite: ${servicio.fecha_vencimiento}\n` +
-           `📶 Servicio: ${estadoIcon}`;
+    return await getTexto('estado_cuenta_con_deuda', empresa_id, {
+      etiqueta: servicio.etiqueta,
+      deuda: servicio.deuda.toFixed(2),
+      fecha_vencimiento: servicio.fecha_vencimiento,
+      estado_icon: estadoIcon
+    });
   }
-  return `✅ *Estado de cuenta*\n\n📋 ${servicio.etiqueta}\n\n¡Estás al corriente! No tienes saldo pendiente. 🎉`;
+  return await getTexto('estado_cuenta_sin_deuda', empresa_id, { etiqueta: servicio.etiqueta });
 }
 
-function _formatPago(servicio) {
+async function _formatPago(servicio, empresa_id) {
   if (!servicio) {
-    return '⚠️ No se pudo obtener información de pago. Por favor intenta de nuevo o escribe *asesor*.';
+    return await getTexto('error_general', empresa_id);
   }
-  return `📍 *¿Dónde pagar?*\n\n` +
-         `Para tu servicio *${servicio.etiqueta}* puedes pagar en:\n\n` +
-         `🔗 Portal en línea:\n${servicio.portal_pago}\n\n` +
-         `🏪 También puedes pagar en cualquiera de nuestras sucursales o corresponsales autorizados.`;
+  return await getTexto('info_pago', empresa_id, {
+    etiqueta: servicio.etiqueta,
+    portal_pago: servicio.portal_pago
+  });
 }
 
-async function _escalar(conversacion, departamento, confirmacion) {
+async function _escalar(conversacion, departamento, confirmacion, io) {
   await conversacionRepo.updateEstado(conversacion.id, ESTADOS.CERRADA);
   const { rows } = await conversacionRepo.createEsperando(conversacion.usuario_id, conversacion.empresa_id, departamento);
   const nuevaConvId = rows[0].id;
+
+  const { aplicarRoundRobin } = require('../../services/asignacion.service');
+  await aplicarRoundRobin(nuevaConvId, conversacion.empresa_id, departamento, io);
+
   await mensajeRepo.create(nuevaConvId, 'sistema_info', `CLIENTE EN ESPERA — ${departamento}`);
   await mensajeRepo.create(nuevaConvId, 'bot', confirmacion);
   return { earlyReturn: true, resultado: { texto: confirmacion, conversacion_id: nuevaConvId, departamento } };

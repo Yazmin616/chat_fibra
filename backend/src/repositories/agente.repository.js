@@ -33,7 +33,21 @@ const findByEmail = (email) =>
  */
 const findAll = () =>
   db.query(
-    "SELECT id, nombre, email, rol, area, esta_online, last_seen, created_at FROM agentes WHERE rol != 'ti' ORDER BY created_at DESC"
+    `SELECT 
+      id, nombre, email, rol, area, esta_online, last_seen, created_at, foto_perfil,
+      EXISTS(SELECT 1 FROM public.areas_soluciones WHERE coordinador_id = agentes.id) AS es_coordinador
+     FROM agentes 
+     WHERE rol != 'ti' 
+     ORDER BY created_at DESC`
+  );
+
+/**
+ * Lista todos los agentes para el directorio público interno.
+ * Solo campos necesarios para UI.
+ */
+const findAllDirectorio = () =>
+  db.query(
+    "SELECT id, nombre, area, esta_online FROM agentes WHERE rol != 'ti' ORDER BY area ASC, nombre ASC"
   );
 
 /**
@@ -126,4 +140,24 @@ const marcarInactivos = (minutos) =>
     [minutos]
   );
 
-module.exports = { findById, findByEmail, findAll, create, remove, update, updateWithPassword, setOnline, touchLastSeen, marcarInactivos };
+/**
+ * Obtiene el siguiente agente online del área indicada que lleva más tiempo sin recibir un chat.
+ * Para el algoritmo de asignación equitativa (Round-Robin).
+ * @param {string} area 
+ * @returns {Promise<import('pg').QueryResult>}
+ */
+const getNextAgentForRoundRobin = (area) =>
+  db.query(
+    'SELECT id FROM agentes WHERE esta_online = true AND area = $1 ORDER BY ultimo_chat_asignado ASC NULLS FIRST LIMIT 1',
+    [area]
+  );
+
+/**
+ * Actualiza el timestamp de última asignación de un agente (Round-Robin).
+ * @param {number} id 
+ * @returns {Promise<import('pg').QueryResult>}
+ */
+const updateUltimoChatAsignado = (id) =>
+  db.query('UPDATE agentes SET ultimo_chat_asignado = NOW() WHERE id = $1', [id]);
+
+module.exports = { findById, findByEmail, findAll, findAllDirectorio, create, remove, update, updateWithPassword, setOnline, touchLastSeen, marcarInactivos, getNextAgentForRoundRobin, updateUltimoChatAsignado };

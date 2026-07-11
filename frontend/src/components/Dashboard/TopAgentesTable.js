@@ -24,8 +24,8 @@ const RankBadge = ({ pos }) => {
 
 const SatBar = ({ pct }) => {
   const n = parseInt(pct) || 0;
-  if (!n) return <span className="sat-empty">—</span>;
-  const color = n >= 70 ? '#22c55e' : n >= 40 ? '#f97316' : '#ef4444';
+  if (!pct && pct !== 0) return <span className="sat-empty">—</span>;
+  const color = n >= 50 ? '#22c55e' : n > 0 ? '#f97316' : '#ef4444';
   return (
     <div className="sat-bar-wrap">
       <div className="sat-bar-track">
@@ -55,7 +55,7 @@ const AgentRow = ({ agente, pos, colorIdx, onClick }) => (
       <span className="agent-vol-main">{agente.total_chats}</span>
       <span className="agent-vol-sub">{agente.esta_semana} sem.</span>
     </div>
-    <SatBar pct={agente.satisfaccion_pct} />
+    <SatBar pct={agente.nps_score} />
   </div>
 );
 
@@ -106,7 +106,7 @@ const TopAgentesTable = ({ agentes }) => {
         <span>#</span>
         <span>Asesor</span>
         <span>Chats</span>
-        <span>Desempeño</span>
+        <span>NPS</span>
       </div>
 
       {/* Ranking general */}

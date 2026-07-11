@@ -39,7 +39,7 @@ const VENTANA_META_HORAS = 24;
 const MSG_DEFAULTS = {
   aviso1: '¿Sigues ahí? 👋 Seguimos disponibles para ayudarte cuando quieras.',
   aviso2: 'Hola, si no continúas la conversación la cerraremos pronto. ¡Escríbenos cuando quieras! 😊',
-  cierre: '¿Cómo calificarías la atención de {nombre_agente} hoy? 🌟\n\n1️⃣  Mala\n2️⃣  Regular\n3️⃣  Buena\n\nEscribe el número de tu calificación.',
+  cierre: 'La conversación ha sido cerrada automáticamente por inactividad. ¡Escríbenos cuando necesites ayuda de nuevo! 👋',
 };
 
 /**
@@ -89,11 +89,12 @@ function iniciarAutoCierre(io) {
       for (const conv of rows) {
         // ── Configuración de la empresa ──────────────────────────────────────
         const configRes = await db.query(
-          'SELECT clave, valor FROM configuraciones WHERE empresa_id=$1',
+          "SELECT clave, valor, empresa_id FROM configuraciones WHERE empresa_id=$1 OR empresa_id='todas'",
           [conv.empresa_id || 'fibratec']
         );
         const configMap = {};
-        configRes.rows.forEach(r => { configMap[r.clave] = r.valor; });
+        configRes.rows.filter(r => r.empresa_id === 'todas').forEach(r => { configMap[r.clave] = r.valor; });
+        configRes.rows.filter(r => r.empresa_id !== 'todas').forEach(r => { configMap[r.clave] = r.valor; });
 
         const ahora   = new Date();
         // Turnos del área de esta conversación (fallback → globales → jornada global)
@@ -290,11 +291,23 @@ function iniciarAutoCierre(io) {
 async function _procesarInactividadCliente(conv, configMap, io) {
   // Verificar quién envió el último mensaje.
   // Si fue el cliente, el agente aún no respondió → no aplica inactividad del cliente.
-  const { rows: lastMsg } = await db.query(
-    'SELECT remitente FROM mensajes WHERE conversacion_id=$1 ORDER BY id DESC LIMIT 1',
+  const { rows: history } = await db.query(
+    `SELECT remitente, texto FROM mensajes 
+     WHERE conversacion_id=$1 AND remitente NOT LIKE 'sistema_%' 
+     ORDER BY id DESC LIMIT 5`,
     [conv.id]
   );
-  if (lastMsg[0]?.remitente === 'user') return false;
+  let lastRealSender = null;
+  for (const m of history) {
+    if (m.remitente === 'bot' && (m.texto.includes('Sigues ahí') || m.texto.includes('Seguimos disponibles') || m.texto.includes('minutos sin respuesta') || m.texto.includes('inactividad'))) {
+      continue;
+    }
+    lastRealSender = m.remitente;
+    break;
+  }
+  // Solo iniciar el contador de inactividad del cliente si el agente fue el último en escribir.
+  // Si fue el usuario o el bot (ej. mensaje de bienvenida/transferencia), el agente aún debe responder.
+  if (lastRealSender !== 'agente') return false;
 
   const aviso1Min  = parseInt(configMap.inactividad_aviso1_min || '30');
   const aviso2Min  = parseInt(configMap.inactividad_aviso2_min || '120');
@@ -400,19 +413,18 @@ async function _enviarAvisoInactividad(conv, nivel, minutosInactivo, configMap, 
  */
 async function _cerrarHumano(conv, io, configMap = null) {
   const bannerMsg = 'Conversación cerrada automáticamente por inactividad del cliente';
-  const plantilla = configMap?.inactividad_msg_cierre || MSG_DEFAULTS.cierre;
-  const surveyText = _sustituirVariables(plantilla, conv);
+  const clienteMsg = 'La conversación ha sido cerrada automáticamente por inactividad. ¡Escríbenos cuando necesites ayuda de nuevo! 👋';
 
   await db.query(
     `UPDATE conversaciones
      SET estado=$1, es_humano=false,
          tipo_cierre='automatico', comentario_cierre=$2, cerrado_en=NOW(), updated_at=NOW()
      WHERE id=$3`,
-    [ESTADOS.ENCUESTA_AGENTE, 'Cerrado automáticamente por inactividad del cliente', conv.id]
+    [ESTADOS.CERRADA, 'Cerrado automáticamente por inactividad del cliente', conv.id]
   );
   await mensajeRepo.create(conv.id, 'sistema_success', bannerMsg);
-  await mensajeRepo.create(conv.id, 'bot', surveyText);
-  await enviarMensaje(conv.canal || 'telegram', conv.external_id, surveyText, conv.empresa_id);
+  await mensajeRepo.create(conv.id, 'bot', clienteMsg);
+  await enviarMensaje(conv.canal || 'telegram', conv.external_id, clienteMsg, conv.empresa_id);
 
   if (io) {
     emitToConv(io, conv.departamento, 'nuevo_mensaje', {
@@ -421,10 +433,10 @@ async function _cerrarHumano(conv, io, configMap = null) {
     });
     emitToConv(io, conv.departamento, 'nuevo_mensaje', {
       conversacion_id: conv.id, usuario_id: conv.usuario_id,
-      empresa_id: conv.empresa_id, mensaje: surveyText, remitente: 'bot',
+      empresa_id: conv.empresa_id, mensaje: clienteMsg, remitente: 'bot',
     });
     emitToConv(io, conv.departamento, 'conversacion_actualizada', {
-      id: conv.id, empresa_id: conv.empresa_id, estado: ESTADOS.ENCUESTA_AGENTE, es_humano: false,
+      id: conv.id, empresa_id: conv.empresa_id, estado: ESTADOS.CERRADA, es_humano: false,
     });
   }
 }

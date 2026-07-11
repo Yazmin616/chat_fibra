@@ -122,15 +122,15 @@
 
 /* ═══════════════════════════════════
    RESPONSIVO — TopBar
-═══════════════════════════════════ */
+   ═══════════════════════════════════ */
 @media (max-width: 768px) {
   .manual-btn {
     display: none;
   }
 
-  /* Ocultar el rol debajo del nombre de usuario */
-  .user-name + span {
-    display: none;
+  /* Ocultar nombre y rol en móviles para conservar espacio */
+  .user-info-text {
+    display: none !important;
   }
 
   .tenant-selector {
@@ -140,7 +140,7 @@
 
   .company-select {
     font-size: 13px;
-    max-width: 130px;
+    max-width: 180px; /* Incrementado para evitar truncamientos como "Todas las empr" */
   }
 
   .top-bar {
@@ -150,11 +150,104 @@
 
 @media (max-width: 480px) {
   .company-select {
-    max-width: 100px;
+    max-width: 160px; /* Mejor visualización en pantallas ultra pequeñas */
     font-size: 12px;
   }
+}
 
-  .user-name {
-    font-size: 12px;
-  }
+/* Menú Desplegable de Usuario (TopBar) */
+.topbar-user-menu {
+  position: relative;
+}
+
+.topbar-dropdown-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  width: 190px;
+  z-index: 999;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.topbar-dropdown-header {
+  padding: 10px 14px;
+  background: #f8fafc;
+  border-bottom: 1px solid #e2e8f0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.topbar-dropdown-header strong {
+  font-size: 13px;
+  color: #1e293b;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.topbar-dropdown-header span {
+  font-size: 11px;
+  color: #64748b;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.topbar-dropdown-item {
+  background: none;
+  border: none;
+  padding: 10px 14px;
+  font-size: 13px;
+  color: #475569;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  outline: none;
+}
+
+.topbar-dropdown-item:hover:not(:disabled) {
+  background: #f1f5f9;
+  color: #0f172a;
+}
+
+.topbar-dropdown-item:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.topbar-dropdown-item.logout-btn {
+  color: #ef4444;
+}
+
+.topbar-dropdown-item.logout-btn:hover {
+  background: #fee2e2;
+  color: #ef4444;
+}
+
+.topbar-dropdown-divider {
+  height: 1px;
+  background: #e2e8f0;
+}
+
+.user-info-text {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.user-role-label {
+  font-size: 10px;
+  color: #667781;
+  text-transform: uppercase;
 }

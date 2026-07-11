@@ -1,15 +1,18 @@
 import React from 'react';
 import {
   LayoutDashboard, MessageCircle, Settings, Users,
-  LogOut, Shield, AlertTriangle, Tag, FileText, GitBranch,
+  LogOut, Shield, AlertTriangle, Tag, FileText, GitBranch, BarChart2, ClipboardList
 } from 'lucide-react';
 
 const Sidebar = ({
   visible, currentView, setView, user, onLogout,
   totalNoLeidos = 0, totalInfracciones = 0,
   hasModulo = () => true,  // fallback: muestra todo si no hay permisos aún
+  esCoordinador = false,
 }) => {
   if (!visible) return null;
+
+  const esAdmin = user?.rol === 'admin';
 
   const item = (modulo, view, icon, label, badge) => {
     if (!hasModulo(modulo)) return null;
@@ -48,14 +51,17 @@ const Sidebar = ({
       </div>
 
       <div className="menu-section">
-        {item('dashboard',     'dashboard',         <LayoutDashboard size={20} />, 'Dashboard')}
-        {item('chat',          'chat',              <MessageCircle size={20} />,  'Chat',              totalNoLeidos)}
+        {item('dashboard',     'dashboard',         <LayoutDashboard size={20} />, esAdmin ? 'Dashboard General' : 'Dashboard Propio')}
+        {item('nps',           'nps',               <BarChart2 size={20} />,       esCoordinador ? 'Dashboard de mi Staff' : 'Evaluación Staff')}
+        {item('soluciones',    'soluciones',         <ClipboardList size={20} />,   esAdmin ? 'Soluciones Globales' : (esCoordinador ? 'Soluciones de mi Staff' : 'Mis Soluciones'))}
+        {item('chat',          'chat',              <MessageCircle size={20} />,  'Chat')}
         {item('contactos',     'contactos',         <Users size={20} />,          'Contactos')}
         {item('infracciones',  'infracciones',      <AlertTriangle size={20} />,  'Infracciones',      totalInfracciones)}
         {item('etiquetas',     'etiquetas',         <Tag size={20} />,            'Etiquetas')}
         {item('notas_cierre',  'categorias-cierre', <FileText size={20} />,       'Notas de Cierre')}
         {item('flujo_bot',     'flow-editor',       <GitBranch size={20} />,      'Flujo del Bot')}
         {item('usuarios',      'agents',            <Users size={20} />,          'Usuarios / Agentes')}
+        {item('equipos',       'equipos',           <Shield size={20} />,         'Equipos')}
         {item('configuracion', 'config',            <Settings size={20} />,       'Configuración')}
       </div>
 
@@ -65,7 +71,10 @@ const Sidebar = ({
             <Shield size={14} color="#dc2626" />
             <strong style={{ color: '#fff' }}>{user?.nombre}</strong>
           </div>
-          <span style={{ textTransform: 'capitalize' }}>{user?.rol} · {user?.area}</span>
+          <span style={{ textTransform: 'capitalize' }}>
+            {user?.rol} · {user?.area}
+            {esCoordinador && ' · Coordinador'}
+          </span>
         </div>
 
         <div className="menu-item logout" onClick={onLogout}>

@@ -197,16 +197,16 @@ function PanelTurnos({ areas, refreshAreas }) {
   });
 
   return (
-    <div className="settings-card sc-card" style={{ marginBottom: 20 }}>
-      <div className="sc-card-header">
+    <div style={{ marginBottom: 40 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
         <div>
-          <h3 className="th-subtitle">Turnos por área</h3>
-          <p className="th-desc">
+          <h3 className="th-subtitle" style={{ fontSize: '18px', margin: '0 0 5px 0' }}>Turnos por área</h3>
+          <p className="th-desc" style={{ margin: 0, color: '#64748b' }}>
             Las áreas sin turno propio heredan los turnos <strong>Globales</strong>.
             Si tampoco hay globales, se usa la Jornada laboral configurada como default.
           </p>
         </div>
-        <button className="btn-save" style={{ marginTop: 0 }} onClick={() => setShowing('new')}>
+        <button className="btn-save" onClick={() => setShowing('new')}>
           + Agregar turno
         </button>
       </div>
@@ -317,18 +317,19 @@ function PanelFestivos({ areas }) {
   };
 
   return (
-    <div className="settings-card sc-card">
-      <div className="sc-card-header">
+    <div style={{ marginBottom: 40, borderTop: '1px solid #e2e8f0', paddingTop: 30 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
         <div>
-          <h3 className="th-subtitle">Días festivos / no laborables</h3>
-          <p className="th-desc">
-            En días festivos no se generan sanciones y se envía el mensaje de escenario A al cliente.
-            Un festivo sin área aplica a todos los equipos.
+          <h3 className="th-subtitle" style={{ fontSize: '18px', margin: '0 0 5px 0' }}>Días festivos excepcionales</h3>
+          <p className="th-desc" style={{ margin: 0, color: '#64748b' }}>
+            Aplica a fechas específicas donde el área (o toda la empresa si es Global) no trabajará en todo el día.
           </p>
         </div>
-        <button className="btn-save" style={{ marginTop: 0 }} onClick={() => setMostrando(v => !v)}>
-          + Agregar festivo
-        </button>
+        {!mostrando && (
+          <button className="btn-save" onClick={() => setMostrando(true)}>
+            + Agregar festivo
+          </button>
+        )}
       </div>
 
       {mostrando && (
@@ -407,6 +408,11 @@ function PanelMensajes({ config, onSave, setDirty }) {
   const [msgFueraHorario,  setMsgFueraHorario]  = useState(config.msg_fuera_horario ?? DEFAULTS.msg_fuera_horario);
   const [saveState, setSaveState] = useState('idle');
 
+  const isDirty = (
+    msgFestivo !== (config.msg_festivo ?? DEFAULTS.msg_festivo) ||
+    msgFueraHorario !== (config.msg_fuera_horario ?? DEFAULTS.msg_fuera_horario)
+  );
+
   const handleSave = async () => {
     setSaveState('saving');
     try {
@@ -424,9 +430,9 @@ function PanelMensajes({ config, onSave, setDirty }) {
   const markDirty = (setter) => (val) => { setter(val); setDirty(true); };
 
   return (
-    <div className="settings-card sc-card" style={{ marginTop: 20 }}>
-      <h3 className="th-subtitle">Mensajes automáticos al cliente</h3>
-      <p className="th-desc">
+    <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: 30 }}>
+      <h3 className="th-subtitle" style={{ fontSize: '18px', margin: '0 0 5px 0' }}>Mensajes automáticos al cliente</h3>
+      <p className="th-desc" style={{ margin: '0 0 20px 0', color: '#64748b' }}>
         Se envían automáticamente cuando llega un mensaje del cliente según la situación.
         Usa <code>{'{horarios_atencion}'}</code> para insertar los horarios generados desde los turnos.
       </p>
@@ -462,8 +468,11 @@ function PanelMensajes({ config, onSave, setDirty }) {
       </div>
 
       <div className="sc-footer">
+        {isDirty && <span style={{ color: '#d97706', fontSize: '13px', fontWeight: '500', marginRight: 'auto' }}>
+          ⚠️ Tienes cambios sin guardar. Haz clic en "Guardar cambios" para aplicarlos.
+        </span>}
         <SectionStatus state={saveState} />
-        <button className="btn-save" disabled={saveState === 'saving'} onClick={handleSave}>
+        <button className="btn-save" disabled={saveState === 'saving' || !isDirty} onClick={handleSave}>
           {saveState === 'saving' ? 'Guardando…' : 'Guardar mensajes'}
         </button>
       </div>

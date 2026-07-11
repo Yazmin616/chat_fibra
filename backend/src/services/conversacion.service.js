@@ -25,19 +25,37 @@ const { emitToConv }   = require('../utils/rooms');
  */
 async function listar(empresa_id, agente_id) {
   let esAdmin    = false;
-  let areaAgente = null;
+  let areasAgente = [];
 
   if (agente_id) {
     const { rows } = await agenteRepo.findById(agente_id);
     if (rows.length > 0) {
       esAdmin    = rows[0].rol === 'admin';
-      areaAgente = rows[0].area;
+      
+      const permisosRepo = require('../repositories/permisos.repository');
+      const permisos = await permisosRepo.getPermisos(agente_id);
+      
+      if (permisos && permisos.areas && permisos.areas.length > 0) {
+        // Encontrar los permisos de área para la empresa solicitada o __todas__
+        const areaConfig = permisos.areas.find(a => a.empresa_id === empresa_id || a.empresa_id === '__todas__');
+        if (areaConfig && areaConfig.areas) {
+          areasAgente = areaConfig.areas;
+        }
+      } else {
+        // Fallback al rol legacy por si no hay permisos JSON
+        areasAgente = [rows[0].area];
+      }
     }
+  }
+
+  // Si el asesor tiene '__todas__' en sus áreas, puede ver todo como el admin
+  if (areasAgente.includes('__todas__')) {
+    esAdmin = true;
   }
 
   const { rows } = esAdmin
     ? await conversacionRepo.listAdmin(empresa_id)
-    : await conversacionRepo.listByArea(areaAgente, empresa_id);
+    : await conversacionRepo.listByAreas(areasAgente.length > 0 ? areasAgente : ['ninguna'], empresa_id);
 
   return rows.sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at));
 }
@@ -98,17 +116,39 @@ async function getMensajes(usuarioId, agente_id, conversacion_id) {
  * @throws {Error} 404 si la conversación no existe.
  * @returns {Promise<void>}
  */
-async function marcarLeido(conversacion_id, io) {
+async function marcarLeido(conversacion_id, agente, io) {
   const { rows } = await conversacionRepo.findById(conversacion_id);
   if (rows.length === 0) {
     const err = new Error('Conversación no encontrada');
     err.status = 404;
     throw err;
   }
-  const { empresa_id, usuario_id, departamento } = rows[0];
+  const conv = rows[0];
+  const { empresa_id, usuario_id, departamento } = conv;
 
   // Marcar solo los mensajes de ESTA conversación para no afectar otras empresas
   await mensajeRepo.markReadByConversacion(conversacion_id);
+
+  // Auto-asignación si el chat está abierto pero nadie lo tiene asignado aún
+  if (!conv.agente_id && agente && (conv.estado === 'abierta' || conv.estado === 'ESPERANDO_AGENTE' || conv.estado === 'atendiendo')) {
+    await conversacionRepo.assignAgente(conversacion_id, agente.id);
+    
+    try {
+      const { marcarTomada } = require('./transferencia.service');
+      await marcarTomada(conversacion_id, agente.id, agente.nombre);
+    } catch (_) {}
+
+    const nuevoEstado = conv.estado === 'ESPERANDO_AGENTE' ? 'atendiendo' : conv.estado;
+
+    if (io) {
+      emitToConv(io, departamento, 'conversacion_actualizada', {
+        id: conversacion_id,
+        agente_id: agente.id,
+        agente_nombre: agente.nombre,
+        estado: nuevoEstado
+      });
+    }
+  }
 
   if (io) emitToConv(io, departamento, 'conversacion_leida', { conversacion_id, usuario_id, empresa_id });
 }

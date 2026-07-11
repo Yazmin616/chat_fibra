@@ -24,7 +24,7 @@ function getSectionFromHash() {
   return found ? found.id : DEFAULT_SECTION_ID;
 }
 
-const SettingsView = ({ config, onSave, empresaId, user }) => {
+const SettingsView = ({ config, onSave, empresaId, user, esCoordinador }) => {
   const [activeId, setActiveId] = useState(getSectionFromHash);
 
   // dirtyRef: escrito por la sección activa, leído por el shell al navegar.
@@ -56,7 +56,7 @@ const SettingsView = ({ config, onSave, empresaId, user }) => {
     setActiveId(id);
   }, [activeId]);
 
-  const visibleSections = SECTIONS.filter(s => !s.adminOnly || user?.rol === 'admin');
+  const visibleSections = SECTIONS.filter(s => !s.adminOnly || user?.rol === 'admin' || (esCoordinador && s.coordinatorAllowed));
   const activeSection = visibleSections.find(s => s.id === activeId) || visibleSections[0];
   const ActiveComponent = activeSection.component;
 
@@ -100,6 +100,7 @@ const SettingsView = ({ config, onSave, empresaId, user }) => {
           setDirty={setDirty}
           empresaId={empresaId}
           user={user}
+          esCoordinador={esCoordinador}
         />
       </div>
 

@@ -25,6 +25,13 @@ import React from 'react';
 import { Search, MessageSquare, Clock, CheckCircle, ClipboardList, User, CheckCheck } from 'lucide-react';
 import { formatConvTime } from '../../utils/formatDate';
 
+const cleanLastMessage = (text) => {
+  if (!text) return '';
+  const clean = text.replace(/\s+/g, ' ');
+  if (clean.length > 50) return clean.slice(0, 50) + '...';
+  return clean;
+};
+
 /**
  * @param {object}   props
  * @param {object[]} props.conversaciones         - Lista de conversaciones ya filtradas.
@@ -39,6 +46,7 @@ import { formatConvTime } from '../../utils/formatDate';
  */
 const ChatList = ({
   conversaciones,
+  todasLasConversaciones = [],
   conversacionActiva,
   setConversacionActiva,
   cargarMensajes,
@@ -46,8 +54,27 @@ const ChatList = ({
   setBusqueda,
   filtro,
   setFiltro,
-  user
+  user,
+  empresaId
 }) => {
+  const ESTADOS_PURO_BOT = ['abierta', 'MENU_PRINCIPAL', 'SELECCION_EMPRESA', 'SELECCION_AREA'];
+
+  const unreadPendientes = todasLasConversaciones.filter(c => {
+    if (empresaId && empresaId !== 'todas' && c.empresa_id !== empresaId) return false;
+    if (c.estado === 'cerrada' || c.estado?.startsWith('ENCUESTA')) return false;
+    if (ESTADOS_PURO_BOT.includes(c.estado)) return false;
+    if (user?.rol !== 'admin' && c.agente_id) return false;
+    return parseInt(c.no_leidos) > 0;
+  }).length;
+
+  const unreadAsignados = todasLasConversaciones.filter(c => {
+    if (empresaId && empresaId !== 'todas' && c.empresa_id !== empresaId) return false;
+    if (c.estado === 'cerrada' || c.estado?.startsWith('ENCUESTA')) return false;
+    if (ESTADOS_PURO_BOT.includes(c.estado)) return false;
+    if (Number(c.agente_id) !== Number(user?.id)) return false;
+    return parseInt(c.no_leidos) > 0;
+  }).length;
+
   return (
     <div className="chat-list-panel">
       <div className="search-container">
@@ -66,14 +93,26 @@ const ChatList = ({
         <button
           className={`tab-pill ${filtro === 'Todos los chats' ? 'active' : ''}`}
           onClick={() => setFiltro('Todos los chats')}
+          style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
         >
           Pendientes
+          {unreadPendientes > 0 && (
+            <div style={{ backgroundColor: '#25D366', color: 'white', borderRadius: '10px', padding: '0 6px', fontSize: '11px', fontWeight: 'bold' }}>
+              {unreadPendientes}
+            </div>
+          )}
         </button>
         <button
           className={`tab-pill ${filtro === 'Mis Asignados' ? 'active' : ''}`}
           onClick={() => setFiltro('Mis Asignados')}
+          style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
         >
           Mis Asignados
+          {unreadAsignados > 0 && (
+            <div style={{ backgroundColor: '#25D366', color: 'white', borderRadius: '10px', padding: '0 6px', fontSize: '11px', fontWeight: 'bold' }}>
+              {unreadAsignados}
+            </div>
+          )}
         </button>
         <button
           className={`tab-pill tab-pill--cerrados ${filtro === 'Cerrados' ? 'active' : ''}`}
@@ -87,6 +126,7 @@ const ChatList = ({
         {conversaciones.map((conv) => {
           const esCerrado  = conv.estado === 'cerrada' || conv.estado?.startsWith('ENCUESTA');
           const esEncuesta = conv.estado?.startsWith('ENCUESTA');
+          const esHumano = conv.estado === 'ESPERANDO_AGENTE' || conv.estado === 'atendiendo';
 
           return (
             <div
@@ -139,23 +179,25 @@ const ChatList = ({
                       </span>
                     ) : esCerrado ? (
                       <span className="conv-estado-cerrado">
-                        {conv.ultimo_mensaje || 'Chat cerrado'}
+                        {cleanLastMessage(conv.ultimo_mensaje) || 'Chat cerrado'}
                       </span>
                     ) : (
                       <span>
                         {conv.ultimo_remitente === 'agente' ? 'Tú: ' : ''}
-                        {conv.ultimo_mensaje || 'Sin mensajes'}
+                        {cleanLastMessage(conv.ultimo_mensaje) || 'Sin mensajes'}
                       </span>
                     )}
                   </div>
 
                   <div style={{ flexShrink: 0, display: 'flex', alignItems: 'flex-start', paddingTop: '2px' }}>
-                    {!esCerrado && parseInt(conv.no_leidos) > 0 ? (
+                    {esHumano && conv.estado === 'ESPERANDO_AGENTE' ? (
+                      <div className="unread-badge-right" style={{ backgroundColor: '#25D366', color: 'white', borderRadius: '50%', minWidth: '18px', height: '18px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: 'bold', padding: '0 4px' }}>
+                        {parseInt(conv.no_leidos) > 0 ? conv.no_leidos : 1}
+                      </div>
+                    ) : esHumano && parseInt(conv.no_leidos) > 0 ? (
                       <div className="unread-badge-right" style={{ backgroundColor: '#25D366', color: 'white', borderRadius: '50%', minWidth: '18px', height: '18px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: 'bold', padding: '0 4px' }}>
                         {conv.no_leidos}
                       </div>
-                    ) : conv.estado === 'ESPERANDO_AGENTE' ? (
-                      <Clock size={14} color="var(--text-hint)" />
                     ) : esCerrado ? (
                       <CheckCheck size={16} color="var(--text-hint)" />
                     ) : (

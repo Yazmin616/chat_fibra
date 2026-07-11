@@ -105,28 +105,35 @@
 
 /* ── KPI Cards ────────────────────────────────────────────── */
 .kpi-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(175px, 1fr));
-  gap: 16px;
+  display: flex;
+  flex-wrap: wrap;
+  background: var(--dash-card-bg);
+  border: 1px solid var(--dash-card-border);
+  border-radius: var(--dash-radius);
+  box-shadow: var(--dash-shadow);
+  overflow: hidden;
+  margin-bottom: 24px;
 }
 
 .kpi-card {
-  background: var(--dash-card-bg);
-  border: 1px solid var(--dash-card-border);
-  border-top: 3px solid var(--kpi-color, #3b82f6);
-  padding: 20px 22px;
-  border-radius: var(--dash-radius);
+  flex: 1 1 180px;
+  padding: 24px 20px;
   display: flex;
   align-items: center;
   gap: 16px;
-  box-shadow: var(--dash-shadow);
-  transition: box-shadow 0.2s, transform 0.2s;
+  border-right: 1px solid var(--dash-card-border);
+  border-bottom: 1px solid var(--dash-card-border);
+  transition: background 0.2s;
   cursor: default;
+  border-top: 3px solid var(--kpi-color, #3b82f6);
+}
+
+.kpi-card:last-child {
+  border-right: none;
 }
 
 .kpi-card:hover {
-  box-shadow: var(--dash-shadow-hover);
-  transform: translateY(-2px);
+  background: var(--dash-bg);
 }
 
 .kpi-icon {

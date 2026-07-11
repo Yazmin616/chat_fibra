@@ -22,7 +22,7 @@ const router                = express.Router();
 const agenteController      = require('../controllers/agente.controller');
 const dashboardController   = require('../controllers/dashboard.controller');
 const infraccionController  = require('../controllers/infraccion.controller');
-const { verifyToken, requireAdmin } = require('../middleware/auth.middleware');
+const { verifyToken, requireAdmin, requireAdminOrCoordinator } = require('../middleware/auth.middleware');
 
 // Multer en memoria: archivos nunca tocan el disco, se procesan directamente en RAM
 // y se envían al canal externo (Telegram). Límite 16 MB.
@@ -415,8 +415,10 @@ router.post('/sticker', verifyToken, async (req, res) => {
 router.get('/dashboard',                    verifyToken, dashboardController.getKpis);
 router.get('/dashboard/calificaciones',     verifyToken, dashboardController.getCalificaciones);
 router.get('/dashboard/asesor/:id',         verifyToken, requireAdmin, dashboardController.getAgenteStats);
-router.get('/infracciones',                 verifyToken, requireAdmin, infraccionController.getInfracciones);
-router.get('/infracciones/hoy',             verifyToken, requireAdmin, infraccionController.getConteoHoy);
+router.get('/dashboard/nps',                verifyToken, requireAdminOrCoordinator, dashboardController.getNpsStats);
+router.get('/dashboard/soluciones',         verifyToken, dashboardController.getSolucionesStaff);
+router.get('/infracciones',                 verifyToken, requireAdminOrCoordinator, infraccionController.getInfracciones);
+router.get('/infracciones/hoy',             verifyToken, requireAdminOrCoordinator, infraccionController.getConteoHoy);
 router.post('/reaccionar', verifyToken, agenteController.reaccionar);
 
 // Respuestas rápidas (personales de cada agente)
@@ -431,6 +433,7 @@ router.post('/enviar-media',       verifyToken,              upload.single('arch
 router.post('/liberar',            verifyToken,              agenteController.liberar);
 router.post('/escribiendo',        verifyToken,              agenteController.escribiendo);
 router.delete('/conversacion/:id', verifyToken, requireAdmin, agenteController.eliminarConversacion);
+router.get('/directorio',          verifyToken,              agenteController.directorio);
 router.get('/',                    verifyToken, requireAdmin, agenteController.listar);
 router.post('/',                   verifyToken, requireAdmin, agenteController.crear);
 router.patch('/:id/foto',          verifyToken, avatarUpload.single('foto'), agenteController.subirFoto);

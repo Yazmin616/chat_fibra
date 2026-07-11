@@ -15,6 +15,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { apiService } from '../../services/api';
 import { Search, Phone, User, Edit2, Check, X } from 'lucide-react';
+import '../../styles/contacts.css';
 
 /**
  * Vista sin props. Gestiona su propio estado de lista, búsqueda y edición inline.
@@ -69,136 +70,214 @@ const ContactsView = () => {
   );
 
   return (
-    <div className="contacts-view-container" style={{ padding: '24px', maxWidth: '1200px', margin: '0 auto' }}>
-      <div className="view-header" style={{ marginBottom: '24px' }}>
-        <h1 style={{ fontSize: '24px', fontWeight: '700', color: '#111b21', margin: '0 0 8px 0' }}>Contactos</h1>
-        <p style={{ color: '#667781', fontSize: '14px', margin: 0 }}>Gestiona los clientes que han interactuado con el sistema.</p>
+    <div className="contacts-view-container">
+      <div className="contacts-header">
+        <h1>Contactos</h1>
+        <p>Gestiona los clientes que han interactuado con el sistema.</p>
       </div>
 
-      <div className="contacts-actions" style={{ marginBottom: '20px' }}>
-        <div className="search-box" style={{ 
-          display: 'flex', 
-          alignItems: 'center', 
-          gap: '10px', 
-          background: '#fff', 
-          padding: '10px 16px', 
-          borderRadius: '12px',
-          border: '1px solid #e9edef',
-          maxWidth: '400px'
-        }}>
-          <Search size={18} color="#54656f" />
+      <div className="contacts-actions">
+        <div className="contacts-search-box">
+          <Search size={18} color="#94a3b8" />
           <input 
             type="text" 
             placeholder="Busca por nombre o teléfono..." 
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            style={{ border: 'none', outline: 'none', width: '100%', fontSize: '14px' }}
           />
         </div>
       </div>
 
-      <div className="contacts-table-container" style={{
-        background: '#fff',
-        borderRadius: '16px',
-        border: '1px solid #e9edef',
-        overflow: 'auto',
-        boxShadow: '0 2px 5px rgba(0,0,0,0.05)'
-      }}>
-        {loading ? (
-          <div style={{ padding: '40px', textAlign: 'center', color: '#667781' }}>Cargando contactos...</div>
-        ) : (
-          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
-            <thead>
-              <tr style={{ background: '#f8f9fa', borderBottom: '1px solid #e9edef' }}>
-                <th style={{ padding: '16px', fontSize: '12px', fontWeight: '700', color: '#54656f', textTransform: 'uppercase' }}>Cliente</th>
-                <th style={{ padding: '16px', fontSize: '12px', fontWeight: '700', color: '#54656f', textTransform: 'uppercase' }}>Teléfono</th>
-                <th style={{ padding: '16px', fontSize: '12px', fontWeight: '700', color: '#54656f', textTransform: 'uppercase' }}>Canal</th>
-                <th style={{ padding: '16px', fontSize: '12px', fontWeight: '700', color: '#54656f', textTransform: 'uppercase' }}>Acciones</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredContacts.map(contact => (
-                <tr key={contact.id} style={{ borderBottom: '1px solid #f2f2f2' }}>
-                  <td style={{ padding: '16px' }}>
-                    {editingId === contact.id ? (
-                      <input 
-                        type="text" 
-                        value={editForm.nombre}
-                        onChange={(e) => setEditForm({...editForm, nombre: e.target.value})}
-                        style={{ padding: '6px', borderRadius: '4px', border: '1px solid #dc2626', fontSize: '14px', width: '100%' }}
-                      />
-                    ) : (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                        <div style={{ 
-                          width: '32px', 
-                          height: '32px', 
-                          borderRadius: '50%', 
-                          background: '#e9edef', 
-                          display: 'flex', 
-                          alignItems: 'center', 
-                          justifyContent: 'center' 
-                        }}>
-                          <User size={16} color="#54656f" />
+      {loading ? (
+        <div style={{ padding: '40px', textAlign: 'center', color: '#64748b' }}>Cargando contactos...</div>
+      ) : (
+        <>
+          {/* TABLA DE ESCRITORIO / TABLET */}
+          <div className="contacts-table-wrapper">
+            <table className="contacts-table">
+              <thead>
+                <tr>
+                  <th style={{ width: '40%' }}>Cliente</th>
+                  <th style={{ width: '30%' }}>Teléfono</th>
+                  <th style={{ width: '15%' }}>Canal</th>
+                  <th style={{ width: '15%' }}>Acciones</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredContacts.map(contact => (
+                  <tr key={contact.id}>
+                    <td>
+                      {editingId === contact.id ? (
+                        <input 
+                          type="text" 
+                          value={editForm.nombre}
+                          onChange={(e) => setEditForm({...editForm, nombre: e.target.value})}
+                          style={{ padding: '8px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '13px', width: '100%', outline: 'none' }}
+                        />
+                      ) : (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                          <div style={{ 
+                            width: '32px', 
+                            height: '32px', 
+                            borderRadius: '50%', 
+                            background: '#eff6ff', 
+                            color: '#3b82f6',
+                            display: 'flex', 
+                            alignItems: 'center', 
+                            justifyContent: 'center' 
+                          }}>
+                            <User size={16} />
+                          </div>
+                          <div>
+                            <div style={{ fontWeight: '600', color: '#0f172a', fontSize: '13px' }}>{contact.nombre || contact.username || 'Sin nombre'}</div>
+                          </div>
                         </div>
-                        <div>
-                          <div style={{ fontWeight: '600', color: '#111b21', fontSize: '14px' }}>{contact.nombre || contact.username || 'Sin nombre'}</div>
+                      )}
+                    </td>
+                    <td>
+                      {editingId === contact.id ? (
+                        <input 
+                          type="text" 
+                          value={editForm.telefono}
+                          onChange={(e) => setEditForm({...editForm, telefono: e.target.value})}
+                          style={{ padding: '8px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '13px', width: '100%', outline: 'none' }}
+                        />
+                      ) : (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#475569', fontSize: '13px' }}>
+                          <Phone size={13} color="#64748b" />
+                          {contact.telefono || 'No registrado'}
                         </div>
+                      )}
+                    </td>
+                    <td>
+                      <span style={{ 
+                        padding: '4px 8px', 
+                        borderRadius: '6px', 
+                        background: contact.canal === 'telegram' ? '#e1f5fe' : '#e8f5e9',
+                        color: contact.canal === 'telegram' ? '#039be5' : '#2e7d32',
+                        fontSize: '11px',
+                        fontWeight: '700',
+                        textTransform: 'uppercase'
+                      }}>
+                        {contact.canal}
+                      </span>
+                    </td>
+                    <td>
+                      {editingId === contact.id ? (
+                        <div style={{ display: 'flex', gap: '6px' }}>
+                          <button onClick={() => handleSave(contact.id)} style={{ border: 'none', background: '#3b82f6', color: '#fff', padding: '6px', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
+                            <Check size={14} />
+                          </button>
+                          <button onClick={() => setEditingId(null)} style={{ border: 'none', background: '#ef4444', color: '#fff', padding: '6px', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
+                            <X size={14} />
+                          </button>
+                        </div>
+                      ) : (
+                        <button onClick={() => handleEdit(contact)} style={{ border: 'none', background: '#f1f5f9', color: '#475569', padding: '6px', borderRadius: '6px', cursor: 'pointer', transition: 'background 0.2s' }}>
+                          <Edit2 size={14} />
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* LISTA DE TARJETAS PARA MÓVILES */}
+          <div className="contacts-mobile-list">
+            {filteredContacts.map(contact => {
+              const isEditing = editingId === contact.id;
+
+              return (
+                <div key={contact.id} className="contact-mobile-card">
+                  <div className="contact-card-header">
+                    <div className="contact-card-user">
+                      <div className="contact-card-avatar">
+                        <User size={16} />
                       </div>
-                    )}
-                  </td>
-                  <td style={{ padding: '16px' }}>
-                    {editingId === contact.id ? (
-                      <input 
-                        type="text" 
-                        value={editForm.telefono}
-                        onChange={(e) => setEditForm({...editForm, telefono: e.target.value})}
-                        style={{ padding: '6px', borderRadius: '4px', border: '1px solid #dc2626', fontSize: '14px', width: '100%' }}
-                      />
-                    ) : (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#54656f', fontSize: '14px' }}>
-                        <Phone size={14} />
-                        {contact.telefono || 'No registrado'}
-                      </div>
-                    )}
-                  </td>
-                  <td style={{ padding: '16px' }}>
+                      
+                      {isEditing ? (
+                        <input 
+                          type="text" 
+                          className="contact-mobile-input"
+                          value={editForm.nombre}
+                          onChange={(e) => setEditForm({...editForm, nombre: e.target.value})}
+                          placeholder="Nombre del Cliente"
+                        />
+                      ) : (
+                        <span className="contact-card-name">
+                          {contact.nombre || contact.username || 'Sin nombre'}
+                        </span>
+                      )}
+                    </div>
+                    
                     <span style={{ 
                       padding: '4px 8px', 
                       borderRadius: '6px', 
                       background: contact.canal === 'telegram' ? '#e1f5fe' : '#e8f5e9',
                       color: contact.canal === 'telegram' ? '#039be5' : '#2e7d32',
-                      fontSize: '11px',
+                      fontSize: '10px',
                       fontWeight: '700',
-                      textTransform: 'uppercase'
+                      textTransform: 'uppercase',
+                      marginLeft: '10px'
                     }}>
                       {contact.canal}
                     </span>
-                  </td>
-                  <td style={{ padding: '16px' }}>
-                    {editingId === contact.id ? (
-                      <div style={{ display: 'flex', gap: '8px' }}>
-                        <button onClick={() => handleSave(contact.id)} style={{ border: 'none', background: '#dc2626', color: '#fff', padding: '6px', borderRadius: '6px', cursor: 'pointer' }}>
-                          <Check size={16} />
-                        </button>
-                        <button onClick={() => setEditingId(null)} style={{ border: 'none', background: '#ea4335', color: '#fff', padding: '6px', borderRadius: '6px', cursor: 'pointer' }}>
-                          <X size={16} />
-                        </button>
-                      </div>
+                  </div>
+
+                  <div className="contact-card-body">
+                    {isEditing ? (
+                      <input 
+                        type="text" 
+                        className="contact-mobile-input"
+                        value={editForm.telefono}
+                        onChange={(e) => setEditForm({...editForm, telefono: e.target.value})}
+                        placeholder="Teléfono"
+                      />
                     ) : (
-                      <button onClick={() => handleEdit(contact)} style={{ border: 'none', background: 'transparent', color: '#54656f', padding: '6px', borderRadius: '6px', cursor: 'pointer', transition: 'background 0.2s' }}>
-                        <Edit2 size={16} />
+                      <div className="contact-card-phone">
+                        <Phone size={13} color="#64748b" />
+                        <span>{contact.telefono || 'No registrado'}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="contact-card-actions">
+                    {isEditing ? (
+                      <>
+                        <button 
+                          onClick={() => handleSave(contact.id)} 
+                          style={{ border: 'none', background: '#3b82f6', color: '#fff', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px' }}
+                        >
+                          <Check size={14} /> Guardar
+                        </button>
+                        <button 
+                          onClick={() => setEditingId(null)} 
+                          style={{ border: 'none', background: '#ef4444', color: '#fff', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px' }}
+                        >
+                          <X size={14} /> Cancelar
+                        </button>
+                      </>
+                    ) : (
+                      <button 
+                        onClick={() => handleEdit(contact)} 
+                        style={{ border: 'none', background: '#f1f5f9', color: '#475569', padding: '8px 16px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: '500' }}
+                      >
+                        <Edit2 size={13} /> Editar
                       </button>
                     )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-        {!loading && filteredContacts.length === 0 && (
-          <div style={{ padding: '40px', textAlign: 'center', color: '#667781' }}>No se encontraron contactos.</div>
-        )}
-      </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
+
+      {!loading && filteredContacts.length === 0 && (
+        <div style={{ padding: '40px', textAlign: 'center', color: '#64748b' }}>No se encontraron contactos.</div>
+      )}
     </div>
   );
 };

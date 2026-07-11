@@ -67,8 +67,8 @@
 
 /* Pestaña Cerrados — color neutro para diferenciarla de las activas */
 .tab-pill--cerrados.active {
-  background: var(--bg-search);
-  color: var(--text-secondary);
+  background: var(--accent);
+  color: white;
 }
 
 /* Lista de conversaciones */

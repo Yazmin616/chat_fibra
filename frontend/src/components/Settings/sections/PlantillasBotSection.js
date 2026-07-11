@@ -33,23 +33,26 @@ const PlantillasBotSection = ({ empresaId }) => {
     ));
   };
 
-  const handleSave = async (clave, texto) => {
+  const handleSaveAll = async () => {
     try {
       setSaving(true);
-      await apiService.updatePlantillaBot(clave, texto, empresaId);
+      const dirtyPlantillas = plantillas.filter(p => p.dirty);
+      for (const p of dirtyPlantillas) {
+        await apiService.updatePlantillaBot(p.clave, p.texto, empresaId);
+      }
       
       setPlantillas(prev => prev.map(p => 
-        p.clave === clave 
-          ? { ...p, es_personalizado: true, dirty: false }
-          : p
+        p.dirty ? { ...p, es_personalizado: true, dirty: false } : p
       ));
     } catch (err) {
-      console.error('Error saving plantilla:', err);
-      alert('Error al guardar la plantilla: ' + err.message);
+      console.error('Error saving plantillas:', err);
+      alert('Error al guardar las plantillas: ' + err.message);
     } finally {
       setSaving(false);
     }
   };
+
+  const isDirty = plantillas.some(p => p.dirty);
 
   if (loading) return <div style={{ padding: '20px', color: '#666' }}>Cargando plantillas...</div>;
   if (error) return <div style={{ padding: '20px', color: 'red' }}>{error}</div>;
@@ -70,9 +73,9 @@ const PlantillasBotSection = ({ empresaId }) => {
         Asegúrate de dejarlas tal cual para que el bot las reemplace automáticamente.
       </div>
 
-      <div className="settings-card sc-card" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '30px' }}>
+      <div style={{ display: 'flex', flexDirection: 'column' }}>
         {plantillas.map((plantilla, index) => (
-          <div key={plantilla.clave} className={`sc-phase sc-phase--${(index % 3) + 1}`} style={{ borderLeftColor: '#3b82f6' }}>
+          <div key={plantilla.clave} className="sc-phase">
             <div className="sc-phase-head">
               <span className="sc-phase-num" style={{ background: '#3b82f6' }}>{index + 1}</span>
               <span className="sc-phase-name">{plantilla.clave} {plantilla.es_personalizado && <span style={{ fontSize: '11px', backgroundColor: '#e0f2fe', color: '#0369a1', padding: '2px 8px', borderRadius: '12px', fontWeight: 'normal', marginLeft: '10px' }}>Personalizada</span>}</span>
@@ -87,20 +90,21 @@ const PlantillasBotSection = ({ empresaId }) => {
               value={plantilla.texto}
               onChange={(val) => handleChangeTexto(plantilla.clave, val)}
             />
-
-            {plantilla.dirty && (
-              <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '10px' }}>
-                <button
-                  className="btn-save"
-                  disabled={saving}
-                  onClick={() => handleSave(plantilla.clave, plantilla.texto)}
-                >
-                  {saving ? 'Guardando...' : 'Guardar cambios'}
-                </button>
-              </div>
-            )}
           </div>
         ))}
+      </div>
+
+      <div className="sc-footer">
+        {isDirty && <span style={{ color: '#d97706', fontSize: '13px', fontWeight: '500', marginRight: 'auto' }}>
+          ⚠️ Tienes cambios sin guardar. Haz clic en "Guardar cambios" para aplicarlos.
+        </span>}
+        <button
+          className="btn-save"
+          disabled={saving || !isDirty}
+          onClick={handleSaveAll}
+        >
+          {saving ? 'Guardando...' : 'Guardar cambios'}
+        </button>
       </div>
     </div>
   );

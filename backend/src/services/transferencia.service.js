@@ -34,7 +34,7 @@ const { enviarMensaje }     = require('../adapters');
  * @param {import('socket.io').Server} params.io
  * @returns {Promise<{tipo: string, area_destino: string}>}
  */
-async function transferir({ conversacion_id, agente_id, agente_nombre, area_origen, area_destino, nota, io }) {
+async function transferir({ conversacion_id, agente_id, agente_nombre, area_origen, area_destino, agente_destino_id, agente_destino_nombre, nota, io }) {
   // Validar que la conversación existe y está asignada a este agente
   const { rows } = await db.query(
     `SELECT c.*, u.external_id, u.canal
@@ -58,11 +58,27 @@ async function transferir({ conversacion_id, agente_id, agente_nombre, area_orig
 
   // Para admins sin área asignada, usar el departamento actual de la conversación
   const areaOrigenEfectiva = area_origen || conv.departamento || 'Sin área';
+  const esDirecta = !!agente_destino_id;
   const tipo = area_destino === areaOrigenEfectiva ? 'mismo_equipo' : 'entre_equipos';
   const esCambioEquipo = tipo === 'entre_equipos';
 
   // ── Actualizar la conversación ──────────────────────────────────────────────
-  if (esCambioEquipo) {
+  if (esDirecta) {
+    await db.query(
+      `UPDATE conversaciones
+       SET agente_id          = $1,
+           departamento       = $2,
+           estado             = 'atendiendo',
+           nota_transferencia = NULL,
+           transferida_en     = NOW(),
+           transferida_desde  = $3,
+           sla_pendiente_desde = NOW(),
+           aviso_inactividad_enviado = 0,
+           updated_at         = NOW()
+       WHERE id=$4`,
+      [agente_destino_id, area_destino, conv.departamento, conversacion_id]
+    );
+  } else if (esCambioEquipo) {
     // Caso 2: cambia área, guarda timestamp y área origen para filtrar historial
     await db.query(
       `UPDATE conversaciones
@@ -94,9 +110,14 @@ async function transferir({ conversacion_id, agente_id, agente_nombre, area_orig
   }
 
   // ── Insertar mensaje de sistema visible en el historial ────────────────────
-  const bannerTexto = esCambioEquipo
-    ? `🔀 Chat transferido a ${area_destino} por ${agente_nombre}. Nota: "${nota}"`
-    : `🔄 Chat devuelto a cola de ${areaOrigenEfectiva} por ${agente_nombre} (cambio de turno). Nota: "${nota}"`;
+  let bannerTexto = '';
+  if (esDirecta) {
+    bannerTexto = `${agente_nombre} asignó este chat a ${agente_destino_nombre}. Motivo: "${nota}"`;
+  } else {
+    bannerTexto = esCambioEquipo
+      ? `Chat transferido a ${area_destino} por ${agente_nombre}. Nota: "${nota}"`
+      : `Chat devuelto a cola de ${areaOrigenEfectiva} por ${agente_nombre} (cambio de turno). Nota: "${nota}"`;
+  }
 
   await mensajeRepo.create(conversacion_id, 'sistema_info', bannerTexto);
 
@@ -112,13 +133,20 @@ async function transferir({ conversacion_id, agente_id, agente_nombre, area_orig
     nota,
   });
 
+  // Si fue directa, marcarla como tomada inmediatamente
+  if (esDirecta) {
+    await transferenciaRepo.markTomada(registro.id, agente_destino_id, agente_destino_nombre);
+  }
+
   // ── Verificar horario del área destino ─────────────────────────────────────
   // Si el área destino no tiene turno activo, avisar al cliente que está fuera de horario
   const { escenario: escHorario } = await detectarEscenario(db, new Date(), conv.empresa_id, area_destino, {});
   if (escHorario !== 'C') { // 'C' = turno activo; 'A'/'B' = festivo / fuera de turno
     try {
       const { rows: [cfg] } = await db.query(
-        `SELECT valor FROM configuraciones WHERE clave='msg_fuera_horario' AND empresa_id=$1`,
+        `SELECT valor FROM configuraciones 
+         WHERE (empresa_id = $1 OR empresa_id = 'todas') AND clave = 'msg_fuera_horario'
+         ORDER BY CASE WHEN empresa_id = $1 THEN 0 ELSE 1 END LIMIT 1`,
         [conv.empresa_id]
       );
       const msgFuera = cfg?.valor || '⏰ Nuestro equipo no está disponible en este momento. Te atenderemos en horario de atención.';
@@ -132,16 +160,19 @@ async function transferir({ conversacion_id, agente_id, agente_nombre, area_orig
     const payload = {
       id:         conversacion_id,
       empresa_id: conv.empresa_id,
-      estado:     'ESPERANDO_AGENTE',
-      agente_id:  null,
+      estado:     esDirecta ? 'atendiendo' : 'ESPERANDO_AGENTE',
+      agente_id:  esDirecta ? agente_destino_id : null,
       departamento: area_destino,
     };
+    if (esDirecta) {
+      payload.no_leidos = (parseInt(conv.no_leidos) || 0) + 1;
+    }
 
     // Notificar al área origen + admin (el chat desaparece de la lista del agente)
     emitToConv(io, areaOrigenEfectiva, 'conversacion_actualizada', payload);
 
     // Notificar al área destino (el chat aparece en su cola), evitando doble emit a admin
-    if (esCambioEquipo) {
+    if (esCambioEquipo || esDirecta) {
       io.to(`area:${area_destino}`).emit('conversacion_actualizada', payload);
     }
 

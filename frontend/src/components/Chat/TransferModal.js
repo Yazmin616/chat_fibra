@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, ArrowRightLeft } from 'lucide-react';
+import { X, ArrowRightLeft, RefreshCw, User } from 'lucide-react';
+import { apiService } from '../../services/api';
 
 const AREAS = ['Ventas', 'Cobranza', 'Soporte Técnico'];
 
@@ -19,12 +20,17 @@ const AREAS = ['Ventas', 'Cobranza', 'Soporte Técnico'];
  */
 const TransferModal = ({ clienteNombre, areaActual, onConfirmar, onCancelar }) => {
   const [areaDestino, setAreaDestino] = useState(areaActual || AREAS[0]);
+  const [agenteDestinoId, setAgenteDestinoId] = useState('');
+  const [agentes,     setAgentes]     = useState([]);
   const [nota,        setNota]        = useState('');
   const [cargando,    setCargando]    = useState(false);
   const overlayRef   = useRef(null);
   const textareaRef  = useRef(null);
 
-  useEffect(() => { textareaRef.current?.focus(); }, []);
+  useEffect(() => {
+    textareaRef.current?.focus();
+    apiService.getDirectorioAgentes().then(setAgentes).catch(console.error);
+  }, []);
 
   useEffect(() => {
     const onEsc = (e) => { if (e.key === 'Escape') onCancelar(); };
@@ -40,11 +46,19 @@ const TransferModal = ({ clienteNombre, areaActual, onConfirmar, onCancelar }) =
     e.preventDefault();
     if (!nota.trim() || cargando) return;
     setCargando(true);
-    await onConfirmar(areaDestino, nota.trim());
+    let idAgente = agenteDestinoId;
+    let nombreAgente = null;
+    if (idAgente) {
+      const selected = agentes.find(a => a.id === Number(idAgente));
+      if (selected) nombreAgente = selected.nombre;
+    }
+    await onConfirmar(areaDestino, nota.trim(), idAgente, nombreAgente);
     setCargando(false);
   };
 
   const esMismoEquipo = areaDestino === areaActual;
+  const esDirecta = !!agenteDestinoId;
+  const agentesArea = agentes.filter(a => a.area === areaDestino);
 
   return (
     <div className="cc-overlay" ref={overlayRef} onClick={handleOverlayClick}>
@@ -86,11 +100,32 @@ const TransferModal = ({ clienteNombre, areaActual, onConfirmar, onCancelar }) =
             </select>
           </div>
 
+          {/* Agente destino */}
+          <div className="cc-field">
+            <label className="cc-label">Agente (opcional)</label>
+            <select
+              className="cc-input"
+              value={agenteDestinoId}
+              onChange={e => setAgenteDestinoId(e.target.value)}
+            >
+              <option value="">Cola general del grupo</option>
+              {agentesArea.map(a => (
+                <option key={a.id} value={a.id}>
+                  {a.nombre} {a.esta_online ? '(En línea)' : '(Desconectado)'}
+                </option>
+              ))}
+            </select>
+          </div>
+
           {/* Indicador de tipo */}
-          <div className={`transfer-tipo-badge ${esMismoEquipo ? 'mismo' : 'otro'}`}>
-            {esMismoEquipo
-              ? '🔄 Cambio de turno — el chat vuelve a la cola de este equipo'
-              : `🔀 Cambio de área — el chat pasa a la cola de ${areaDestino}`}
+          <div className={`transfer-tipo-badge ${esDirecta ? 'directa' : (esMismoEquipo ? 'mismo' : 'otro')}`}>
+            {esDirecta ? (
+              <><User size={14} style={{marginRight: '6px'}} /> Transferencia directa al asesor</>
+            ) : esMismoEquipo ? (
+              <><RefreshCw size={14} style={{marginRight: '6px'}} /> Cambio de turno — el chat vuelve a la cola de este equipo</>
+            ) : (
+              <><ArrowRightLeft size={14} style={{marginRight: '6px'}} /> Cambio de área — el chat pasa a la cola de {areaDestino}</>
+            )}
           </div>
 
           {/* Nota obligatoria */}

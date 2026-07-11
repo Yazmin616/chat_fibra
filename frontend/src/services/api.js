@@ -162,8 +162,20 @@ export const apiService = {
    * @param {string} empresa_id - ID de la empresa.
    * @returns {Promise<object>}
    */
-  async getConfigs(empresa_id) {
-    const res = await fetch(`${API_URL}/configuracion?empresa_id=${empresa_id}`, {
+  async getConfigs(empresa_id, area) {
+    let url = `${API_URL}/configuracion?empresa_id=${empresa_id}`;
+    if (area) url += `&area=${encodeURIComponent(area)}`;
+    const res = await fetch(url, {
+      headers: _authHeaders(),
+    });
+    return _parseJson(res);
+  },
+
+  /**
+   * Devuelve el resumen de configuraciones Meta de todas las empresas
+   */
+  async getResumenMeta() {
+    const res = await fetch(`${API_URL}/configuracion/resumen-meta`, {
       headers: _authHeaders(),
     });
     return _parseJson(res);
@@ -176,11 +188,14 @@ export const apiService = {
    * @param {string} empresa_id - ID de la empresa.
    * @returns {Promise<{ok: boolean}>}
    */
-  async updateConfig(clave, valor, empresa_id) {
+  async updateConfig(clave, valor, empresa_id, area) {
+    const body = { clave, valor, empresa_id };
+    if (area !== undefined) body.area = area;
+    
     const res = await fetch(`${API_URL}/configuracion`, {
       method:  'POST',
       headers: _authHeaders(),
-      body:    JSON.stringify({ clave, valor, empresa_id }),
+      body:    JSON.stringify(body),
     });
     return _parseJson(res);
   },
@@ -353,11 +368,11 @@ export const apiService = {
    * @param {string} nota            - Nota de contexto (obligatoria).
    * @returns {Promise<{ok: boolean, tipo: string, area_destino: string}>}
    */
-  async transferirChat(conversacion_id, area_destino, nota) {
+  async transferirChat(conversacion_id, area_destino, nota, agente_destino_id = null, agente_destino_nombre = null) {
     const res = await fetch(`${API_URL}/transferencias/transferir`, {
       method:  'POST',
       headers: _authHeaders(),
-      body:    JSON.stringify({ conversacion_id, area_destino, nota }),
+      body:    JSON.stringify({ conversacion_id, area_destino, nota, agente_destino_id, agente_destino_nombre }),
     });
     return _parseJson(res);
   },
@@ -419,6 +434,18 @@ export const apiService = {
   // ─────────────────────────────────────────────
   // AGENTES
   // ─────────────────────────────────────────────
+
+  /**
+   * Obtiene el directorio de agentes (id, nombre, area, esta_online).
+   * Accesible para todos los asesores (no requiere admin).
+   */
+  async getDirectorioAgentes() {
+    const res = await fetch(`${API_URL}/agente/directorio`, {
+      headers: _authHeaders(),
+    });
+    if (!res.ok) throw new Error('Error al cargar directorio de agentes');
+    return res.json();
+  },
 
   /**
    * Lista todos los agentes registrados en el sistema.
@@ -542,8 +569,31 @@ export const apiService = {
     return _parseJson(res);
   },
 
-  // ─────────────────────────────────────────────
-  // RESPUESTAS RÁPIDAS
+  async getNpsStats(empresaId = '') {
+    const url = new URL(`${API_URL}/agente/dashboard/nps`);
+    if (empresaId) url.searchParams.append('empresa_id', empresaId);
+    
+    const res = await fetch(url.toString(), {
+      headers: _authHeaders(),
+    });
+    return _parseJson(res);
+  },
+
+  async getSolucionesStaff({ empresa_id, area, agente_id, desde, hasta, q, page = 1, limit = 50 } = {}) {
+    const url = new URL(`${API_URL}/agente/dashboard/soluciones`);
+    if (empresa_id && empresa_id !== 'todas') url.searchParams.append('empresa_id', empresa_id);
+    if (area)      url.searchParams.append('area', area);
+    if (agente_id) url.searchParams.append('agente_id', agente_id);
+    if (desde)     url.searchParams.append('desde', desde);
+    if (hasta)     url.searchParams.append('hasta', hasta);
+    if (q)         url.searchParams.append('q', q);
+    url.searchParams.append('page',  page);
+    url.searchParams.append('limit', limit);
+    const res = await fetch(url.toString(), { headers: _authHeaders() });
+    return _parseJson(res);
+  },
+
+
   // ─────────────────────────────────────────────
 
   async reaccionar(mensaje_id, emoji) {
@@ -937,4 +987,63 @@ export const apiService = {
     });
     return _parseJson(res);
   },
+
+  // ─────────────────────────────────────────────
+  // PLANTILLAS META
+  // ─────────────────────────────────────────────
+  async getPlantillasMeta(empresa_id) {
+    const query = empresa_id ? `?empresa_id=${empresa_id}` : '';
+    const res = await fetch(`${API_URL}/plantillas-meta${query}`, { headers: _authHeaders() });
+    return _parseJson(res);
+  },
+
+  async createPlantillaMeta(empresa_id, data) {
+    const res = await fetch(`${API_URL}/plantillas-meta`, {
+      method: 'POST',
+      headers: _authHeaders(),
+      body: JSON.stringify({ ...data, empresa_id })
+    });
+    return _parseJson(res);
+  },
+
+  async deletePlantillaMeta(empresa_id, id) {
+    const query = empresa_id ? `?empresa_id=${empresa_id}` : '';
+    const res = await fetch(`${API_URL}/plantillas-meta/${id}${query}`, {
+      method: 'DELETE',
+      headers: _authHeaders()
+    });
+    return _parseJson(res);
+  },
+
+  // ─────────────────────────────────────────────
+  // AREAS Y SOLUCIONES DEL BOT
+  // ─────────────────────────────────────────────
+  async getAreasSoluciones(empresa_id) {
+    const query = empresa_id ? `?empresa_id=${empresa_id}` : '';
+    const res = await fetch(`${API_URL}/areas-soluciones${query}`, { headers: _authHeaders() });
+    return _parseJson(res);
+  },
+  async createAreaSolucion(data) {
+    const res = await fetch(`${API_URL}/areas-soluciones`, {
+      method: 'POST',
+      headers: _authHeaders(),
+      body: JSON.stringify(data)
+    });
+    return _parseJson(res);
+  },
+  async updateAreaSolucion(id, data) {
+    const res = await fetch(`${API_URL}/areas-soluciones/${id}`, {
+      method: 'PUT',
+      headers: _authHeaders(),
+      body: JSON.stringify(data)
+    });
+    return _parseJson(res);
+  },
+  async deleteAreaSolucion(id) {
+    const res = await fetch(`${API_URL}/areas-soluciones/${id}`, {
+      method: 'DELETE',
+      headers: _authHeaders()
+    });
+    return _parseJson(res);
+  }
 };

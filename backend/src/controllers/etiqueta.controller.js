@@ -1,3 +1,4 @@
+const db             = require('../config/db');
 const etiquetaRepo    = require('../repositories/etiqueta.repository');
 const conversacionRepo = require('../repositories/conversacion.repository');
 const { emitToConv }  = require('../utils/rooms');
@@ -24,10 +25,25 @@ async function listar(req, res, next) {
         ? await etiquetaRepo.search(empresa_id, busqueda, areaFiltro)
         : await etiquetaRepo.list(empresa_id, areaFiltro));
     } else {
-      const areaAgente = agente?.area || null;
-      ({ rows } = busqueda
-        ? await etiquetaRepo.searchForAgent(empresa_id, busqueda, areaAgente)
-        : await etiquetaRepo.listForAgent(empresa_id, areaAgente));
+      let targetEmpresas = [empresa_id];
+      if (empresa_id === 'todas') {
+        const { rows: empRows } = await db.query("SELECT id AS empresa_id FROM public.empresas");
+        targetEmpresas = empRows.map(r => r.empresa_id);
+      }
+      
+      if (targetEmpresas.length === 0) {
+        rows = [];
+      } else {
+        const fetchRows = busqueda
+          ? await etiquetaRepo.searchForAgentMulti(targetEmpresas, busqueda, agente?.area || null)
+          : await etiquetaRepo.listForAgentMulti(targetEmpresas, agente?.area || null);
+        rows = fetchRows.rows;
+      }
+      
+      // Filtro para Coordinadores: si el usuario es coordinador, solo ve lo de sus áreas y lo general
+      if (req.agente.coordinadorAreas && req.agente.coordinadorAreas.length > 0) {
+        rows = rows.filter(r => !r.area || req.agente.coordinadorAreas.includes(r.area));
+      }
     }
 
     res.json(rows);

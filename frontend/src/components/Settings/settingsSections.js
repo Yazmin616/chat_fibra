@@ -21,7 +21,8 @@
  *   }
  */
 
-import { Bot, MessageSquare, Timer, CalendarDays, Wrench, ShieldCheck, BookKey, Menu } from 'lucide-react';
+import { Bot, MessageSquare, Timer, CalendarDays, Wrench, ShieldCheck, BookKey, Menu, Users, Smartphone, MapPin, Briefcase } from 'lucide-react';
+import WhatsAppMetaSection      from './sections/WhatsAppMetaSection';
 import InactividadBotSection    from './sections/InactividadBotSection';
 import InactividadHumanaSection from './sections/InactividadHumanaSection';
 import SLASection               from './sections/SLASection';
@@ -31,14 +32,27 @@ import PlantillasRolSection     from './sections/PlantillasRolSection';
 import PalabrasClaveBotSection  from './sections/PalabrasClaveBotSection';
 import PlantillasBotSection     from './sections/PlantillasBotSection';
 import MenusBotSection          from './sections/MenusBotSection';
+import AsignacionStaffSection   from './sections/AsignacionStaffSection';
+import PlantillasMetaSection    from './sections/PlantillasMetaSection';
+import AreasSolucionesSection   from './sections/AreasSolucionesSection';
+import UbicacionesCobroSection  from './sections/UbicacionesCobroSection';
 
 export const SECTIONS = [
+  {
+    id:          'whatsapp-meta',
+    label:       'WhatsApp / Meta',
+    icon:        Smartphone,
+    description: 'Número conectado, conversaciones y límites',
+    component:   WhatsAppMetaSection,
+    adminOnly:   true,
+  },
   {
     id:          'inactividad-bot',
     label:       'Inactividad del bot',
     icon:        Bot,
     description: 'Cierre del menú automático',
     component:   InactividadBotSection,
+    adminOnly:   true,
   },
   {
     id:          'inactividad-humana',
@@ -46,6 +60,7 @@ export const SECTIONS = [
     icon:        MessageSquare,
     description: 'Escalada cuando el cliente no responde',
     component:   InactividadHumanaSection,
+    adminOnly:   true,
   },
   {
     id:          'sla-agente',
@@ -53,6 +68,7 @@ export const SECTIONS = [
     icon:        Timer,
     description: 'Tiempo máximo de respuesta del agente',
     component:   SLASection,
+    adminOnly:   true,
   },
   {
     id:          'turnos',
@@ -60,6 +76,8 @@ export const SECTIONS = [
     icon:        CalendarDays,
     description: 'Turnos, festivos y mensajes automáticos',
     component:   TurnosSection,
+    adminOnly:   true,
+    coordinatorAllowed: true,
   },
   {
     id:          'mantenimiento',
@@ -67,6 +85,7 @@ export const SECTIONS = [
     icon:        Wrench,
     description: 'Mensaje mientras el sistema está en mantenimiento',
     component:   MantenimientoSection,
+    adminOnly:   true,
   },
   {
     id:          'plantillas-bot',
@@ -99,6 +118,41 @@ export const SECTIONS = [
     description: 'Mapa de frases → intención del bot',
     component:   PalabrasClaveBotSection,
     adminOnly:   true,
+  },
+  {
+    id:          'plantillas-meta',
+    label:       'Plantillas de Meta',
+    icon:        MessageSquare,
+    description: 'Catálogo de plantillas aprobadas por Meta para usar',
+    component:   PlantillasMetaSection,
+    adminOnly:   true,
+  },
+  {
+    id:          'asignacion-staff',
+    label:       'Asignación de Staff',
+    icon:        Users,
+    description: 'Autoasignar, round-robin y visibilidad',
+    component:   AsignacionStaffSection,
+    adminOnly:   true,
+    coordinatorAllowed: true,
+  },
+  {
+    id:          'areas-soluciones',
+    label:       'Áreas y Soluciones',
+    icon:        Briefcase,
+    description: 'Nombres de áreas y catálogo de soluciones',
+    component:   AreasSolucionesSection,
+    adminOnly:   true,
+    coordinatorAllowed: true,
+  },
+  {
+    id:          'ubicaciones-cobro',
+    label:       'Ubicaciones de Cobro',
+    icon:        MapPin,
+    description: 'Direcciones para pago físico',
+    component:   UbicacionesCobroSection,
+    adminOnly:   true,
+    coordinatorAllowed: true,
   },
 ];
 

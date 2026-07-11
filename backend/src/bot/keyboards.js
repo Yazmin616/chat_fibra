@@ -9,6 +9,22 @@ const menusService = require('../services/menus.service');
  * Obtiene un teclado base desde la BD.
  */
 async function get(menuId, empresaId, columns = 1) {
+  if (menuId === 'AREAS') {
+    const db = require('../config/db');
+    const eid = (empresaId && empresaId !== 'todas') ? empresaId : 'fibratec';
+    const { rows } = await db.query(
+      `SELECT nombre_area FROM public.areas_soluciones WHERE (empresa_id ? $1 OR empresa_id ? 'todas') AND activo = true ORDER BY id ASC`,
+      [eid]
+    );
+    if (rows.length > 0) {
+      return {
+        inline_keyboard: rows.map(area => [{
+          text: area.nombre_area,
+          callback_data: area.nombre_area.toLowerCase().replace(/[^a-z0-9]/g, '_').substring(0, 64)
+        }])
+      };
+    }
+  }
   return await menusService.getKeyboard(menuId, empresaId, columns);
 }
 
@@ -78,6 +94,16 @@ function generarTecladoAmbiguo(intenciones) {
   };
 }
 
+const ENCUESTA = {
+  inline_keyboard: [
+    [{ text: '🌟 Excelente', callback_data: '5' }],
+    [{ text: '😊 Bien', callback_data: '4' }],
+    [{ text: '😐 Regular', callback_data: '3' }],
+    [{ text: '🙁 Malo', callback_data: '2' }],
+    [{ text: '😡 Muy malo', callback_data: '1' }]
+  ]
+};
+
 module.exports = {
   get,
   EMPRESAS,
@@ -85,4 +111,5 @@ module.exports = {
   generarTecladoAmbiguo,
   getAutoservicioKeyboard,
   getOtraConsultaKeyboard,
+  ENCUESTA,
 };

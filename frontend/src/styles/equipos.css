@@ -1,0 +1,496 @@
+.equipos-container {
+  padding: 30px;
+  max-width: 1200px;
+  margin: 0 auto;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  height: 100%;
+  overflow-y: auto;
+  box-sizing: border-box;
+}
+
+.equipos-header {
+  margin-bottom: 25px;
+}
+
+.equipos-header h1 {
+  font-size: 22px;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0 0 6px 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.equipos-header p {
+  font-size: 13px;
+  color: #64748b;
+  margin: 0;
+}
+
+/* Modern Table Layout */
+.equipos-table-wrapper {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+  overflow: visible; /* Required for coordinator dropdown to overflow table rows */
+}
+
+.equipos-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+}
+
+.equipos-table th {
+  background: #f8fafc;
+  padding: 14px 20px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #475569;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.equipos-table td {
+  padding: 18px 20px;
+  font-size: 13px;
+  color: #334155;
+  border-bottom: 1px solid #f1f5f9;
+  vertical-align: middle;
+}
+
+.equipos-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.equipos-table tbody tr:hover {
+  background: #f8fafc;
+}
+
+/* Team column info */
+.team-info-cell {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.team-icon-box {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  background: #eff6ff;
+  color: #3b82f6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.team-info-cell.ventas .team-icon-box {
+  background: #ecfdf5;
+  color: #10b981;
+}
+
+.team-info-cell.cobranza .team-icon-box {
+  background: #fffbeb;
+  color: #f59e0b;
+}
+
+.team-name-wrap {
+  display: flex;
+  flex-direction: column;
+}
+
+.team-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: #0f172a;
+  margin: 0 0 2px 0;
+}
+
+.team-desc {
+  font-size: 12px;
+  color: #64748b;
+  margin: 0;
+  line-height: 1.4;
+  max-width: 250px;
+}
+
+/* Coordinator column */
+.coordinador-selector-box {
+  position: relative;
+  width: 240px;
+}
+
+.coord-dropdown-trigger {
+  width: 100%;
+  padding: 8px 12px;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  box-sizing: border-box;
+}
+
+.coord-dropdown-trigger:hover {
+  background: #f8fafc;
+  border-color: #94a3b8;
+}
+
+.coord-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.coord-avatar {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #6366f1;
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.coord-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: #1e293b;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 160px;
+}
+
+.coord-name.placeholder {
+  color: #94a3b8;
+  font-style: italic;
+  font-weight: 400;
+}
+
+/* Dropdown list */
+.coord-dropdown-list {
+  position: absolute;
+  top: 105%;
+  left: 0;
+  width: 280px;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  z-index: 100;
+  max-height: 250px;
+  overflow-y: auto;
+}
+
+.coord-search-input {
+  width: 100%;
+  padding: 8px 12px;
+  border: none;
+  border-bottom: 1px solid #e2e8f0;
+  font-size: 12px;
+  outline: none;
+  box-sizing: border-box;
+}
+
+.coord-search-input:focus {
+  background: #f8fafc;
+}
+
+.coord-options-scroll {
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.coord-option {
+  padding: 8px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.coord-option:hover {
+  background: #f8fafc;
+}
+
+.coord-option.selected {
+  background: #eff6ff;
+}
+
+.coord-option-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.coord-option-name {
+  font-size: 12px;
+  font-weight: 500;
+  color: #1e293b;
+}
+
+.coord-option-email {
+  font-size: 10px;
+  color: #64748b;
+}
+
+.coord-option-area-tag {
+  font-size: 9px;
+  font-weight: 600;
+  padding: 1px 4px;
+  border-radius: 3px;
+  background: #e2e8f0;
+  color: #475569;
+}
+
+/* Save feedback indicator in table row */
+.save-status-row-indicator {
+  font-size: 11px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 6px;
+  border-radius: 4px;
+  background: #ecfdf5;
+  color: #065f46;
+  opacity: 0;
+  transform: scale(0.9);
+  transition: all 0.2s ease;
+  margin-left: 8px;
+  vertical-align: middle;
+}
+
+.save-status-row-indicator.visible {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.save-status-row-indicator.error {
+  background: #fef2f2;
+  color: #991b1b;
+}
+
+.save-status-row-indicator.saving {
+  background: #eff6ff;
+  color: #1e40af;
+}
+
+/* Members column styling */
+.miembros-stack {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.miembro-avatar-stack {
+  position: relative;
+  cursor: pointer;
+  transition: all 0.15s ease-in-out;
+}
+
+.miembro-avatar-stack:hover {
+  transform: scale(1.15);
+  z-index: 10;
+}
+
+.miembro-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: #e2e8f0;
+  color: #475569;
+  font-size: 11px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid #ffffff;
+  overflow: hidden;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.miembro-status-dot {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  border: 1.5px solid #ffffff;
+  background: #94a3b8; /* offline */
+}
+
+.miembro-status-dot.online {
+  background: #10b981; /* online */
+}
+
+.miembros-empty {
+  font-size: 12px;
+  color: #94a3b8;
+  font-style: italic;
+  margin: 0;
+}
+
+/* Tooltip on hover for members stack */
+.miembro-avatar-stack[data-tooltip]::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: 125%;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #0f172a;
+  color: #ffffff;
+  font-size: 10px;
+  font-weight: 500;
+  padding: 4px 8px;
+  border-radius: 4px;
+  white-space: nowrap;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: all 0.15s ease;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+  z-index: 200;
+}
+
+.miembro-avatar-stack:hover::after {
+  opacity: 1;
+  visibility: visible;
+}
+
+/* Loading & Empty states */
+.equipos-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 300px;
+  color: #64748b;
+  font-size: 14px;
+  gap: 12px;
+}
+
+.equipos-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  background: #ffffff;
+  border: 1px dashed #cbd5e1;
+  border-radius: 10px;
+  text-align: center;
+  max-width: 500px;
+  margin: 40px auto;
+}
+
+.equipos-empty-state h3 {
+  font-size: 16px;
+  font-weight: 600;
+  color: #1e293b;
+  margin: 16px 0 8px 0;
+}
+
+.equipos-empty-state p {
+  font-size: 13px;
+  color: #64748b;
+  margin: 0;
+  line-height: 1.5;
+}
+
+/* Coordinadores en el stack de miembros */
+.miembro-avatar-stack.es-coordinador .miembro-avatar {
+  border-color: #f59e0b; /* Borde dorado */
+  box-shadow: 0 0 6px rgba(245, 158, 11, 0.4);
+}
+
+.miembro-crown-icon {
+  position: absolute;
+  top: -6px;
+  right: -3px;
+  z-index: 5;
+  background: #f59e0b;
+  border-radius: 50%;
+  width: 12px;
+  height: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #ffffff;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.2);
+}
+
+/* ═══════════════════════════════════
+   RESPONSIVO — Equipos (Mobile Card Layout)
+   ═══════════════════════════════════ */
+.equipos-mobile-list {
+  display: none;
+  flex-direction: column;
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.equipos-mobile-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  overflow: visible; /* Requerido para que los dropdowns se desborden bien */
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.equipos-mobile-card-header {
+  border-bottom: 1px solid #f1f5f9;
+  padding-bottom: 12px;
+}
+
+.equipos-mobile-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.equipos-mobile-card-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.equipos-mobile-card-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #64748b;
+}
+
+@media (max-width: 768px) {
+  .equipos-container {
+    padding: 16px;
+  }
+  .equipos-table-wrapper {
+    display: none;
+  }
+  .equipos-mobile-list {
+    display: flex;
+  }
+}

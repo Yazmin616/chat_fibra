@@ -34,6 +34,11 @@ const SLASection = ({ config, onSave, setDirty }) => {
   const nArea = parseInt(areaMin)   || 15;
   const n1    = parseInt(nivel1Min) || 30;
 
+  const isDirty = (
+    areaMin !== String(config.sla_area_min ?? DEFAULTS.sla_area_min) ||
+    nivel1Min !== String(config.sla_agente_nivel1_min ?? DEFAULTS.sla_agente_nivel1_min)
+  );
+
   const handleSave = () => runSave(onSave, [
     ['sla_area_min',          areaMin],
     ['sla_agente_nivel1_min', nivel1Min],
@@ -132,10 +137,13 @@ const SLASection = ({ config, onSave, setDirty }) => {
 
       {/* ── Footer ────────────────────────────────────────────────────────── */}
       <div className="sc-footer">
+        {isDirty && <span style={{ color: '#d97706', fontSize: '13px', fontWeight: '500', marginRight: 'auto' }}>
+          ⚠️ Tienes cambios sin guardar. Haz clic en "Guardar cambios" para aplicarlos.
+        </span>}
         <SectionStatus state={saveState} />
         <button
           className="btn-save"
-          disabled={saveState === 'saving' || nArea < 1 || n1 < 1}
+          disabled={saveState === 'saving' || nArea < 1 || n1 < 1 || !isDirty}
           onClick={handleSave}
         >
           {saveState === 'saving' ? 'Guardando…' : 'Guardar cambios'}

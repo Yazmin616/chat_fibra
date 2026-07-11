@@ -1,0 +1,437 @@
+/* =============================================================
+   SOLUCIONES DEL STAFF — UI Limpia y Responsiva
+   ============================================================= */
+
+.sol-root {
+  height: 100%;
+  width: 100%;
+  overflow-y: auto;
+  background: #f8fafc;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 24px;
+  box-sizing: border-box;
+  font-family: system-ui, -apple-system, sans-serif;
+}
+
+/* ── Encabezado ── */
+.sol-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.sol-title {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.sol-subtitle {
+  margin: 6px 0 0;
+  font-size: 14px;
+  color: #64748b;
+}
+
+/* ── Botón filtros ── */
+.sol-filter-toggle {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 16px;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #334155;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.sol-filter-toggle:hover,
+.sol-filter-toggle.active {
+  background: #f1f5f9;
+  border-color: #94a3b8;
+}
+
+.sol-filter-dot {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #ef4444;
+  border: 2px solid #fff;
+}
+
+/* ── Panel de filtros ── */
+.sol-filters-panel {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.sol-filters-panel.asesor-panel {
+  padding: 16px;
+  background: #f8fafc;
+}
+
+.sol-filters-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 16px;
+}
+
+.sol-filter-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.sol-filter-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #475569;
+  text-transform: uppercase;
+}
+
+.sol-filter-input,
+.sol-filter-select {
+  padding: 8px 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  font-size: 14px;
+  color: #0f172a;
+  background: #ffffff;
+  outline: none;
+}
+
+.sol-filter-input:focus,
+.sol-filter-select:focus {
+  border-color: #3b82f6;
+}
+
+.sol-reset-btn {
+  align-self: flex-start;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  background: transparent;
+  border: 1px solid #fecdd3;
+  border-radius: 6px;
+  font-size: 13px;
+  color: #e11d48;
+  cursor: pointer;
+}
+
+.sol-reset-btn:hover { 
+  background: #fff1f2;
+}
+
+/* ── Error ── */
+.sol-error {
+  padding: 12px 16px;
+  background: #fef2f2;
+  border-left: 4px solid #ef4444;
+  font-size: 14px;
+  color: #991b1b;
+}
+
+/* ── Contador y Paginación ── */
+.sol-count-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.sol-count {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #334155;
+}
+
+.sol-count svg { color: #10b981; }
+
+.sol-pagination {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.sol-pagination-bottom {
+  justify-content: center;
+  padding: 16px 0;
+}
+
+.sol-page-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  font-size: 13px;
+  color: #334155;
+  cursor: pointer;
+}
+
+.sol-page-btn:disabled { 
+  opacity: 0.5; 
+  cursor: not-allowed;
+}
+
+.sol-page-btn:not(:disabled):hover { 
+  background: #f8fafc;
+}
+
+.sol-page-label {
+  font-size: 13px;
+  color: #64748b;
+}
+
+/* ── Tabla Simple (Desktop) ── */
+.sol-table-wrap {
+  background: #ffffff;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+  overflow: hidden;
+}
+
+.sol-table-scroll {
+  overflow-x: auto;
+}
+
+.sol-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 900px;
+}
+
+.sol-th {
+  padding: 12px 16px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #475569;
+  text-transform: uppercase;
+  background: #f8fafc;
+  border-bottom: 2px solid #e2e8f0;
+  white-space: nowrap;
+  text-align: center; /* Centrado a petición del usuario */
+}
+
+.sol-tr {
+  background: #ffffff;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.sol-tr:hover { 
+  background: #f8fafc; 
+}
+
+.sol-td {
+  padding: 14px 16px;
+  font-size: 13px;
+  color: #334155;
+  vertical-align: middle;
+  text-align: center; /* Centrado a petición del usuario */
+}
+
+/* ── Celdas específicas ── */
+.sol-date {
+  white-space: nowrap;
+  color: #64748b;
+}
+
+.sol-agent-cell {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.sol-client-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center; /* Centrado */
+  gap: 4px;
+}
+
+.sol-agent-name {
+  font-weight: 500;
+  color: #1e293b;
+}
+
+.sol-client-name { 
+  font-weight: 600; 
+  color: #1e293b; 
+}
+
+.sol-client-phone { 
+  font-size: 12px; 
+  color: #64748b; 
+}
+
+.sol-area-badge {
+  display: inline-block;
+  padding: 4px 10px;
+  background: #f1f5f9;
+  color: #475569;
+  border-radius: 4px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.sol-cat-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.sol-nota-cell {
+  max-width: 250px;
+  text-align: center;
+}
+
+.sol-nota-text {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  font-size: 13px;
+  color: #475569;
+}
+
+.sol-nota-empty {
+  font-size: 13px;
+  color: #94a3b8;
+  font-style: italic;
+}
+
+.sol-tipo-badge {
+  display: inline-block;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  text-transform: uppercase;
+  font-weight: 600;
+}
+
+.sol-empty {
+  padding: 40px 20px;
+  text-align: center;
+  color: #94a3b8;
+  font-size: 14px;
+}
+
+/* ════════════════════════════════
+   RESPONSIVO (MÓVIL) - Estilo Tarjetas
+   ════════════════════════════════ */
+@media (max-width: 768px) {
+  .sol-root {
+    padding: 16px;
+    gap: 16px;
+  }
+
+  .sol-title { font-size: 20px; }
+  
+  .sol-filters-grid { grid-template-columns: 1fr; }
+
+  .sol-count-row {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  /* Ocultar tabla nativa en móvil y convertirla en tarjetas */
+  .sol-table, .sol-table tbody, .sol-table tr, .sol-table td {
+    display: block;
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+  }
+  
+  .sol-table thead {
+    display: none; /* Ocultar encabezados en móvil */
+  }
+  
+  .sol-table-wrap {
+    border: none;
+    background: transparent;
+  }
+
+  .sol-tr {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    margin-bottom: 12px;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .sol-tr:not(:last-child) .sol-td {
+    border-bottom: none;
+  }
+
+  .sol-td {
+    padding: 0;
+    text-align: left;
+    display: block;
+    margin-bottom: 4px;
+  }
+  
+  .sol-td:last-child {
+    margin-bottom: 0;
+  }
+
+  /* Etiquetas de ayuda visual para cada campo en móvil */
+  .sol-td::before {
+    content: attr(data-label);
+    display: block;
+    font-size: 11px;
+    font-weight: 700;
+    color: #94a3b8;
+    text-transform: uppercase;
+    margin-bottom: 2px;
+  }
+
+  .sol-agent-cell {
+    justify-content: flex-start;
+  }
+
+  .sol-agent-cell, .sol-client-cell {
+    align-items: flex-start; /* Alineado a la izquierda en móvil */
+  }
+
+  .sol-nota-cell {
+    max-width: 100%;
+    text-align: left;
+  }
+}

@@ -36,7 +36,7 @@ async function getKpis(agente_id, empresa_id, filtro_agente_id, filtro_area) {
   }
 
   // Construir filtros seguros (parámetros posicionales, no concatenación)
-  const f = _buildFilters(empresa_id, esAdmin, agente_id, filtro_agente_id, filtro_area);
+  const f = await _buildFilters(empresa_id, esAdmin, agente_id, filtro_agente_id, filtro_area);
 
   // Ejecutar todas las queries de lectura en paralelo para mejor rendimiento
   const [kpis, calificaciones, actividadDiaria, ultimasCalificaciones] = await Promise.all([
@@ -59,13 +59,12 @@ async function getKpis(agente_id, empresa_id, filtro_agente_id, filtro_area) {
       WHERE c.agente_id IS NOT NULL ${f.where}
     `, f.params),
 
-    // Distribución CSAT — agente (para el donut) + bot (conversaciones sin atender)
+    // Distribución NPS — agente (para el donut) + bot (conversaciones sin atender)
     db.query(`
       SELECT
-        COUNT(*) FILTER (WHERE cal.tipo='agente' AND cal.puntuacion='Bien')          AS bien,
-        COUNT(*) FILTER (WHERE cal.tipo='agente' AND cal.puntuacion='Regular')       AS regular,
-        COUNT(*) FILTER (WHERE cal.tipo='agente' AND cal.puntuacion='Mal')           AS mal,
-        COUNT(*) FILTER (WHERE cal.tipo='agente' AND cal.puntuacion='NoRespondida')  AS no_evaluada,
+        COUNT(*) FILTER (WHERE cal.tipo='agente' AND cal.puntuacion='5')             AS promotores,
+        COUNT(*) FILTER (WHERE cal.tipo='agente' AND cal.puntuacion='4')             AS neutrales,
+        COUNT(*) FILTER (WHERE cal.tipo='agente' AND cal.puntuacion IN ('1','2','3')) AS detractores,
         COUNT(*) FILTER (WHERE cal.tipo='agente') AS total,
         COUNT(*) FILTER (WHERE cal.tipo='bot')    AS sin_atencion
       FROM calificaciones cal
@@ -100,10 +99,24 @@ async function getKpis(agente_id, empresa_id, filtro_agente_id, filtro_area) {
 
   ]);
 
-  // Top asesores (solo disponible para Admin)
+  // Top asesores (solo disponible para Admin y Coordinadores)
   let topAgentes = [];
-  if (esAdmin) {
+  const { rows: coordinatedAreas } = agente_id ? await db.query(
+    "SELECT nombre_area FROM public.areas_soluciones WHERE coordinador_id = $1",
+    [agente_id]
+  ) : { rows: [] };
+  const areasCoordinadas = coordinatedAreas.map(r => r.nombre_area);
+  const esCoordinador = areasCoordinadas.length > 0;
+
+  if (esAdmin || esCoordinador) {
     const ef = _buildEmpresaFilter(empresa_id);
+    let areaFilter = '';
+    if (!esAdmin && esCoordinador) {
+      const placeholders = areasCoordinadas.map((_, i) => `$${ef.params.length + i + 1}`).join(', ');
+      ef.params.push(...areasCoordinadas);
+      areaFilter = `AND a.area IN (${placeholders})`;
+    }
+
     const { rows } = await db.query(`
       SELECT
         a.id, a.nombre, a.area,
@@ -111,19 +124,19 @@ async function getKpis(agente_id, empresa_id, filtro_agente_id, filtro_area) {
         COUNT(c.id) FILTER (WHERE (c.updated_at AT TIME ZONE 'America/Mexico_City')::date >= (NOW() AT TIME ZONE 'America/Mexico_City')::date - 6) AS esta_semana,
         COUNT(cal.id) AS total_calificaciones,
         ROUND(
-          (
-            COUNT(cal.id) FILTER (WHERE cal.puntuacion='Bien')    * 3 +
-            COUNT(cal.id) FILTER (WHERE cal.puntuacion='Regular') * 2 +
-            COUNT(cal.id) FILTER (WHERE cal.puntuacion='Mal')     * 1
-          ) * 100.0 / NULLIF(COUNT(cal.id) FILTER (WHERE cal.puntuacion IN ('Bien','Regular','Mal')) * 3, 0),
+          COALESCE(
+            (COUNT(cal.id) FILTER (WHERE cal.puntuacion IN ('5')) * 100.0 / NULLIF(COUNT(cal.id), 0))
+            -
+            (COUNT(cal.id) FILTER (WHERE cal.puntuacion IN ('1','2','3')) * 100.0 / NULLIF(COUNT(cal.id), 0))
+          , 0),
           0
-        ) AS satisfaccion_pct
+        ) AS nps_score
       FROM agentes a
       LEFT JOIN conversaciones c ON c.agente_id=a.id ${ef.joinWhere}
-      LEFT JOIN calificaciones cal ON cal.conversacion_id=c.id AND cal.tipo='agente'
-      WHERE a.rol='asesor'
+      LEFT JOIN calificaciones cal ON cal.conversacion_id=c.id AND cal.tipo='agente' AND cal.puntuacion IN ('1','2','3','4','5')
+      WHERE a.rol='asesor' ${areaFilter}
       GROUP BY a.id, a.nombre, a.area
-      ORDER BY satisfaccion_pct DESC NULLS LAST, total_chats DESC
+      ORDER BY nps_score DESC NULLS LAST, total_chats DESC
     `, ef.params);
     topAgentes = rows;
   }
@@ -152,7 +165,7 @@ async function getCalificaciones(agente_id, empresa_id, filtro_agente_id, filtro
     const { rows } = await agenteRepo.findById(agente_id);
     esAdmin = rows[0]?.rol === 'admin';
   }
-  const f = _buildFilters(empresa_id, esAdmin, agente_id, filtro_agente_id, filtro_area);
+  const f = await _buildFilters(empresa_id, esAdmin, agente_id, filtro_agente_id, filtro_area);
   const { rows } = await db.query(`
     SELECT cal.puntuacion, cal.tipo, cal.created_at, u.nombre AS cliente, a.nombre AS agente, c.departamento
     FROM calificaciones cal
@@ -162,6 +175,81 @@ async function getCalificaciones(agente_id, empresa_id, filtro_agente_id, filtro
     WHERE 1=1 ${f.where}
     ORDER BY cal.created_at DESC
   `, f.params);
+  return rows;
+}
+
+/**
+ * Devuelve las estadísticas NPS exclusivas (1 al 5) agrupadas por agente.
+ * Se ignoran las calificaciones con formato viejo ('Bien', 'Regular', 'Mal').
+ * @param {string} [empresa_id] - ID de empresa o "todas".
+ * @returns {Promise<object[]>}
+ */
+async function getNpsStats(empresa_id, agente_id) {
+  let esAdmin = false;
+  if (agente_id) {
+    const { rows } = await agenteRepo.findById(agente_id);
+    esAdmin = rows[0]?.rol === 'admin';
+  }
+
+  const params = [];
+  
+  // 1. Filtro de empresa (aplica a la tabla conversaciones c de forma opcional en el LEFT JOIN)
+  let empresaFilter = '';
+  if (empresa_id && empresa_id !== 'todas') {
+    params.push(empresa_id);
+    empresaFilter = `AND c.empresa_id = $${params.length}`;
+  }
+
+  // 2. Filtro de agente/área (aplica a la tabla agentes a en el WHERE)
+  let agenteFilter = '';
+  if (!esAdmin && agente_id) {
+    const { rows: coordinatedAreas } = await db.query(
+      "SELECT nombre_area FROM public.areas_soluciones WHERE coordinador_id = $1",
+      [agente_id]
+    );
+    const areasCoordinadas = coordinatedAreas.map(r => r.nombre_area);
+    if (areasCoordinadas.length > 0) {
+      const placeholders = areasCoordinadas.map((_, i) => `$${params.length + i + 1}`).join(', ');
+      params.push(...areasCoordinadas);
+      agenteFilter = `AND a.area IN (${placeholders})`;
+    } else {
+      params.push(agente_id);
+      agenteFilter = `AND a.id = $${params.length}`;
+    }
+  }
+
+  const { rows } = await db.query(`
+    SELECT
+      a.id,
+      a.nombre AS staff,
+      a.esta_online,
+      a.last_seen,
+      COUNT(DISTINCT c.id) AS conversaciones,
+      COUNT(cal.id) AS conversaciones_calificadas,
+      COUNT(DISTINCT c.id) FILTER (WHERE c.estado = 'ENCUESTA_AGENTE') AS no_contestan,
+      COUNT(DISTINCT c.id) FILTER (WHERE c.estado IN ('atendiendo', 'ESPERANDO_AGENTE')) AS chats_activos,
+      COUNT(DISTINCT c.id) FILTER (WHERE c.estado = 'ESPERANDO_AGENTE') AS chats_esperando,
+      COUNT(cal.id) FILTER (WHERE cal.puntuacion IN ('5')) AS promotores,
+      COUNT(cal.id) FILTER (WHERE cal.puntuacion IN ('4')) AS neutrales,
+      COUNT(cal.id) FILTER (WHERE cal.puntuacion IN ('3', '2', '1')) AS detractores,
+      -- Fórmula NPS = % Promotores - % Detractores
+      ROUND(
+        COALESCE(
+          (COUNT(cal.id) FILTER (WHERE cal.puntuacion IN ('5')) * 100.0 / NULLIF(COUNT(cal.id), 0))
+          -
+          (COUNT(cal.id) FILTER (WHERE cal.puntuacion IN ('3', '2', '1')) * 100.0 / NULLIF(COUNT(cal.id), 0))
+        , 0),
+      2) AS nps
+    FROM agentes a
+    LEFT JOIN conversaciones c ON c.agente_id = a.id ${empresaFilter}
+    LEFT JOIN calificaciones cal ON cal.conversacion_id = c.id
+      AND cal.tipo = 'agente'
+      AND cal.puntuacion IN ('1', '2', '3', '4', '5')
+    WHERE a.rol = 'asesor' ${agenteFilter}
+    GROUP BY a.id, a.nombre, a.esta_online, a.last_seen
+    ORDER BY nps DESC NULLS LAST, conversaciones DESC
+  `, params);
+
   return rows;
 }
 
@@ -178,7 +266,7 @@ async function getCalificaciones(agente_id, empresa_id, filtro_agente_id, filtro
  * @param {number|string} agente_id
  * @returns {{ params: any[], where: string }}
  */
-function _buildFilters(empresa_id, esAdmin, agente_id, filtro_agente_id, filtro_area) {
+async function _buildFilters(empresa_id, esAdmin, agente_id, filtro_agente_id, filtro_area) {
   const todas   = empresa_id === 'todas';
   const params  = [];
   const clauses = [];
@@ -189,9 +277,23 @@ function _buildFilters(empresa_id, esAdmin, agente_id, filtro_agente_id, filtro_
   }
 
   if (!esAdmin && agente_id) {
-    // Asesor: solo ve sus propias conversaciones
-    params.push(agente_id);
-    clauses.push(`c.agente_id=$${params.length}`);
+    // Si no es admin, ver si es coordinador de algún área
+    const { rows: coordinatedAreas } = await db.query(
+      "SELECT nombre_area FROM public.areas_soluciones WHERE coordinador_id = $1",
+      [agente_id]
+    );
+    const areasCoordinadas = coordinatedAreas.map(r => r.nombre_area);
+
+    if (areasCoordinadas.length > 0) {
+      // Si es coordinador, ve todo su departamento / área
+      const areaPlaceholders = areasCoordinadas.map((_, i) => `$${params.length + i + 1}`).join(', ');
+      params.push(...areasCoordinadas);
+      clauses.push(`c.departamento IN (${areaPlaceholders})`);
+    } else {
+      // Asesor normal: solo ve sus propias conversaciones
+      params.push(agente_id);
+      clauses.push(`c.agente_id=$${params.length}`);
+    }
   } else if (esAdmin && filtro_agente_id) {
     // Admin filtrando por agente específico
     params.push(filtro_agente_id);
@@ -314,4 +416,133 @@ async function getAgenteStats(id) {
   };
 }
 
-module.exports = { getKpis, getCalificaciones, getAgenteStats };
+/**
+ * Lista conversaciones cerradas con su nota/categoría de cierre.
+ * Filtra por área cuando el solicitante es coordinador (no admin).
+ *
+ * @param {object} opts
+ * @param {number}  opts.solicitante_id  - PK del agente que pide los datos.
+ * @param {string}  [opts.empresa_id]    - Filtro de empresa.
+ * @param {string}  [opts.area]          - Filtro de área específica (solo admin).
+ * @param {number}  [opts.filtro_agente] - Filtro por agente específico.
+ * @param {string}  [opts.desde]         - Fecha inicio ISO (YYYY-MM-DD).
+ * @param {string}  [opts.hasta]         - Fecha fin ISO (YYYY-MM-DD).
+ * @param {string}  [opts.q]             - Búsqueda libre (cliente o nota).
+ * @param {number}  [opts.page=1]        - Página.
+ * @param {number}  [opts.limit=50]      - Resultados por página.
+ */
+async function getSolucionesStaff({ solicitante_id, empresa_id, area, filtro_agente, desde, hasta, q, page = 1, limit = 50 }) {
+  // Determinar rol del solicitante
+  let esAdmin       = false;
+  let esCoordinador = false;
+  let areasCoordinadas = [];
+
+  if (solicitante_id) {
+    const { rows: aRow } = await agenteRepo.findById(solicitante_id);
+    esAdmin = aRow[0]?.rol === 'admin';
+
+    if (!esAdmin) {
+      const { rows: coordRows } = await db.query(
+        'SELECT nombre_area FROM public.areas_soluciones WHERE coordinador_id = $1',
+        [solicitante_id]
+      );
+      areasCoordinadas = coordRows.map(r => r.nombre_area);
+      esCoordinador = areasCoordinadas.length > 0;
+    }
+  }
+
+  // Asesor regular: solo ve sus propios cierres (se fuerza filtro_agente a su propio id)
+  const esAsesorSimple = !esAdmin && !esCoordinador;
+  if (esAsesorSimple) {
+    filtro_agente = solicitante_id; // override: solo sus propias conversaciones
+  }
+
+  // Construir cláusulas WHERE dinámicamente
+  const params  = [];
+  const clauses = [`c.cerrado_en IS NOT NULL`];
+
+  // Filtro empresa
+  if (empresa_id && empresa_id !== 'todas') {
+    params.push(empresa_id);
+    clauses.push(`c.empresa_id = $${params.length}`);
+  }
+
+  // Filtro de área: coordinador solo ve sus áreas; admin puede filtrar por área opcional. Asesor ve las suyas de cualquier área.
+  if (esCoordinador) {
+    const ph = areasCoordinadas.map((_, i) => `$${params.length + i + 1}`).join(', ');
+    params.push(...areasCoordinadas);
+    clauses.push(`c.departamento IN (${ph})`);
+  } else if (esAdmin && area) {
+    params.push(area);
+    clauses.push(`c.departamento = $${params.length}`);
+  }
+
+  // Filtro agente específico
+  if (filtro_agente) {
+    params.push(filtro_agente);
+    clauses.push(`a.id = $${params.length}`);
+  }
+
+  // Filtro fechas
+  if (desde) {
+    params.push(desde);
+    clauses.push(`(c.cerrado_en AT TIME ZONE 'America/Mexico_City')::date >= $${params.length}::date`);
+  }
+  if (hasta) {
+    params.push(hasta);
+    clauses.push(`(c.cerrado_en AT TIME ZONE 'America/Mexico_City')::date <= $${params.length}::date`);
+  }
+
+  // Búsqueda libre
+  if (q) {
+    params.push(`%${q}%`);
+    clauses.push(`(u.nombre ILIKE $${params.length} OR u.telefono ILIKE $${params.length} OR c.comentario_cierre ILIKE $${params.length} OR cat.nombre ILIKE $${params.length})`);
+  }
+
+  const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
+
+  // Contar total para paginación
+  const countResult = await db.query(`
+    SELECT COUNT(*) AS total
+    FROM conversaciones c
+    LEFT JOIN agentes a  ON c.agente_id   = a.id
+    LEFT JOIN usuarios u ON c.usuario_id  = u.id
+    LEFT JOIN categoria_cierre cat ON c.categoria_cierre_id = cat.id
+    ${where}
+  `, params);
+
+  const total = parseInt(countResult.rows[0]?.total || 0);
+
+  // Paginación
+  const offset = (page - 1) * limit;
+  params.push(limit, offset);
+
+  const { rows } = await db.query(`
+    SELECT
+      c.id,
+      c.empresa_id,
+      c.departamento   AS area,
+      c.cerrado_en,
+      c.cerrado_por    AS cerrado_por_nombre,
+      c.comentario_cierre,
+      c.tipo_cierre,
+      cat.nombre       AS categoria_cierre,
+      cat.color        AS categoria_color,
+      a.id             AS agente_id,
+      a.nombre         AS agente_nombre,
+      a.foto_perfil    AS agente_foto,
+      u.nombre         AS cliente_nombre,
+      u.telefono       AS cliente_telefono
+    FROM conversaciones c
+    LEFT JOIN agentes a        ON c.agente_id         = a.id
+    LEFT JOIN usuarios u       ON c.usuario_id        = u.id
+    LEFT JOIN categoria_cierre cat ON c.categoria_cierre_id = cat.id
+    ${where}
+    ORDER BY c.cerrado_en DESC NULLS LAST
+    LIMIT $${params.length - 1} OFFSET $${params.length}
+  `, params);
+
+  return { rows, total, page, limit };
+}
+
+module.exports = { getKpis, getCalificaciones, getAgenteStats, getNpsStats, getSolucionesStaff };

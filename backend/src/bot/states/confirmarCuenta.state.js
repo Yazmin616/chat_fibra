@@ -60,7 +60,7 @@ async function handle(mensaje, conversacion, usuario) {
     };
   }
 
-  const teclado = meta.identificado_via_wisp ? AUTOSERVICIO : AUTOSERVICIO_BASICO;
+  const teclado = await keyboards.getAutoservicioKeyboard(meta.toJSON(), conversacion.empresa_id);
   return {
     respuesta:   `${saludo}\n\n¿En qué puedo ayudarte hoy?`,
     nuevoEstado: ESTADOS.MENU_AUTOSERVICIO,

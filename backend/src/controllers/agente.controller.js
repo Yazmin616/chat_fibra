@@ -11,6 +11,7 @@
  *   POST   /agente/responder    → responder()
  *   POST   /agente/liberar      → liberar()
  *   DELETE /agente/conversacion/:id → eliminarConversacion()
+ *   GET    /agente/directorio       → directorio()
  */
 
 const path          = require('path');
@@ -91,6 +92,17 @@ const enviarMediaSchema = Joi.object({
 const listar = async (req, res, next) => {
   try {
     const { rows } = await agenteService.listar();
+    res.json(rows);
+  } catch (err) { next(err); }
+};
+
+/**
+ * GET /agente/directorio
+ * Devuelve id, nombre, area y estado online de todos los agentes para el UI.
+ */
+const directorio = async (req, res, next) => {
+  try {
+    const { rows } = await require('../repositories/agente.repository').findAllDirectorio();
     res.json(rows);
   } catch (err) { next(err); }
 };
@@ -289,12 +301,21 @@ const subirFoto = async (req, res, next) => {
     const ext        = MIME_TO_EXT[req.file.mimetype] || '.jpg';
     const avatarsDir = path.join(__dirname, '..', '..', 'uploads', 'avatars');
 
-    // Borrar todas las versiones anteriores del avatar (cualquier extensión)
+    // Obtener la foto anterior para borrarla
+    const { rows } = await db.query('SELECT foto_perfil FROM agentes WHERE id = $1', [id]);
+    const oldFoto = rows[0]?.foto_perfil;
+    if (oldFoto) {
+      const oldFilename = require('path').basename(oldFoto);
+      try { fs.unlinkSync(path.join(avatarsDir, oldFilename)); } catch (_) {}
+    }
+
+    // Compatibilidad: Borrar formatos viejos si existen
     for (const e of AVATAR_EXTS) {
       try { fs.unlinkSync(path.join(avatarsDir, `${id}${e}`)); } catch (_) {}
     }
 
-    const filename = `${id}${ext}`;
+    // Nombre con timestamp para forzar actualización de caché
+    const filename = `${id}_${Date.now()}${ext}`;
     fs.writeFileSync(path.join(avatarsDir, filename), req.file.buffer);
 
     const url = `/uploads/avatars/${filename}`;
@@ -479,4 +500,4 @@ const usarRespuestaRapida = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
-module.exports = { listar, crear, actualizar, eliminar, responder, liberar, eliminarConversacion, escribiendo, enviarMediaHandler, subirFoto, reaccionar, listarRR, crearRR, actualizarRR, eliminarRR, usarRespuestaRapida };
+module.exports = { listar, crear, actualizar, eliminar, responder, liberar, eliminarConversacion, escribiendo, enviarMediaHandler, subirFoto, reaccionar, listarRR, crearRR, actualizarRR, eliminarRR, usarRespuestaRapida, directorio };

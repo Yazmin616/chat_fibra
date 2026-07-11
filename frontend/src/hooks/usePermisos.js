@@ -1,16 +1,20 @@
 import { useState, useEffect, useCallback } from 'react';
 import { apiService } from '../services/api';
+import { MessageSquare, Users, AlertTriangle, LayoutDashboard, Key, Settings, Tags, FileText, Shield, BarChart2, ClipboardList } from 'lucide-react';
 
 // ── Catálogo de módulos (espejo del backend) ──────────────────────────────────
 export const MODULOS = [
-  { id: 'chat',          nombre: 'Chat',           desc: 'Panel de conversaciones y atención al cliente', icono: '💬' },
-  { id: 'contactos',     nombre: 'Contactos',       desc: 'Directorio de clientes',                        icono: '👥' },
-  { id: 'infracciones',  nombre: 'Infracciones',    desc: 'Registro de infracciones del equipo',           icono: '⚠️' },
-  { id: 'dashboard',     nombre: 'Dashboard',       desc: 'Analíticas y métricas del sistema',             icono: '📊' },
-  { id: 'usuarios',      nombre: 'Usuarios',        desc: 'Gestión de agentes y cuentas',                  icono: '🔑' },
-  { id: 'configuracion', nombre: 'Configuración',   desc: 'Parámetros globales: jornadas, SLA, etc.',      icono: '⚙️' },
-  { id: 'etiquetas',     nombre: 'Etiquetas',       desc: 'Catálogo de etiquetas para conversaciones',     icono: '🏷️' },
-  { id: 'notas_cierre',  nombre: 'Notas de Cierre', desc: 'Categorías de cierre de conversaciones',        icono: '📝' },
+  { id: 'chat',          nombre: 'Chat',              desc: 'Panel de conversaciones y atención al cliente', icono: MessageSquare },
+  { id: 'contactos',     nombre: 'Contactos',          desc: 'Directorio de clientes',                        icono: Users },
+  { id: 'infracciones',  nombre: 'Infracciones',       desc: 'Registro de infracciones del equipo',           icono: AlertTriangle },
+  { id: 'dashboard',     nombre: 'Dashboard',          desc: 'Analíticas y métricas del sistema',             icono: LayoutDashboard },
+  { id: 'nps',           nombre: 'Dashboard de Staff', desc: 'Métricas de rendimiento y NPS del staff',       icono: BarChart2 },
+  { id: 'soluciones',    nombre: 'Soluciones Staff',   desc: 'Historial de cierres y soluciones del staff',   icono: ClipboardList },
+  { id: 'usuarios',      nombre: 'Usuarios',           desc: 'Gestión de agentes y cuentas',                  icono: Key },
+  { id: 'configuracion', nombre: 'Configuración',     desc: 'Parámetros globales: jornadas, SLA, etc.',      icono: Settings },
+  { id: 'etiquetas',     nombre: 'Etiquetas',          desc: 'Catálogo de etiquetas para conversaciones',     icono: Tags },
+  { id: 'notas_cierre',  nombre: 'Notas de Cierre',    desc: 'Categorías de cierre de conversaciones',        icono: FileText },
+  { id: 'equipos',       nombre: 'Equipos',            desc: 'Gestión de equipos y coordinadores de área',    icono: Shield },
 ];
 
 export const EMPRESAS_DEF = [
@@ -74,13 +78,19 @@ export function usePermisos(user, socket) {
 
   // ── Helpers ──────────────────────────────────────────────────────────────────
 
-  /** ¿Tiene acceso al módulo? Admin siempre sí. Todos pueden ver dashboard. */
+  // Debe declararse ANTES de hasModulo para evitar "before initialization"
+  const esCoordinador = permisos?.es_coordinador || user?.es_coordinador || false;
+
+  /** ¿Tiene acceso al módulo? Admin siempre sí. Coordinadores ven nps, soluciones y configuracion. */
   const hasModulo = useCallback((mod) => {
     if (user?.rol === 'admin') return true;
-    if (mod === 'dashboard') return true;
+    // Coordinadores siempre ven sus módulos de staff y su panel de configuración
+    if ((mod === 'nps' || mod === 'soluciones' || mod === 'configuracion') && esCoordinador) return true;
+    // Asesores normales también ven sus propias soluciones
+    if (mod === 'soluciones') return true;
     if (!permisos) return false;
     return permisos.modulos?.includes(mod) ?? false;
-  }, [user, permisos]);
+  }, [user, permisos, esCoordinador]);
 
   /** ¿Tiene acceso a la empresa? */
   const hasEmpresa = useCallback((empresaId) => {
@@ -111,5 +121,5 @@ export function usePermisos(user, socket) {
     return entrada.areas?.includes('__todas__') || entrada.areas?.includes(area);
   }, [user, permisos]);
 
-  return { permisos, loading, hasModulo, hasEmpresa, hasArea, filtrarEmpresas, recargar: cargar };
+  return { permisos, loading, hasModulo, hasEmpresa, hasArea, filtrarEmpresas, esCoordinador, recargar: cargar };
 }

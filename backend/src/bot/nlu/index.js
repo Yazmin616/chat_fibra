@@ -80,17 +80,29 @@ async function detectarIntencion(mensaje, empresa_id) {
   const reglas = await _cargarReglas(empresa_id || '__todas__');
   const m = normalizar(mensaje);
 
+  let mejorCoincidencia = null;
+
   for (const regla of reglas) {
     for (const palabra of regla.palabras) {
-      if (m.includes(normalizar(palabra))) {
-        return {
-          intencion:       regla.intencion,
-          palabraCoincide: palabra,
-          depto:           INTENCION_A_DEPTO[regla.intencion] ?? null,
-        };
+      const palabraNorm = normalizar(palabra);
+      if (m.includes(palabraNorm)) {
+        if (!mejorCoincidencia || palabraNorm.length > mejorCoincidencia.palabraNormLength) {
+          mejorCoincidencia = {
+            intencion:       regla.intencion,
+            palabraCoincide: palabra,
+            depto:           INTENCION_A_DEPTO[regla.intencion] ?? null,
+            palabraNormLength: palabraNorm.length
+          };
+        }
       }
     }
   }
+
+  if (mejorCoincidencia) {
+    const { palabraNormLength, ...res } = mejorCoincidencia;
+    return res;
+  }
+
   return null;
 }
 

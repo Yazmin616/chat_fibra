@@ -98,7 +98,7 @@ const deleteByConversacionIds = (ids) =>
 const markReadByConversacion = (conversacion_id) =>
   db.query(
     `UPDATE mensajes SET leido=true
-     WHERE conversacion_id=$1 AND remitente='user' AND leido=false`,
+     WHERE conversacion_id=$1 AND remitente IN ('user', 'sistema_info') AND leido=false`,
     [conversacion_id]
   );
 

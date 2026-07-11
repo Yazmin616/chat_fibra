@@ -346,50 +346,100 @@ const EtiquetasSection = ({ empresaId: empresaIdProp, user }) => {
           {busqueda ? `Sin resultados para "${busqueda}"` : 'No hay etiquetas. Crea la primera.'}
         </div>
       ) : (
-        <div className="etq-table-wrap">
-          <table className="etq-table">
-            <thead>
-              <tr>
-                <th>Etiqueta</th>
-                <th>Empresa(s)</th>
-                <th>Área</th>
-                <th>Descripción</th>
-                {isAdmin && <th className="etq-th-actions">Acciones</th>}
-              </tr>
-            </thead>
-            <tbody>
-              {etiquetas.map(etq => (
-                <tr key={etq.id}>
-                  <td><EtiquetaChip nombre={etq.nombre} color={etq.color} /></td>
-                  <td><EmpresaBadges empresas={etq.empresas} /></td>
-                  <td><AreaBadge area={etq.area} /></td>
-                  <td className="etq-td-desc">{etq.descripcion || <span className="etq-no-desc">—</span>}</td>
-                  {isAdmin && (
-                    <td className="etq-td-actions">
-                      {eliminando === etq.id ? (
-                        <div className="etq-confirm-delete">
-                          <span>¿Eliminar?</span>
-                          <button className="etq-btn-confirm-yes" onClick={() => confirmarEliminar(etq.id)}>Sí</button>
-                          <button className="etq-btn-confirm-no"  onClick={() => setEliminando(null)}>No</button>
-                        </div>
-                      ) : (
-                        <>
-                          <button className="etq-icon-btn" title="Editar" onClick={() => abrirFormulario(etq)}>
-                            <Pencil size={15} />
-                          </button>
-                          <button className="etq-icon-btn etq-icon-btn--danger" title="Eliminar" onClick={() => setEliminando(etq.id)}>
-                            <Trash2 size={15} />
-                          </button>
-                        </>
-                      )}
-                    </td>
-                  )}
+        <>
+          {/* TABLA DE ESCRITORIO / TABLET */}
+          <div className="etq-table-wrap">
+            <table className="etq-table">
+              <thead>
+                <tr>
+                  <th>Etiqueta</th>
+                  <th>Empresa(s)</th>
+                  <th>Área</th>
+                  <th>Descripción</th>
+                  {isAdmin && <th className="etq-th-actions">Acciones</th>}
                 </tr>
-              ))}
-            </tbody>
-          </table>
-          <div className="etq-count">{etiquetas.length} etiqueta{etiquetas.length !== 1 ? 's' : ''}</div>
-        </div>
+              </thead>
+              <tbody>
+                {etiquetas.map(etq => (
+                  <tr key={etq.id}>
+                    <td><EtiquetaChip nombre={etq.nombre} color={etq.color} /></td>
+                    <td><EmpresaBadges empresas={etq.empresas} /></td>
+                    <td><AreaBadge area={etq.area} /></td>
+                    <td className="etq-td-desc">{etq.descripcion || <span className="etq-no-desc">—</span>}</td>
+                    {isAdmin && (
+                      <td className="etq-td-actions">
+                        {eliminando === etq.id ? (
+                          <div className="etq-confirm-delete">
+                            <span>¿Eliminar?</span>
+                            <button className="etq-btn-confirm-yes" onClick={() => confirmarEliminar(etq.id)}>Sí</button>
+                            <button className="etq-btn-confirm-no"  onClick={() => setEliminando(null)}>No</button>
+                          </div>
+                        ) : (
+                          <>
+                            <button className="etq-icon-btn" title="Editar" onClick={() => abrirFormulario(etq)}>
+                              <Pencil size={15} />
+                            </button>
+                            <button className="etq-icon-btn etq-icon-btn--danger" title="Eliminar" onClick={() => setEliminando(etq.id)}>
+                              <Trash2 size={15} />
+                            </button>
+                          </>
+                        )}
+                      </td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <div className="etq-count">{etiquetas.length} etiqueta{etiquetas.length !== 1 ? 's' : ''}</div>
+          </div>
+
+          {/* LISTA DE TARJETAS PARA MÓVILES */}
+          <div className="etq-mobile-list">
+            {etiquetas.map(etq => (
+              <div key={etq.id} className="etq-mobile-card">
+                <div className="etq-mobile-card-header">
+                  <EtiquetaChip nombre={etq.nombre} color={etq.color} />
+                  <AreaBadge area={etq.area} />
+                </div>
+                
+                <div className="etq-mobile-card-body">
+                  <div className="etq-mobile-card-empresas">
+                    <span className="etq-mobile-card-label">Empresa(s):</span>
+                    <EmpresaBadges empresas={etq.empresas} />
+                  </div>
+                  {etq.descripcion && (
+                    <div className="etq-mobile-card-desc">
+                      <span className="etq-mobile-card-label">Descripción:</span>
+                      <p>{etq.descripcion}</p>
+                    </div>
+                  )}
+                </div>
+
+                {isAdmin && (
+                  <div className="etq-mobile-card-actions">
+                    {eliminando === etq.id ? (
+                      <div className="etq-confirm-delete">
+                        <span>¿Eliminar?</span>
+                        <button className="etq-btn-confirm-yes" onClick={() => confirmarEliminar(etq.id)}>Sí</button>
+                        <button className="etq-btn-confirm-no"  onClick={() => setEliminando(null)}>No</button>
+                      </div>
+                    ) : (
+                      <>
+                        <button className="etq-icon-btn" title="Editar" onClick={() => abrirFormulario(etq)}>
+                          <Pencil size={15} />
+                        </button>
+                        <button className="etq-icon-btn etq-icon-btn--danger" title="Eliminar" onClick={() => setEliminando(etq.id)}>
+                          <Trash2 size={15} />
+                        </button>
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+            ))}
+            <div className="etq-count" style={{ padding: '0 8px' }}>{etiquetas.length} etiqueta{etiquetas.length !== 1 ? 's' : ''}</div>
+          </div>
+        </>
       )}
     </div>
   );

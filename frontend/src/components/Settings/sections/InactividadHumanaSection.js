@@ -23,6 +23,22 @@ const InactividadHumanaSection = ({ config, onSave, setDirty }) => {
   const [unitA2, setUnitA2] = useState(() => bestUnit(a2Min).unit);
   const [unitAc, setUnitAc] = useState(() => bestUnit(acMin).unit);
 
+  React.useEffect(() => {
+    const newA1 = String(config.inactividad_aviso1_min ?? DEFAULTS.inactividad_aviso1_min);
+    const newA2 = String(config.inactividad_aviso2_min ?? DEFAULTS.inactividad_aviso2_min);
+    const newAc = String(config.inactividad_cierre_min ?? DEFAULTS.inactividad_cierre_min);
+    setA1Min(newA1);
+    setA2Min(newA2);
+    setAcMin(newAc);
+    setMsgA1(config.inactividad_msg_aviso1 ?? DEFAULTS.inactividad_msg_aviso1);
+    setMsgA2(config.inactividad_msg_aviso2 ?? DEFAULTS.inactividad_msg_aviso2);
+    setMsgCierre(config.inactividad_msg_cierre ?? DEFAULTS.inactividad_msg_cierre);
+    setUnitA1(bestUnit(newA1).unit);
+    setUnitA2(bestUnit(newA2).unit);
+    setUnitAc(bestUnit(newAc).unit);
+    setDirty(false);
+  }, [config]);
+
   const { saveState, runSave } = useSectionSave(setDirty);
 
   const mark = (setter) => (val) => { setter(val); setDirty(true); };
@@ -35,7 +51,16 @@ const InactividadHumanaSection = ({ config, onSave, setDirty }) => {
   const waWarn  = nc > 720 && nc < 1440;
   const waError = nc >= 1440;
 
-  const saveDisabled = saveState === 'saving' || !orderOk || waError;
+  const isDirty = (
+    a1Min !== String(config.inactividad_aviso1_min ?? DEFAULTS.inactividad_aviso1_min) ||
+    a2Min !== String(config.inactividad_aviso2_min ?? DEFAULTS.inactividad_aviso2_min) ||
+    acMin !== String(config.inactividad_cierre_min ?? DEFAULTS.inactividad_cierre_min) ||
+    msgA1 !== (config.inactividad_msg_aviso1 ?? DEFAULTS.inactividad_msg_aviso1) ||
+    msgA2 !== (config.inactividad_msg_aviso2 ?? DEFAULTS.inactividad_msg_aviso2) ||
+    msgCierre !== (config.inactividad_msg_cierre ?? DEFAULTS.inactividad_msg_cierre)
+  );
+
+  const saveDisabled = saveState === 'saving' || !orderOk || waError || !isDirty;
 
   const handleSave = () => runSave(onSave, [
     ['inactividad_aviso1_min', a1Min],
@@ -140,12 +165,12 @@ const InactividadHumanaSection = ({ config, onSave, setDirty }) => {
       <div className="sc-phase sc-phase--3">
         <div className="sc-phase-head">
           <span className="sc-phase-num" style={{ background: '#dc2626' }}>3</span>
-          <span className="sc-phase-name">Cierre automático + encuesta CSAT</span>
+          <span className="sc-phase-name">Cierre automático</span>
         </div>
         <div className="setting-item sc-row">
           <div className="setting-info">
             <label htmlFor="ac-t">Cerrar conversación después de</label>
-            <span>Libera al agente y envía la encuesta de satisfacción al cliente.</span>
+            <span>Libera al agente y envía un mensaje de despedida.</span>
           </div>
           <TimeField id="ac-t" minutes={acMin} unit={unitAc}
             onChangeMinutes={m => { setAcMin(String(m)); setDirty(true); }}
@@ -157,6 +182,9 @@ const InactividadHumanaSection = ({ config, onSave, setDirty }) => {
 
       {/* ── Footer con botón único ─────────────────────────────────────────── */}
       <div className="sc-footer">
+        {isDirty && <span style={{ color: '#d97706', fontSize: '13px', fontWeight: '500', marginRight: 'auto' }}>
+          ⚠️ Tienes cambios sin guardar. Haz clic en "Guardar cambios" para aplicarlos.
+        </span>}
         <SectionStatus state={saveState} />
         <button className="btn-save" disabled={saveDisabled} onClick={handleSave}>
           {saveState === 'saving' ? 'Guardando…' : 'Guardar cambios'}

@@ -48,14 +48,17 @@ const MSG_DEFAULT_FUERA_HORARIO = [
 
 const INTENTOS_MAX = 3;
 
-async function _escalarArea(depto, conversacion, mensaje) {
+async function _escalarArea(depto, conversacion, mensaje, io) {
   const empresaId = conversacion.empresa_id || 'fibratec';
   let configMap = {};
   try {
     const { rows } = await db.query(
-      'SELECT clave, valor FROM configuraciones WHERE empresa_id=$1', [empresaId]
+      "SELECT clave, valor, empresa_id FROM configuraciones WHERE empresa_id=$1 OR empresa_id='todas'", [empresaId]
     );
-    rows.forEach(r => { configMap[r.clave] = r.valor; });
+    // 1. Cargar las globales primero
+    rows.filter(r => r.empresa_id === 'todas').forEach(r => { configMap[r.clave] = r.valor; });
+    // 2. Sobreescribir con las específicas de la empresa
+    rows.filter(r => r.empresa_id !== 'todas').forEach(r => { configMap[r.clave] = r.valor; });
   } catch { /* non-critical */ }
 
   const { escenario, turnos } = await detectarEscenario(db, new Date(), empresaId, depto, configMap);
@@ -91,6 +94,9 @@ async function _escalarArea(depto, conversacion, mensaje) {
   const nuevaConvId = (
     await conversacionRepo.createEsperando(conversacion.usuario_id, conversacion.empresa_id, depto)
   ).rows[0].id;
+  
+  const { aplicarRoundRobin } = require('../../services/asignacion.service');
+  await aplicarRoundRobin(nuevaConvId, conversacion.empresa_id, depto, io);
 
   const bannerCRM    = `CLIENTE EN ESPERA — ${depto}`;
   const confirmacion = `✅ Te estamos conectando con el área de *${depto}*.\n\nPuedes escribir tu consulta ahora y nuestro asesor la tendrá lista al atenderte. ¡Gracias por tu paciencia! 🙏`;
@@ -101,7 +107,7 @@ async function _escalarArea(depto, conversacion, mensaje) {
   return { earlyReturn: true, resultado: { texto: confirmacion, conversacion_id: nuevaConvId, departamento: depto } };
 }
 
-async function handle(mensaje, conversacion, usuario) {
+async function handle(mensaje, conversacion, usuario, io) {
   const depto = parseDepto(mensaje);
 
   if (depto) {
@@ -109,9 +115,12 @@ async function handle(mensaje, conversacion, usuario) {
     let configMap = {};
     try {
       const { rows } = await db.query(
-        'SELECT clave, valor FROM configuraciones WHERE empresa_id=$1', [empresaId]
+        "SELECT clave, valor, empresa_id FROM configuraciones WHERE empresa_id=$1 OR empresa_id='todas'", [empresaId]
       );
-      rows.forEach(r => { configMap[r.clave] = r.valor; });
+      // 1. Cargar las globales primero
+      rows.filter(r => r.empresa_id === 'todas').forEach(r => { configMap[r.clave] = r.valor; });
+      // 2. Sobreescribir con las específicas de la empresa
+      rows.filter(r => r.empresa_id !== 'todas').forEach(r => { configMap[r.clave] = r.valor; });
     } catch (err) {
       logger.warn('[SELECCION_AREA] No se pudo cargar configMap:', err.message);
     }
@@ -150,6 +159,9 @@ async function handle(mensaje, conversacion, usuario) {
       await conversacionRepo.createEsperando(conversacion.usuario_id, conversacion.empresa_id, depto)
     ).rows[0].id;
 
+    const { aplicarRoundRobin } = require('../../services/asignacion.service');
+    await aplicarRoundRobin(nuevaConvId, conversacion.empresa_id, depto, io);
+
     const bannerCRM    = `CLIENTE EN ESPERA — ${depto}`;
     const confirmacion = `✅ Te estamos conectando con el área de *${depto}*.\n\nPuedes escribir tu consulta ahora y nuestro asesor la tendrá lista al atenderte. ¡Gracias por tu paciencia! 🙏`;
 
@@ -167,7 +179,7 @@ async function handle(mensaje, conversacion, usuario) {
     // NLU detectó un área — tratar igual que si el cliente la hubiera elegido del menú
     const aviso = `🔍 Entendido. Te conectamos con *${nlu.depto}*...\n`;
     conversacion._usuario_nombre = usuario?.nombre;
-    const resultado = await _escalarArea(nlu.depto, conversacion, mensaje);
+    const resultado = await _escalarArea(nlu.depto, conversacion, mensaje, io);
     if (resultado.earlyReturn) {
       // Añadir aviso previo al mensaje de confirmación
       resultado.resultado.texto = aviso + resultado.resultado.texto;
@@ -186,7 +198,7 @@ async function handle(mensaje, conversacion, usuario) {
     const areaDefault = DEPARTAMENTOS.SOPORTE;
     const avisoEscalada = `Parece que tienes dificultades para elegir. Te comunico con un asesor de *${areaDefault}* ahora.\n\n`;
     conversacion._usuario_nombre = usuario?.nombre;
-    const resultado = await _escalarArea(areaDefault, conversacion, mensaje);
+    const resultado = await _escalarArea(areaDefault, conversacion, mensaje, io);
     if (resultado.earlyReturn) {
       resultado.resultado.texto = avisoEscalada + resultado.resultado.texto;
       return resultado;

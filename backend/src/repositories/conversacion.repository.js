@@ -101,6 +101,7 @@ const assignAgente = (id, agente_id) =>
      SET agente_id=COALESCE(agente_id,$1),
          estado=CASE WHEN estado='ESPERANDO_AGENTE' THEN 'atendiendo' ELSE estado END,
          ultimo_mensaje_cliente=CASE WHEN estado='ESPERANDO_AGENTE' THEN NOW() ELSE ultimo_mensaje_cliente END,
+         sla_pendiente_desde=CASE WHEN estado='ESPERANDO_AGENTE' THEN NOW() ELSE sla_pendiente_desde END,
          updated_at=NOW()
      WHERE id=$2`,
     [agente_id, id]
@@ -165,7 +166,7 @@ const MENSAJES_SUBQUERIES = `
   (SELECT texto FROM mensajes WHERE conversacion_id=c.id ORDER BY id DESC LIMIT 1) AS ultimo_mensaje,
   (SELECT remitente FROM mensajes WHERE conversacion_id=c.id ORDER BY id DESC LIMIT 1) AS ultimo_remitente,
   (SELECT created_at FROM mensajes WHERE conversacion_id=c.id ORDER BY id DESC LIMIT 1) AS fecha_ultimo_mensaje,
-  (SELECT COUNT(*) FROM mensajes WHERE conversacion_id=c.id AND remitente='user' AND leido=false) AS no_leidos
+  (SELECT COUNT(*) FROM mensajes WHERE conversacion_id=c.id AND remitente IN ('user', 'sistema_info') AND leido=false) AS no_leidos
 `;
 
 /**
@@ -182,9 +183,11 @@ const listAdmin = (empresa_id) => {
   return db.query(`
     SELECT DISTINCT ON (c.usuario_id, c.empresa_id)
       c.*, u.nombre, u.username, u.external_id, u.canal, u.telefono,
+      a.nombre AS agente_nombre,
       ${MENSAJES_SUBQUERIES}
     FROM conversaciones c
     JOIN usuarios u ON c.usuario_id=u.id
+    LEFT JOIN agentes a ON c.agente_id = a.id
     WHERE 1=1 ${whereEmpresa}
     ORDER BY c.usuario_id, c.empresa_id,
       CASE WHEN c.estado IN ('ESPERANDO_AGENTE','atendiendo') THEN 0 ELSE 1 END ASC,
@@ -199,17 +202,19 @@ const listAdmin = (empresa_id) => {
  * @param {string} empresa_id - "todas" o un ID de empresa concreto.
  * @returns {Promise<import('pg').QueryResult>}
  */
-const listByArea = (area, empresa_id) => {
+const listByAreas = (areas, empresa_id) => {
   const todas = empresa_id === 'todas';
-  const params = [area];
+  const params = [areas];
   const whereEmpresa = !todas ? `AND c.empresa_id=$${params.push(empresa_id || 'fibratec')}` : '';
   return db.query(`
     SELECT DISTINCT ON (c.usuario_id, c.empresa_id)
       c.*, u.nombre, u.username, u.external_id, u.canal, u.telefono,
+      a.nombre AS agente_nombre,
       ${MENSAJES_SUBQUERIES}
     FROM conversaciones c
     JOIN usuarios u ON c.usuario_id=u.id
-    WHERE c.departamento=$1 ${whereEmpresa}
+    LEFT JOIN agentes a ON c.agente_id = a.id
+    WHERE c.departamento = ANY($1::text[]) ${whereEmpresa}
     ORDER BY c.usuario_id, c.empresa_id,
       CASE WHEN c.estado IN ('ESPERANDO_AGENTE','atendiendo') THEN 0 ELSE 1 END ASC,
       c.updated_at DESC
@@ -265,5 +270,5 @@ module.exports = {
   touch,
   unassignAgente,
   listAdmin,
-  listByArea
+  listByAreas,
 };

@@ -45,6 +45,8 @@ import ChatWindow          from './components/Chat/ChatWindow';
 import SettingsView        from './components/Settings/SettingsView';
 import EtiquetasSection    from './components/Settings/sections/EtiquetasSection';
 import CategoriasCierreSection from './components/Settings/sections/CategoriasCierreSection';
+import NpsDashboardView from './components/Metrics/NpsDashboardView';
+import SolucionesStaffView from './components/Metrics/SolucionesStaffView';
 import AgentManagementView from './components/Settings/AgentManagementView';
 import DashboardView       from './components/Settings/DashboardView';
 import ContactsView        from './components/Contacts/ContactsView';
@@ -54,6 +56,7 @@ import CerrarChatModal     from './components/Chat/CerrarChatModal';
 import TransferModal       from './components/Chat/TransferModal';
 import Login               from './components/Auth/Login';
 import TIPanel             from './components/TI/TIPanel';
+import EquiposView         from './components/Equipos/EquiposView';
 import './styles/ti-panel.css';
 
 /** Conexión Socket.io (singleton): se crea una vez al cargar la app. */
@@ -73,7 +76,7 @@ const ESTADOS_PURO_BOT = ['abierta', 'MENU_PRINCIPAL', 'SELECCION_EMPRESA', 'SEL
 function App() {
   const { user, login, logout, actualizarUsuario } = useAuth();
   const { notify }                = useNotifications();
-  const { hasModulo, filtrarEmpresas } = usePermisos(user, socket);
+  const { hasModulo, filtrarEmpresas, esCoordinador } = usePermisos(user, socket);
   const [mantenimiento, setMantenimiento] = useState(false);
 
   // Escuchar evento de mantenimiento:
@@ -102,7 +105,7 @@ function App() {
   // Estado de UI persistido en localStorage
   // En móvil el sidebar arranca oculto para no tapar el contenido
   const [sidebarVisible, setSidebarVisible] = useState(() => window.innerWidth > 768);
-  const [currentView,       setCurrentView]       = useState(() => localStorage.getItem('app_current_view') || 'chat');
+  const [currentView,       setCurrentView]       = useState(() => localStorage.getItem('app_current_view') || 'dashboard');
   const [totalInfracciones, setTotalInfracciones] = useState(0);
   const [cerrarModalId,     setCerrarModalId]     = useState(null);
   const [transferModalId,   setTransferModalId]   = useState(null);
@@ -124,6 +127,7 @@ function App() {
     conversacionActiva,  setConversacionActiva,
     mensajes,            setMensajes,
     config,              setConfig,
+    configLoading,
     cargar,
     cargarMensajes,
     enviarMensaje,
@@ -232,20 +236,20 @@ function App() {
     }
   });
 
-  // Cargar conteo de infracciones de hoy y escuchar nuevas en tiempo real (solo admin)
+  // Cargar conteo de infracciones de hoy y escuchar nuevas en tiempo real (solo admin y coordinadores)
   useEffect(() => {
-    if (!user || user.rol !== 'admin') return;
+    if (!user || (user.rol !== 'admin' && !esCoordinador)) return;
     apiService.getInfraccionesHoy(user.id, empresaId)
       .then(data => setTotalInfracciones(data.total || 0))
       .catch(() => {});
-  }, [user, empresaId]);
+  }, [user, empresaId, esCoordinador]);
 
   useEffect(() => {
-    if (!user || user.rol !== 'admin') return;
+    if (!user || (user.rol !== 'admin' && !esCoordinador)) return;
     const handler = () => setTotalInfracciones(prev => prev + 1);
     socket.on('nueva_infraccion', handler);
     return () => socket.off('nueva_infraccion', handler);
-  }, [user]);
+  }, [user, esCoordinador]);
 
   // Unirse a la sala de Socket.io. Se re-emite también en cada reconexión
   // para recuperar las salas que el servidor pierde al reiniciarse.
@@ -257,17 +261,37 @@ function App() {
     return () => socket.off('connect', joinRoom);
   }, [user]);
 
+  // Al cerrar sesión (user es null), resetear estados locales de UI para la siguiente sesión
+  useEffect(() => {
+    if (!user) {
+      setCurrentView('dashboard');
+      setEmpresaId('todas');
+      setFiltro('Todos los chats');
+      setBusqueda('');
+      if (setConversacionActiva) setConversacionActiva(null);
+    }
+  }, [user, setConversacionActiva]);
+
   // Persistir preferencias en localStorage; limpiar badge de infracciones al entrar a esa vista
   useEffect(() => {
-    localStorage.setItem('app_current_view', currentView);
-    if (currentView === 'infracciones') setTotalInfracciones(0);
-  }, [currentView]);
-  useEffect(() => { localStorage.setItem('app_empresa_id', empresaId); }, [empresaId]);
+    if (user) {
+      localStorage.setItem('app_current_view', currentView);
+      if (currentView === 'infracciones') setTotalInfracciones(0);
+    }
+  }, [currentView, user]);
+
+  useEffect(() => {
+    if (user) {
+      localStorage.setItem('app_empresa_id', empresaId);
+    }
+  }, [empresaId, user]);
 
   // Persistir preferencia de tema (solo afecta al chat)
   useEffect(() => {
-    localStorage.setItem('app_theme', darkMode ? 'dark' : 'light');
-  }, [darkMode]);
+    if (user) {
+      localStorage.setItem('app_theme', darkMode ? 'dark' : 'light');
+    }
+  }, [darkMode, user]);
 
   // Cerrar chat activo al presionar Escape
   useEffect(() => {
@@ -290,9 +314,19 @@ function App() {
   // ─────────────────────────────────────────────
   // Total de no-leídos global (todas las empresas)
   // Se pasa al Sidebar para mostrar el badge de alerta en el menú de Chat.
+  // Ignora conversaciones cerradas o en estados puros del bot, para no inflar el contador.
   // ─────────────────────────────────────────────
   const totalNoLeidos = useMemo(() =>
-    conversaciones.reduce((sum, c) => sum + parseInt(c.no_leidos || 0), 0),
+    conversaciones.reduce((sum, c) => {
+      const esCerrado = c.estado === 'cerrada' || c.estado?.startsWith('ENCUESTA');
+      const esHumano = c.estado === 'ESPERANDO_AGENTE' || c.estado === 'atendiendo';
+      if (esCerrado || !esHumano) return sum;
+      
+      let unreads = parseInt(c.no_leidos || 0);
+      if (c.estado === 'ESPERANDO_AGENTE' && unreads === 0) unreads = 1;
+      
+      return sum + unreads;
+    }, 0),
     [conversaciones]
   );
 
@@ -371,12 +405,13 @@ function App() {
 
   const handleTransferirChat = (id) => setTransferModalId(id);
 
-  const handleConfirmarTransferencia = async (areaDestino, nota) => {
+  const handleConfirmarTransferencia = async (areaDestino, nota, agenteDestinoId, agenteDestinoNombre) => {
     if (!transferModalId) return;
     try {
-      await apiService.transferirChat(transferModalId, areaDestino, nota);
+      const idTransfer = transferModalId;
       setTransferModalId(null);
       setConversacionActiva(null);
+      await apiService.transferirChat(idTransfer, areaDestino, nota, agenteDestinoId, agenteDestinoNombre);
     } catch (err) {
       alert(err.message || 'Error al transferir el chat');
     }
@@ -425,6 +460,7 @@ function App() {
         totalNoLeidos={totalNoLeidos}
         totalInfracciones={totalInfracciones}
         hasModulo={hasModulo}
+        esCoordinador={esCoordinador}
       />
       <div className="main-wrapper">
         <TopBar
@@ -435,6 +471,8 @@ function App() {
           user={user}
           darkMode={darkMode}
           setDarkMode={setDarkMode}
+          currentView={currentView}
+          onLogout={logout}
         />
         <div className={`main-content${conversacionActiva ? ' has-active-chat' : ''}${darkMode && currentView === 'chat' ? ' chat-dark' : ''}`}>
 
@@ -442,12 +480,14 @@ function App() {
             <>
               <ChatList
                 conversaciones={conversacionesFiltradas}
+                todasLasConversaciones={conversaciones}
                 conversacionActiva={conversacionActiva}
                 setConversacionActiva={setConversacionActiva}
                 cargarMensajes={cargarMensajes}
                 busqueda={busqueda}   setBusqueda={setBusqueda}
                 filtro={filtro}       setFiltro={setFiltro}
                 user={user}
+                empresaId={empresaId}
               />
               <ChatWindow
                 conversacionActiva={conversacionActiva}
@@ -472,20 +512,35 @@ function App() {
           )}
 
           {currentView === 'config' && (
-            <SettingsView
-              config={config}
-              setConfig={setConfig}
-              empresaId={empresaId}
-              user={user}
-              onSave={async (clave, valor) => {
-                await apiService.updateConfig(clave, valor, empresaId);
-                await cargar();
-              }}
-            />
+            configLoading ? (
+              <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)' }}>
+                Cargando configuración...
+              </div>
+            ) : (
+              <SettingsView
+                config={config}
+                setConfig={setConfig}
+                empresaId={empresaId}
+                user={user}
+                esCoordinador={esCoordinador}
+                onSave={async (clave, valor, area) => {
+                  await apiService.updateConfig(clave, valor, empresaId, area);
+                  await cargar();
+                }}
+              />
+            )
           )}
 
           {currentView === 'dashboard' && (
             <DashboardView user={user} empresaId={empresaId} socket={socket} />
+          )}
+
+          {currentView === 'nps' && (
+            <NpsDashboardView empresaId={empresaId} user={user} socket={socket} />
+          )}
+
+          {currentView === 'soluciones' && (
+            <SolucionesStaffView empresaId={empresaId} user={user} socket={socket} />
           )}
 
           {currentView === 'contactos' && <ContactsView />}
@@ -506,7 +561,11 @@ function App() {
             <FlowEditorView empresaId={empresaId !== 'todas' ? empresaId : 'fibratec'} user={user} />
           )}
 
-          {!['chat','agents','config','dashboard','contactos','infracciones','etiquetas','categorias-cierre','flow-editor'].includes(currentView) && (
+          {currentView === 'equipos' && (
+            <EquiposView empresaId={empresaId} user={user} />
+          )}
+
+          {!['chat','agents','config','dashboard','nps','soluciones','contactos','infracciones','etiquetas','categorias-cierre','flow-editor','equipos'].includes(currentView) && (
             <div className="empty-chat">
               <div className="empty-content"><h2>Próximamente</h2></div>
             </div>

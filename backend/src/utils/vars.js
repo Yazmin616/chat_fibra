@@ -77,12 +77,42 @@ const MSG_DEFAULT_MANTENIMIENTO =
  * @returns {string}
  */
 function buildMsgMantenimiento(cfg, vars = {}) {
-  const lineas = [
-    cfg.tel_soporte  ? `🔧 Soporte Técnico: ${cfg.tel_soporte}`  : '',
-    cfg.tel_ventas   ? `💼 Ventas: ${cfg.tel_ventas}`            : '',
-    cfg.tel_cobranza ? `💰 Cobranza: ${cfg.tel_cobranza}`        : '',
-  ].filter(Boolean);
-  const telefonos = lineas.length ? lineas.join('\n') : 'Consulta nuestros canales de contacto.';
+  const telEmpresa = cfg.tel_empresa || '';
+  
+  let lineas = [];
+  if (cfg.extensiones_areas) {
+    try {
+      const extMap = JSON.parse(cfg.extensiones_areas);
+      for (const [areaName, ext] of Object.entries(extMap)) {
+        if (ext && ext.trim()) {
+          lineas.push(`🔹 ${areaName}: Ext. ${ext}`);
+        }
+      }
+    } catch(e) {}
+  }
+  
+  // Fallback for old configs that haven't been saved with the new UI yet
+  if (lineas.length === 0) {
+    const viejas = [
+      cfg.ext_soporte  ? `🔧 Soporte Técnico: Ext. ${cfg.ext_soporte}`  : '',
+      cfg.ext_ventas   ? `💼 Ventas: Ext. ${cfg.ext_ventas}`            : '',
+      cfg.ext_cobranza ? `💰 Cobranza: Ext. ${cfg.ext_cobranza}`        : '',
+    ].filter(Boolean);
+    lineas = viejas;
+  }
+
+  let telefonos = '';
+  if (telEmpresa) {
+    telefonos += `📞 Teléfono Principal: ${telEmpresa}\n`;
+  }
+  
+  if (lineas.length) {
+    if (telEmpresa) telefonos += `\n`;
+    telefonos += `Extensiones:\n` + lineas.join('\n');
+  } else if (!telEmpresa) {
+    telefonos = 'Consulta nuestros canales de contacto.';
+  }
+
   const template  = (cfg.msg_mantenimiento && cfg.msg_mantenimiento.trim()) || MSG_DEFAULT_MANTENIMIENTO;
   return interpolarVars(template, { ...vars, telefonos_areas: telefonos });
 }

@@ -18,25 +18,25 @@ import { Bot } from 'lucide-react';
  * @param {number|string} props.mal     - Cantidad de calificaciones "Mal".
  * @param {number|string} [props.total] - Total (se recalcula internamente si se omite).
  */
-const DonutChart = ({ bien, regular, mal, sin_atencion }) => {
-  const b   = parseInt(bien)    || 0;
-  const r   = parseInt(regular) || 0;
-  const m   = parseInt(mal)     || 0;
-  const tot = b + r + m || 1;
+const DonutChart = ({ promotores, neutrales, detractores, sin_atencion }) => {
+  const p   = parseInt(promotores)  || 0;
+  const n   = parseInt(neutrales)   || 0;
+  const d   = parseInt(detractores) || 0;
+  const tot = p + n + d || 1;
 
   const pct = {
-    bien:    (b / tot) * 100,
-    regular: (r / tot) * 100,
-    mal:     (m / tot) * 100,
+    promotores:  (p / tot) * 100,
+    neutrales:   (n / tot) * 100,
+    detractores: (d / tot) * 100,
   };
 
   const radius = 54;
   const circ   = 2 * Math.PI * radius;
 
   const segments = [
-    { pct: pct.bien,    color: '#22c55e', label: 'Bien',    val: b },
-    { pct: pct.regular, color: '#f97316', label: 'Regular', val: r },
-    { pct: pct.mal,     color: '#ef4444', label: 'Mal',     val: m },
+    { pct: pct.promotores,  color: '#22c55e', label: 'Promotores',  val: p },
+    { pct: pct.neutrales,   color: '#eab308', label: 'Neutrales',   val: n },
+    { pct: pct.detractores, color: '#ef4444', label: 'Detractores', val: d },
   ];
 
   let cumulative = 0;
@@ -67,7 +67,7 @@ const DonutChart = ({ bien, regular, mal, sin_atencion }) => {
           );
         })}
         <text x="70" y="65" textAnchor="middle" style={{ fill: 'var(--dash-text-primary)' }} fontSize="22" fontWeight="bold">
-          {b + r + m}
+          {p + n + d}
         </text>
         <text x="70" y="83" textAnchor="middle" style={{ fill: 'var(--dash-text-muted)' }} fontSize="10">
           evaluaciones
@@ -81,7 +81,7 @@ const DonutChart = ({ bien, regular, mal, sin_atencion }) => {
             <span className="legend-label">{item.label}</span>
             <span className="legend-val">{item.val}</span>
             <span className="legend-pct"  style={{ color: item.color }}>
-              {b + r + m > 0 ? Math.round((item.val / (b + r + m)) * 100) : 0}%
+              {p + n + d > 0 ? Math.round((item.val / (p + n + d)) * 100) : 0}%
             </span>
           </div>
         ))}

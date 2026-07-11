@@ -323,50 +323,100 @@ const CategoriasCierreSection = ({ empresaId: empresaIdProp, user }) => {
           {busqueda ? `Sin resultados para "${busqueda}"` : 'No hay categorías de cierre. Crea la primera.'}
         </div>
       ) : (
-        <div className="etq-table-wrap">
-          <table className="etq-table">
-            <thead>
-              <tr>
-                <th>Nombre</th>
-                <th>Empresa(s)</th>
-                <th>Área</th>
-                <th>Descripción</th>
-                {isAdmin && <th className="etq-th-actions">Acciones</th>}
-              </tr>
-            </thead>
-            <tbody>
-              {categorias.map(cat => (
-                <tr key={cat.id}>
-                  <td><EtiquetaChip nombre={cat.nombre} color={cat.color || '#6366f1'} /></td>
-                  <td><EmpresaBadges empresas={cat.empresas} /></td>
-                  <td><AreaBadge area={cat.area} /></td>
-                  <td className="etq-td-desc">{cat.descripcion || <span className="etq-no-desc">—</span>}</td>
-                  {isAdmin && (
-                    <td className="etq-td-actions">
-                      {eliminando === cat.id ? (
-                        <div className="etq-confirm-delete">
-                          <span>¿Eliminar?</span>
-                          <button className="etq-btn-confirm-yes" onClick={() => confirmarEliminar(cat.id)}>Sí</button>
-                          <button className="etq-btn-confirm-no"  onClick={() => setEliminando(null)}>No</button>
-                        </div>
-                      ) : (
-                        <>
-                          <button className="etq-icon-btn" title="Editar" onClick={() => abrirFormulario(cat)}>
-                            <Pencil size={15} />
-                          </button>
-                          <button className="etq-icon-btn etq-icon-btn--danger" title="Eliminar" onClick={() => setEliminando(cat.id)}>
-                            <Trash2 size={15} />
-                          </button>
-                        </>
-                      )}
-                    </td>
-                  )}
+        <>
+          {/* TABLA DE ESCRITORIO / TABLET */}
+          <div className="etq-table-wrap">
+            <table className="etq-table">
+              <thead>
+                <tr>
+                  <th>Nombre</th>
+                  <th>Empresa(s)</th>
+                  <th>Área</th>
+                  <th>Descripción</th>
+                  {isAdmin && <th className="etq-th-actions">Acciones</th>}
                 </tr>
-              ))}
-            </tbody>
-          </table>
-          <div className="etq-count">{categorias.length} categoría{categorias.length !== 1 ? 's' : ''}</div>
-        </div>
+              </thead>
+              <tbody>
+                {categorias.map(cat => (
+                  <tr key={cat.id}>
+                    <td><EtiquetaChip nombre={cat.nombre} color={cat.color || '#6366f1'} /></td>
+                    <td><EmpresaBadges empresas={cat.empresas} /></td>
+                    <td><AreaBadge area={cat.area} /></td>
+                    <td className="etq-td-desc">{cat.descripcion || <span className="etq-no-desc">—</span>}</td>
+                    {isAdmin && (
+                      <td className="etq-td-actions">
+                        {eliminando === cat.id ? (
+                          <div className="etq-confirm-delete">
+                            <span>¿Eliminar?</span>
+                            <button className="etq-btn-confirm-yes" onClick={() => confirmarEliminar(cat.id)}>Sí</button>
+                            <button className="etq-btn-confirm-no"  onClick={() => setEliminando(null)}>No</button>
+                          </div>
+                        ) : (
+                          <>
+                            <button className="etq-icon-btn" title="Editar" onClick={() => abrirFormulario(cat)}>
+                              <Pencil size={15} />
+                            </button>
+                            <button className="etq-icon-btn etq-icon-btn--danger" title="Eliminar" onClick={() => setEliminando(cat.id)}>
+                              <Trash2 size={15} />
+                            </button>
+                          </>
+                        )}
+                      </td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <div className="etq-count">{categorias.length} categoría{categorias.length !== 1 ? 's' : ''}</div>
+          </div>
+
+          {/* LISTA DE TARJETAS PARA MÓVILES */}
+          <div className="etq-mobile-list">
+            {categorias.map(cat => (
+              <div key={cat.id} className="etq-mobile-card">
+                <div className="etq-mobile-card-header">
+                  <EtiquetaChip nombre={cat.nombre} color={cat.color || '#6366f1'} />
+                  <AreaBadge area={cat.area} />
+                </div>
+                
+                <div className="etq-mobile-card-body">
+                  <div className="etq-mobile-card-empresas">
+                    <span className="etq-mobile-card-label">Empresa(s):</span>
+                    <EmpresaBadges empresas={cat.empresas} />
+                  </div>
+                  {cat.descripcion && (
+                    <div className="etq-mobile-card-desc">
+                      <span className="etq-mobile-card-label">Descripción:</span>
+                      <p>{cat.descripcion}</p>
+                    </div>
+                  )}
+                </div>
+
+                {isAdmin && (
+                  <div className="etq-mobile-card-actions">
+                    {eliminando === cat.id ? (
+                      <div className="etq-confirm-delete">
+                        <span>¿Eliminar?</span>
+                        <button className="etq-btn-confirm-yes" onClick={() => confirmarEliminar(cat.id)}>Sí</button>
+                        <button className="etq-btn-confirm-no"  onClick={() => setEliminando(null)}>No</button>
+                      </div>
+                    ) : (
+                      <>
+                        <button className="etq-icon-btn" title="Editar" onClick={() => abrirFormulario(cat)}>
+                          <Pencil size={15} />
+                        </button>
+                        <button className="etq-icon-btn etq-icon-btn--danger" title="Eliminar" onClick={() => setEliminando(cat.id)}>
+                          <Trash2 size={15} />
+                        </button>
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+            ))}
+            <div className="etq-count" style={{ padding: '0 8px' }}>{categorias.length} categoría{categorias.length !== 1 ? 's' : ''}</div>
+          </div>
+        </>
       )}
     </div>
   );

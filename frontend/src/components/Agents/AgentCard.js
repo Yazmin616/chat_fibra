@@ -1,5 +1,5 @@
 import React from 'react';
-import { Trash2, Edit2, Shield, User, Mail, Briefcase, Power, Clock } from 'lucide-react';
+import { Trash2, Edit2, Shield, User, Mail, Briefcase, Clock, Crown } from 'lucide-react';
 import { resolveAvatar } from '../../services/api';
 
 function formatLastSeen(lastSeen) {
@@ -27,50 +27,60 @@ const AgentCard = ({ agente, onEditar, onEliminar }) => {
   const inicial = agente.nombre?.charAt(0)?.toUpperCase() || '?';
 
   return (
-    <div className="agent-card">
-      <div className="agent-card-header">
-        <div className={`online-indicator ${agente.esta_online ? 'online' : 'offline'}`} />
-        {agente.rol === 'admin'
-          ? <Shield size={16} color="#dc2626" />
-          : <User   size={16} color="#54656f" />
-        }
-        <span className="agent-rol-tag">{agente.rol}</span>
+    <div className="agent-compact-row">
+      {/* 1. Avatar Column */}
+      <div className="agent-row-avatar-wrapper">
+        <div className="agent-row-avatar">
+          {agente.foto_perfil ? (
+            <img src={resolveAvatar(agente.foto_perfil)} alt={agente.nombre} />
+          ) : (
+            <span className="agent-row-inicial">{inicial}</span>
+          )}
+        </div>
+        <div className={`agent-row-status-dot ${agente.esta_online ? 'online' : 'offline'}`} />
       </div>
 
-      <div className="agent-card-body">
-        <div className="agent-card-avatar">
-          {agente.foto_perfil
-            ? <img src={resolveAvatar(agente.foto_perfil)} alt={agente.nombre} />
-            : <span className="agent-card-inicial">{inicial}</span>
-          }
+      {/* 2. Main Info Column */}
+      <div className="agent-row-info">
+        <div className="agent-row-name-line">
+          <h3>{agente.nombre}</h3>
+          
+          <span className={`agent-row-rol-tag ${agente.rol === 'admin' ? 'admin' : ''}`}>
+            {agente.rol === 'admin' && <Shield size={10} style={{ marginRight: '3px' }} />}
+            {agente.rol}
+          </span>
+
+          {agente.es_coordinador && (
+            <span className="agent-row-coord-tag">
+              <Crown size={10} style={{ marginRight: '3px' }} /> Coordinador
+            </span>
+          )}
         </div>
-        <h3>{agente.nombre}</h3>
-        <div className="agent-detail">
-          <Mail size={14} />
-          <span>{agente.email}</span>
-        </div>
-        <div className="agent-detail">
-          <Briefcase size={14} />
-          <span>{agente.area}</span>
-        </div>
-        <div className="agent-detail" style={{ color: agente.esta_online ? '#dc2626' : '#aebac1' }}>
-          <Clock size={14} />
-          <span>{agente.esta_online ? 'Activo ahora' : formatLastSeen(agente.last_seen)}</span>
+        
+        <div className="agent-row-details">
+          <span className="agent-row-detail-item">
+            <Mail size={12} />
+            {agente.email}
+          </span>
+          <span className="agent-row-detail-item">
+            <Briefcase size={12} />
+            {agente.area}
+          </span>
+          <span className="agent-row-detail-item" style={{ color: agente.esta_online ? '#dc2626' : '#94a3b8' }}>
+            <Clock size={12} />
+            {agente.esta_online ? 'Activo ahora' : formatLastSeen(agente.last_seen)}
+          </span>
         </div>
       </div>
 
-      <div className="agent-card-footer">
-        <div className="status-badge">
-          <Power size={12} /> {agente.esta_online ? 'En línea' : 'Desconectado'}
-        </div>
-        <div className="agent-card-actions">
-          <button className="edit-agent-btn" onClick={() => onEditar(agente)} title="Editar agente">
-            <Edit2 size={15} />
-          </button>
-          <button className="delete-agent-btn" onClick={handleEliminar} title="Eliminar agente">
-            <Trash2 size={15} />
-          </button>
-        </div>
+      {/* 3. Actions Column */}
+      <div className="agent-row-actions">
+        <button className="edit-agent-row-btn" onClick={() => onEditar(agente)} title="Editar agente">
+          <Edit2 size={14} />
+        </button>
+        <button className="delete-agent-row-btn" onClick={handleEliminar} title="Eliminar agente">
+          <Trash2 size={14} />
+        </button>
       </div>
     </div>
   );

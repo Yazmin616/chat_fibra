@@ -14,8 +14,7 @@ function tokenExpirado(token) {
 }
 
 function limpiarSesion() {
-  localStorage.removeItem('agente_user');
-  localStorage.removeItem('agente_token');
+  localStorage.clear();
 }
 
 export function useAuth() {

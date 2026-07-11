@@ -38,16 +38,19 @@ function parseDepto(mensaje) {
 }
 
 /**
- * Interpreta la puntuación CSAT enviada por el cliente.
- * Acepta números (1/2/3) y palabras (mal, regular, bien).
+ * Interpreta la puntuación NPS/CSAT enviada por el cliente.
+ * Acepta números (1 al 5) y palabras clave (excelente, bien, regular, malo, muy malo).
+ * Devuelve el número en string para diferenciar del antiguo modelo CSAT (Bien, Regular, Mal).
  * @param {string} mensaje
- * @returns {'Mal'|'Regular'|'Bien'|'Desconocida'}
+ * @returns {'5'|'4'|'3'|'2'|'1'|'Desconocida'}
  */
 function parsePuntuacion(mensaje) {
   const m = norm(mensaje);
-  if (m.includes('1') || m === 'mal')      return 'Mal';
-  if (m.includes('2') || m === 'regular')  return 'Regular';
-  if (m.includes('3') || m === 'bien')     return 'Bien';
+  if (m.includes('5') || m === 'excelente')           return '5';
+  if (m.includes('4') || m === 'bien')                return '4';
+  if (m.includes('3') || m === 'regular')             return '3';
+  if (m.includes('2') || m === 'malo' || m === 'mal') return '2';
+  if (m.includes('1') || m === 'muy malo')            return '1';
   return 'Desconocida';
 }
 

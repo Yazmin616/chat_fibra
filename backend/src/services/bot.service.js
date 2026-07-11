@@ -25,9 +25,11 @@ const logger           = require('../config/logger');
 const { sanitize }     = require('../utils/logSanitizer');
 const { getHandler }   = require('../bot/dispatcher');
 const { ESTADOS }      = require('../bot/constants');
+const { tieneFlujActivo, ESTADO_FLOW } = require('../bot/flowEngine/flowEngine');
 const { esAsesorIntent, esAgradecimientoIntent, detectarArea } = require('../bot/nlu');
 const { detectarEscenario, formatearHorarios, proximoDiaHabil } = require('../utils/turnosHorarios');
 const { interpolarVars, nombreLimpio } = require('../utils/vars');
+const { getAreasSolucionesText } = require('../utils/areasSolucionesHelper');
 
 const MSG_DEFAULT_FESTIVO        = '¡Hola! 👋 Hoy es día festivo en {empresa}. El equipo de {area} retoma actividades el {proximo_dia_habil}. Disculpa el inconveniente — escríbenos entonces y te atenderemos con gusto.\n\n🕐 Horarios habituales:\n{horarios_atencion}';
 const MSG_DEFAULT_FUERA_HORARIO  = '¡Hola! 👋 Gracias por contactar a {empresa}. En este momento el equipo de {area} no está disponible.\n\n🕐 Horarios de atención:\n{horarios_atencion}\n\nTu mensaje quedó registrado y te responderemos en cuanto retomemos actividades. ¡Hasta pronto!';
@@ -74,6 +76,30 @@ async function procesar(input, io) {
 
   const usuario     = await _upsertUsuario(input);
   const conversacion = await _upsertConversacion(usuario.id, input.empresa_id || 'fibratec');
+
+  // ── Interceptor de Opt-in / Opt-out ───────────────────────────────────────
+  if (input.tipo === 'text' && input.mensaje) {
+    const msgUpper = input.mensaje.trim().toUpperCase();
+    
+    if (['BAJA', 'STOP', 'CANCELAR', 'SALIR'].includes(msgUpper)) {
+      await db.query('UPDATE usuarios SET opt_in = false WHERE id = $1', [usuario.id]);
+      const cancelMsg = 'Has sido dado de baja. Ya no recibirás notificaciones ni mensajes automáticos de nuestra parte. Escribe ALTA si deseas volver a recibirlos.';
+      await mensajeRepo.create(conversacion.id, 'bot', cancelMsg, 'text', null, null);
+      return { texto: cancelMsg, conversacion_id: conversacion.id };
+    }
+
+    if (msgUpper === 'ALTA' && usuario.opt_in === false) {
+      await db.query('UPDATE usuarios SET opt_in = true WHERE id = $1', [usuario.id]);
+      const altaMsg = '¡Suscripción reactivada! Podrás volver a recibir nuestras notificaciones.';
+      await mensajeRepo.create(conversacion.id, 'bot', altaMsg, 'text', null, null);
+      return { texto: altaMsg, conversacion_id: conversacion.id };
+    }
+
+    // Reactivación implícita si nos habla normal y estaba dado de baja
+    if (usuario.opt_in === false) {
+      await db.query('UPDATE usuarios SET opt_in = true WHERE id = $1', [usuario.id]);
+    }
+  }
 
   // Guardar en BD y capturar el ID para incluirlo en el evento de socket (dedup en frontend)
   const textoParaDB = input.mensaje_display || input.mensaje;
@@ -180,8 +206,8 @@ async function _upsertConversacion(usuario_id, empresa_id) {
       "SELECT COUNT(*) AS total FROM conversaciones WHERE usuario_id=$1 AND empresa_id=$2 AND estado='cerrada'",
       [usuario_id, empresa_id]
     );
-    const total = parseInt(cnt[0]?.total || '1');
-    const nota = `📋 Cliente recurrente — ${total} conversación${total > 1 ? 'es previas' : ' previa'} en el historial.`;
+    const total = cerradas.length;
+    const nota = `Cliente recurrente — ${total} conversación${total > 1 ? 'es previas' : ' previa'} en el historial.`;
     await mensajeRepo.create(nuevaConv.id, 'sistema_info', nota);
   }
 
@@ -198,33 +224,82 @@ const _ESTADOS_BOT_ACTIVOS = new Set([
   ESTADOS.MENU_TIPO_CLIENTE, ESTADOS.IDENTIFICACION_DATOS,
   ESTADOS.CONFIRMAR_CUENTA, ESTADOS.SELECCION_SERVICIO,
   ESTADOS.MENU_AUTOSERVICIO, ESTADOS.OTRA_CONSULTA,
+  ESTADOS.SELECCION_AREA,
+  ESTADO_FLOW,
 ]);
 
 async function _maquinaEstados(mensaje, conversacion, usuario, io, empresaPreconfigurada, tipo = 'text') {
   try {
+    // ── Activar motor visual si el flujo está activo en la tabla flujos_bot ────────────────
+    const esEstadoInicio = conversacion.estado === ESTADOS.INICIO || conversacion.estado === ESTADOS.ABIERTA;
+    if (esEstadoInicio) {
+      const usarMotorVisual = await tieneFlujActivo(conversacion.empresa_id);
+      if (usarMotorVisual) {
+        conversacion = { ...conversacion, estado: ESTADO_FLOW };
+        await conversacionRepo.updateEstado(conversacion.id, ESTADO_FLOW);
+      }
+    }
     // ── Pre-check universal: intenciones globales ──────────────────────────────
     // Solo se evalúan intenciones (NLU) si el cliente TECLEÓ un mensaje.
     // Si seleccionó un botón (tipo !== 'text'), delegamos el payload directamente al handler
     // para evitar que el payload accidentalmente dispare una intención global.
-    if (_ESTADOS_BOT_ACTIVOS.has(conversacion.estado) && tipo === 'text') {
-      const asesor = await esAsesorIntent(mensaje, conversacion.empresa_id || 'fibratec');
-      if (asesor) {
-        const { AREAS } = require('../bot/keyboards');
-        const respuesta = '🧑‍💼 Entendido, quieres hablar con un asesor.\n\n¿Con qué área quieres hablar?\n\nToca una opción o escribe el nombre del área:';
-        await conversacionRepo.updateEstado(conversacion.id, ESTADOS.SELECCION_AREA);
-        await mensajeRepo.create(conversacion.id, 'bot', respuesta);
-        return { texto: respuesta, conversacion_id: conversacion.id, teclado: AREAS };
-      }
+    // IMPORTANTE: Si la conversación está en ESTADO_FLOW, deshabilitamos estos pre-checks
+    // estáticos (legacy) para que el motor visual maneje las intenciones dinámicamente.
+    if (_ESTADOS_BOT_ACTIVOS.has(conversacion.estado) && conversacion.estado !== ESTADO_FLOW && tipo === 'text') {
+
 
       // ── Pre-check universal: agradecimiento y despedida ──────────────────────
-      const agradecimiento = await esAgradecimientoIntent(mensaje, conversacion.empresa_id || 'fibratec');
-      if (agradecimiento) {
-        const { getTexto } = require('../../services/plantillas.service');
+      const nluCheck = await require('../bot/nlu').detectarIntencion(mensaje, conversacion.empresa_id || 'fibratec');
+      if (nluCheck && (nluCheck.intencion === 'agradecimiento' || nluCheck.intencion === 'despedida')) {
+        const { getTexto } = require('./plantillas.service');
         const respuesta = await getTexto('agradecimiento_despedida', conversacion.empresa_id);
         await conversacionRepo.updateEstado(conversacion.id, ESTADOS.CERRADA);
         await mensajeRepo.create(conversacion.id, 'bot', respuesta);
         return {
-          mensaje_id,
+          conversacion_id: conversacion.id,
+          texto: respuesta,
+          conversacion,
+        };
+      }
+      
+      // ── Pre-check universal: Dónde pagar / Ubicaciones de cobro ──────────────
+      if (nluCheck && nluCheck.intencion === 'donde_pagar') {
+        const empresaId = conversacion.empresa_id || 'fibratec';
+        const { rows } = await db.query(
+          "SELECT valor FROM configuraciones WHERE clave='ubicaciones_cobro' AND (empresa_id=$1 OR empresa_id='todas') ORDER BY CASE WHEN empresa_id=$1 THEN 0 ELSE 1 END LIMIT 1",
+          [empresaId]
+        );
+        
+        let respuesta = '';
+        let estaIdentificado = false;
+
+        // 1. Si el cliente está identificado, incluir sus datos y enlaces de pago
+        if (usuario && usuario.wisp_data && Array.isArray(usuario.wisp_data.servicios) && usuario.wisp_data.servicios.length > 0) {
+          estaIdentificado = true;
+          respuesta += `👤 *Datos del Cliente:*\n• *Nombre*: ${usuario.wisp_data.nombre || usuario.nombre}\n\n`;
+          
+          const detallesServicios = usuario.wisp_data.servicios.map(s => {
+            const deudaText = s.deuda > 0 ? `*$${s.deuda}*` : '_Sin adeudo_';
+            const vencimientoText = s.fecha_vencimiento ? s.fecha_vencimiento : 'No disponible';
+            return `🔌 *Servicio*: ${s.etiqueta || 'Internet'}\n• *ID de Contrato*: ${s.id || 'N/A'}\n• *Adeudo*: ${deudaText}\n• *Vence*: ${vencimientoText}\n• *Enlace de pago*: ${s.portal_pago || 'No disponible'}`;
+          }).join('\n\n');
+          
+          respuesta += `💻 *Estado de Cuenta y Pago en Línea:*\n${detallesServicios}\n\n`;
+        } else {
+          // Leyenda para no identificados
+          respuesta += `⚠️ *Nota:* Como aún no has identificado tu cuenta, por ahora solo podemos proporcionarte información sobre nuestras tiendas físicas.\n\n`;
+        }
+
+        // 2. Incluir ubicaciones físicas de la configuración
+        if (rows.length > 0 && rows[0].valor) {
+          respuesta += `📍 *Pago en efectivo/sucursal:*\n${rows[0].valor}`;
+        } else if (!estaIdentificado) {
+          respuesta = "Actualmente no tenemos sucursales de cobro registradas. Puedes contactar a un asesor para más opciones de pago.";
+        }
+          
+        await conversacionRepo.updateEstado(conversacion.id, ESTADOS.CERRADA);
+        await mensajeRepo.create(conversacion.id, 'bot', respuesta);
+        return {
           conversacion_id: conversacion.id,
           texto: respuesta,
           conversacion,
@@ -258,6 +333,9 @@ async function _maquinaEstados(mensaje, conversacion, usuario, io, empresaPrecon
           case ESTADOS.MENU_TIPO_CLIENTE:
             if (parsers.parseTipoCliente(mensaje)) esOpcionValidaDelMenu = true;
             break;
+          case ESTADOS.SELECCION_AREA:
+            if (parsers.parseDepto(mensaje)) esOpcionValidaDelMenu = true;
+            break;
           case ESTADOS.CONFIRMAR_CUENTA:
             if (parsers.parseConfirmarCuenta(mensaje)) esOpcionValidaDelMenu = true;
             break;
@@ -266,7 +344,25 @@ async function _maquinaEstados(mensaje, conversacion, usuario, io, empresaPrecon
         if (!esOpcionValidaDelMenu) {
           conversacion.estado = ESTADOS.SELECCION_AREA; // Forzar el handler de selección
           await conversacionRepo.updateEstado(conversacion.id, ESTADOS.SELECCION_AREA);
+          const { handle } = require('../bot/states/seleccionArea.state');
+          // Inyectamos un mensaje simulando que el usuario seleccionó esa área numéricamente o textualmente
+          const areaSimulada = `intencion_directa:${areaMatch.depto}`;
+          const handlerRes = await handle(areaSimulada, conversacion, usuario, io);
+          if (handlerRes.earlyReturn) return handlerRes.resultado;
+          return { texto: handlerRes.respuesta, conversacion_id: conversacion.id, teclado: handlerRes.teclado };
         }
+      }
+
+      // ── Pre-check universal: Solicitar hablar con asesor ───────────────────
+      const asesor = await esAsesorIntent(mensaje, conversacion.empresa_id || 'fibratec');
+      if (asesor) {
+        const keyboards = require('../bot/keyboards');
+        const AREAS = await keyboards.get('AREAS', conversacion.empresa_id);
+        const areasInfo = await getAreasSolucionesText(conversacion.empresa_id);
+        const respuesta = `🤖 Entendido, quieres hablar con un asesor.\n\n¿Con qué área quieres hablar?${areasInfo}\n\nToca una opción o escribe el nombre del área:`;
+        await conversacionRepo.updateEstado(conversacion.id, ESTADOS.SELECCION_AREA);
+        await mensajeRepo.create(conversacion.id, 'bot', respuesta);
+        return { texto: respuesta, conversacion_id: conversacion.id, teclado: AREAS };
       }
     }
 
@@ -316,11 +412,12 @@ async function _checkEscenarioHorario(conversacion, input, io) {
   try {
     const empresaId = input.empresa_id || 'fibratec';
     const { rows: cfgRows } = await db.query(
-      'SELECT clave, valor FROM configuraciones WHERE empresa_id=$1',
+      "SELECT clave, valor, empresa_id FROM configuraciones WHERE empresa_id=$1 OR empresa_id='todas'",
       [empresaId]
     );
     const configMap = {};
-    cfgRows.forEach(r => { configMap[r.clave] = r.valor; });
+    cfgRows.filter(r => r.empresa_id === 'todas').forEach(r => { configMap[r.clave] = r.valor; });
+    cfgRows.filter(r => r.empresa_id !== 'todas').forEach(r => { configMap[r.clave] = r.valor; });
 
     const { escenario, turnos } = await detectarEscenario(
       db, new Date(), empresaId, conversacion.departamento, configMap

@@ -33,8 +33,14 @@ const findAll = (empresa_id, departamento) => {
     clauses.push(`i.empresa_id=$${params.length}`);
   }
   if (departamento) {
-    params.push(departamento);
-    clauses.push(`i.departamento=$${params.length}`);
+    if (Array.isArray(departamento)) {
+      const placeholders = departamento.map((_, i) => `$${params.length + i + 1}`).join(', ');
+      params.push(...departamento);
+      clauses.push(`i.departamento IN (${placeholders})`);
+    } else {
+      params.push(departamento);
+      clauses.push(`i.departamento=$${params.length}`);
+    }
   }
   const where = clauses.length > 0 ? 'WHERE ' + clauses.join(' AND ') : '';
   return db.query(
@@ -56,8 +62,14 @@ const countToday = (empresa_id, departamento) => {
     clauses.push(`i.empresa_id=$${params.length}`);
   }
   if (departamento) {
-    params.push(departamento);
-    clauses.push(`i.departamento=$${params.length}`);
+    if (Array.isArray(departamento)) {
+      const placeholders = departamento.map((_, i) => `$${params.length + i + 1}`).join(', ');
+      params.push(...departamento);
+      clauses.push(`i.departamento IN (${placeholders})`);
+    } else {
+      params.push(departamento);
+      clauses.push(`i.departamento=$${params.length}`);
+    }
   }
   return db.query(
     `SELECT COUNT(*) AS total FROM infracciones i WHERE ${clauses.join(' AND ')}`,

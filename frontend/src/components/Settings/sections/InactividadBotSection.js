@@ -13,6 +13,8 @@ const InactividadBotSection = ({ config, onSave, setDirty }) => {
   const [unit,    setUnit]    = useState(() => bestUnit(initMin).unit);
   const { saveState, runSave } = useSectionSave(setDirty);
 
+  const isDirty = minutes !== String(initMin);
+
   const handleChange = (m) => {
     setMinutes(String(m));
     setDirty(true);
@@ -40,16 +42,20 @@ const InactividadBotSection = ({ config, onSave, setDirty }) => {
           />
         </div>
 
-        <div className="sc-footer">
-          <SectionStatus state={saveState} />
-          <button
-            className="btn-save"
-            disabled={saveState === 'saving'}
-            onClick={() => runSave(onSave, [['tiempo_inactividad', minutes]])}
-          >
-            {saveState === 'saving' ? 'Guardando…' : 'Guardar cambios'}
-          </button>
-        </div>
+      </div>
+
+      <div className="sc-footer">
+        {isDirty && <span style={{ color: '#d97706', fontSize: '13px', fontWeight: '500', marginRight: 'auto' }}>
+          ⚠️ Tienes cambios sin guardar. Haz clic en "Guardar cambios" para aplicarlos.
+        </span>}
+        <SectionStatus state={saveState} />
+        <button
+          className="btn-save"
+          disabled={saveState === 'saving' || !isDirty}
+          onClick={() => runSave(onSave, [['tiempo_inactividad', minutes]])}
+        >
+          {saveState === 'saving' ? 'Guardando…' : 'Guardar cambios'}
+        </button>
       </div>
     </div>
   );

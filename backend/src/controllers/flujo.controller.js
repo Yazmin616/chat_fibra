@@ -1,6 +1,7 @@
 const flujoRepo  = require('../repositories/flujo.repository');
 const logger     = require('../config/logger');
 const flujoSeed  = require('../bot/flujoDefault');
+const { invalidarCache } = require('../bot/flowEngine/flowEngine');
 
 /** GET /flujos/:empresa_id */
 async function getFlujo(req, res) {
@@ -38,6 +39,10 @@ async function saveFlujo(req, res) {
     }
 
     const flujo = await flujoRepo.upsertFlujo(empresa_id, nombre, nodos, conexiones, root_node);
+
+    // Invalidar cache del motor visual para que cargue el flujo actualizado
+    invalidarCache(empresa_id);
+
     res.json(flujo);
   } catch (err) {
     logger.error('[FLUJO] saveFlujo:', err.message);
@@ -61,6 +66,10 @@ async function toggleActivo(req, res) {
   try {
     const row = await flujoRepo.setActivo(req.params.id, req.body.activo);
     if (!row) return res.status(404).json({ error: 'Flujo no encontrado' });
+    
+    // Invalidar cache del motor visual
+    invalidarCache(row.empresa_id);
+
     res.json(row);
   } catch (err) {
     logger.error('[FLUJO] toggleActivo:', err.message);

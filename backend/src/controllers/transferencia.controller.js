@@ -9,12 +9,12 @@ const logger               = require('../config/logger');
 
 /**
  * POST /transferencias/transferir
- * Body: { conversacion_id, area_destino, nota }
+ * Body: { conversacion_id, area_destino, nota, agente_destino_id, agente_destino_nombre }
  * Token: agente autenticado (agente_id, nombre y area extraídos del JWT)
  */
 async function transferirChat(req, res, next) {
   try {
-    const { conversacion_id, area_destino, nota } = req.body;
+    const { conversacion_id, area_destino, nota, agente_destino_id, agente_destino_nombre } = req.body;
     const { id: agente_id, nombre: agente_nombre, area: area_origen } = req.agente;
 
     if (!conversacion_id || !area_destino || !nota?.trim()) {
@@ -28,6 +28,8 @@ async function transferirChat(req, res, next) {
       agente_nombre,
       area_origen,
       area_destino,
+      agente_destino_id,
+      agente_destino_nombre,
       nota: nota.trim(),
       io,
     });

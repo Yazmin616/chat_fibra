@@ -2,14 +2,20 @@ const repo = require('../repositories/plantillas.repository');
 
 const DEFAULT_TEMPLATES = {
   saludo_inicial: '👋 ¡Hola, {{nombre}}! Bienvenido/a a {{empresa}}.\n\n¿Cómo puedo ayudarte? Toca una opción o escribe tu consulta.\n\n_Para hablar directamente con un asesor, escribe "asesor"._',
+  saludo_recurrente_multiservicio: '👋 ¡Hola de nuevo, {{nombre}}! Bienvenido/a a {{empresa}}.\n\nTienes varios servicios registrados. ¿Cuál deseas consultar?\n\n{{lista_servicios}}',
+  saludo_recurrente_autoservicio: '👋 ¡Hola de nuevo, {{nombre}}! Bienvenido/a a {{empresa}}.\n\n¿En qué puedo ayudarte hoy?',
+  saludo_recurrente_identificacion: '👋 ¡Hola de nuevo, {{nombre}}! Bienvenido/a a {{empresa}}.\n\nPara consultar tu servicio, necesito verificar tus datos. ¿Con qué te identificas?',
+  seleccion_empresa: '👋 ¡Hola, {{nombre}}! Bienvenido/a.\n\n¿A cuál de nuestras empresas deseas comunicarte?',
   opcion_no_reconocida: 'Opción no reconocida. Por favor elige una de las siguientes opciones:',
   
   identificacion_tipo: 'Por favor selecciona una opción para identificarte:',
   identificacion_pedir_dato: 'Por favor escribe tu *{{tipo_dato}}*:',
   identificacion_no_encontrado: 'No pudimos identificarte con los datos proporcionados.\n\nIntenta con otro tipo de identificación _({{intentos}} intentos restantes)_:',
+  identificacion_fallida_final: '⚠️ No pudimos identificarte con los datos proporcionados.\n\nTe conectamos con un asesor para que pueda ayudarte directamente. 🙏',
   
-  cuenta_encontrada_mia: 'Encontramos la cuenta de *{{nombre}}*.\n\n¿Es tu cuenta?',
-  cuenta_encontrada_ajena: 'Cuenta de *{{nombre}}* encontrada.\n\n¿En qué puedo ayudarte?',
+  cuenta_encontrada_mia: '✅ Encontramos la cuenta de *{{nombre}}*.\n\n¿Es tu cuenta?',
+  cuenta_encontrada_ajena: '✅ Cuenta de *{{nombre}}* encontrada.\n\n¿En qué puedo ayudarte?',
+  cuenta_encontrada_ajena_multi: '✅ Cuenta de *{{nombre}}* encontrada.\n\n¿Cuál servicio deseas consultar?\n\n{{lista_servicios}}',
   cuenta_multi_servicio: 'Tienes varios servicios. ¿Cuál deseas consultar?',
   
   menu_autoservicio: '¿En qué puedo ayudarte?',
@@ -30,12 +36,18 @@ const DEFAULT_TEMPLATES = {
 
 const TEMPLATE_DESCRIPTIONS = {
   saludo_inicial: 'Mensaje inicial de bienvenida al cliente.',
+  saludo_recurrente_multiservicio: 'Saludo a cliente reconocido con varios servicios. Vars: {{nombre}}, {{empresa}}, {{lista_servicios}}',
+  saludo_recurrente_autoservicio: 'Saludo a cliente reconocido listo para autoservicio. Vars: {{nombre}}, {{empresa}}',
+  saludo_recurrente_identificacion: 'Saludo a cliente recurrente pidiendo identificarse. Vars: {{nombre}}, {{empresa}}',
+  seleccion_empresa: 'Mensaje genérico cuando el bot atiende varias empresas. Vars: {{nombre}}',
   opcion_no_reconocida: 'Cuando el bot no entiende la opción seleccionada.',
   identificacion_tipo: 'Pregunta al cliente cómo desea identificarse.',
   identificacion_pedir_dato: 'Pide el dato específico de identificación. Variable: {{tipo_dato}}',
   identificacion_no_encontrado: 'Cuando no se encuentra la cuenta. Variable: {{intentos}}',
+  identificacion_fallida_final: 'Cuando el cliente agota los intentos de identificación.',
   cuenta_encontrada_mia: 'Confirmación de cuenta encontrada. Variable: {{nombre}}',
-  cuenta_encontrada_ajena: 'Confirmación al buscar cuenta de un tercero. Variable: {{nombre}}',
+  cuenta_encontrada_ajena: 'Confirmación al buscar cuenta de un tercero (1 servicio). Variable: {{nombre}}',
+  cuenta_encontrada_ajena_multi: 'Confirmación al buscar cuenta de tercero (multi-servicio). Vars: {{nombre}}, {{lista_servicios}}',
   cuenta_multi_servicio: 'Cuando una cuenta tiene varios servicios asociados.',
   menu_autoservicio: 'Pregunta general del menú principal.',
   menu_otra_consulta: 'Pregunta para volver al menú de autoservicio.',

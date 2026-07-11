@@ -19,6 +19,12 @@ const JornadaSection = ({ config, onSave, setDirty }) => {
 
   const { saveState, runSave } = useSectionSave(setDirty);
 
+  const isDirty = (
+    inicio !== (config.jornada_inicio ?? DEFAULTS.jornada_inicio) ||
+    fin !== (config.jornada_fin ?? DEFAULTS.jornada_fin) ||
+    dias !== (config.jornada_dias ?? DEFAULTS.jornada_dias)
+  );
+
   const diasSet = new Set(dias.split(',').map(Number));
   const toggleDia = (d) => {
     const s = new Set(diasSet);
@@ -90,13 +96,16 @@ const JornadaSection = ({ config, onSave, setDirty }) => {
             ))}
           </div>
         </div>
+      </div>
 
-        <div className="sc-footer">
-          <SectionStatus state={saveState} />
-          <button className="btn-save" disabled={saveState === 'saving'} onClick={handleSave}>
-            {saveState === 'saving' ? 'Guardando…' : 'Guardar cambios'}
-          </button>
-        </div>
+      <div className="sc-footer">
+        {isDirty && <span style={{ color: '#d97706', fontSize: '13px', fontWeight: '500', marginRight: 'auto' }}>
+          ⚠️ Tienes cambios sin guardar. Haz clic en "Guardar cambios" para aplicarlos.
+        </span>}
+        <SectionStatus state={saveState} />
+        <button className="btn-save" disabled={saveState === 'saving' || !isDirty} onClick={handleSave}>
+          {saveState === 'saving' ? 'Guardando…' : 'Guardar cambios'}
+        </button>
       </div>
     </div>
   );

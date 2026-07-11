@@ -42,33 +42,68 @@ const EXT_TO_MIME = {
  * @returns {Promise<void>}
  */
 async function responder({ conversacion_id, mensaje, agente_id, agente_nombre = null, user_id, io }) {
-  await conversacionRepo.assignAgente(conversacion_id, agente_id);
+  // 1. Obtener la conversación y configuraciones
+  const { rows: configRows } = await db.query(
+    `SELECT c.empresa_id, c.agente_id AS current_agente, c.estado, c.departamento, u.canal, cfg.clave, cfg.valor, cfg.empresa_id AS config_empresa_id 
+     FROM conversaciones c
+     JOIN usuarios u ON c.usuario_id = u.id
+     LEFT JOIN configuraciones cfg ON (c.empresa_id = cfg.empresa_id OR cfg.empresa_id = 'todas')
+     WHERE c.id = $1`,
+    [conversacion_id]
+  );
+  
+  if (!configRows.length) return;
+  const { empresa_id, current_agente, departamento, estado: estadoInicial, canal } = configRows[0];
+  
+  const conf = configRows.reduce((acc, row) => {
+    if (row.clave) {
+      if (!acc[row.clave] || row.config_empresa_id !== 'todas') {
+        acc[row.clave] = row.valor;
+      }
+    }
+    return acc;
+  }, {});
 
-  // marcarTomada necesita el nombre; si no viene del JWT lo buscamos en BD (fire-and-forget)
+  const autoAsignar = conf.auto_asignar_primer_respuesta !== 'false';
+  const mostrarStaff = conf.mostrar_staff_chat === 'true';
+
+  // 2. Resolver el nombre del agente
   const nombreFinal = agente_nombre || await db.query('SELECT nombre FROM agentes WHERE id=$1', [agente_id])
     .then(({ rows: [ag] }) => ag?.nombre || null)
     .catch(() => null);
 
-  marcarTomada(conversacion_id, agente_id, nombreFinal).catch(() => {});
+  // 3. Autoasignación
+  if (autoAsignar) {
+    await conversacionRepo.assignAgente(conversacion_id, agente_id);
+    marcarTomada(conversacion_id, agente_id, nombreFinal).catch(() => {});
+  } else {
+    // Si no se autoasigna, solo actualizamos el timestamp
+    await conversacionRepo.touch(conversacion_id);
+  }
+
+  // 4. Mostrar nombre del staff
+  let mensajeEnviado = mensaje;
+  if (mostrarStaff && nombreFinal) {
+    mensajeEnviado = `*${nombreFinal}:*\n${mensaje}`;
+  }
 
   // Guardar y obtener el ID del mensaje para rastrear su estado
   const { rows: [savedMsg] } = await mensajeRepo.create(
-    conversacion_id, 'agente', mensaje, 'text', null, null, agente_id
+    conversacion_id, 'agente', mensajeEnviado, 'text', null, null, agente_id
   );
   const mensaje_id = savedMsg.id;
 
-  await conversacionRepo.touch(conversacion_id);
   // El agente respondió — cancelar el reloj SLA pendiente
   db.query('UPDATE conversaciones SET sla_pendiente_desde=NULL WHERE id=$1', [conversacion_id])
     .catch(() => {});
 
-  // Obtener empresa_id, departamento, canal y estado actual (puede haber cambiado a 'atendiendo')
-  const { rows } = await db.query(
-    `SELECT c.empresa_id, c.usuario_id, c.departamento, c.estado, c.agente_id, u.canal
-     FROM conversaciones c JOIN usuarios u ON c.usuario_id=u.id WHERE c.id=$1`,
+  // Obtener estado y agente final después de posible asignación
+  const { rows: finalRows } = await db.query(
+    `SELECT c.usuario_id, c.estado, c.agente_id
+     FROM conversaciones c WHERE c.id=$1`,
     [conversacion_id]
   );
-  const { empresa_id, usuario_id, departamento, estado, agente_id: agenteAsignado, canal } = rows[0] || {};
+  const { usuario_id, estado, agente_id: agenteAsignado } = finalRows[0] || {};
 
   // Notificar al dashboard con estado inicial 'enviado'
   if (io) {
@@ -77,7 +112,7 @@ async function responder({ conversacion_id, mensaje, agente_id, agente_nombre = 
       usuario_id,
       empresa_id,
       mensaje_id,
-      mensaje,
+      mensaje: mensajeEnviado,
       remitente:     'agente',
       agente_id,
       agente_nombre: nombreFinal,
@@ -98,7 +133,7 @@ async function responder({ conversacion_id, mensaje, agente_id, agente_nombre = 
   }
 
   // Enviar por el canal y actualizar estado según la respuesta del adaptador
-  const result = await enviarMensaje(canal || 'telegram', user_id, mensaje, empresa_id);
+  const result = await enviarMensaje(canal || 'telegram', user_id, mensajeEnviado, empresa_id);
   if (result?.ok || result === true) {
     if (result?.wamid) {
       // WhatsApp: guardar wamid para correlacionar con status webhooks (sent/delivered/read).
@@ -178,15 +213,14 @@ async function liberar({ conversacion_id, categoria_cierre_id, comentario_cierre
   );
 
   const bannerMsg  = `Chat finalizado por ${agente_nombre || 'Agente'} — ${categoria_nombre}`;
-  const surveyText = `¿Cómo calificarías la atención de ${agente_nombre || 'nuestro asesor'} hoy? 🌟`;
+  const surveyText = `El problema ha sido solucionado. Te invitamos a contestar una breve evaluación.\n\n¿Cómo calificarías la atención de ${agente_nombre || 'nuestro asesor'} hoy? 🌟`;
 
   await mensajeRepo.create(conversacion_id, 'sistema_success', bannerMsg);
 
-  // Enviar el comentario de resolución al cliente
+  // Guardar el comentario de resolución internamente pero NO enviarlo al cliente
   if (comentario_cierre?.trim()) {
-    const resolucionMsg = `✅ *Resolución:*\n\n${comentario_cierre.trim()}`;
+    const resolucionMsg = `*Resolución (Interna):*\n\n${comentario_cierre.trim()}`;
     await mensajeRepo.create(conversacion_id, 'sistema_success', resolucionMsg);
-    await enviarMensaje(canal || 'telegram', external_id, resolucionMsg, empresa_id);
     if (io) {
       emitToConv(io, departamento, 'nuevo_mensaje', {
         conversacion_id, usuario_id, empresa_id,

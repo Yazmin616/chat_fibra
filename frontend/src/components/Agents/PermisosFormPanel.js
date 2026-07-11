@@ -114,26 +114,39 @@ const PermisosFormPanel = ({ form }) => {
           title="Módulos del sistema"
           subtitle="¿A qué secciones puede acceder?"
         />
-        <div className="pe-modulos-grid">
-          {MODULOS.map(mod => (
-            <label
-              key={mod.id}
-              className={`pe-modulo-card${modulos.includes(mod.id) ? ' pe-modulo-card--on' : ''}`}
-            >
-              <input
-                type="checkbox"
-                checked={modulos.includes(mod.id)}
-                onChange={() => toggleModulo(mod.id)}
-                className="pe-modulo-input"
-              />
-              <span className="pe-modulo-icono">{mod.icono}</span>
-              <span className="pe-modulo-nombre">{mod.nombre}</span>
-              <span className="pe-modulo-desc">{mod.desc}</span>
-              {modulos.includes(mod.id) && (
-                <span className="pe-modulo-check"><Check size={11} strokeWidth={3} /></span>
-              )}
-            </label>
-          ))}
+        <div className="pe-modulos-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '12px' }}>
+          {MODULOS.map(mod => {
+            const Icono = mod.icono;
+            const isChecked = modulos.includes(mod.id);
+            return (
+              <label
+                key={mod.id}
+                style={{
+                  display: 'flex', alignItems: 'flex-start', gap: '10px',
+                  padding: '12px 14px',
+                  background: isChecked ? '#f8fafc' : 'transparent',
+                  border: `1px solid ${isChecked ? '#cbd5e1' : 'transparent'}`,
+                  borderRadius: '6px', cursor: 'pointer', transition: 'background 0.15s'
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={isChecked}
+                  onChange={() => toggleModulo(mod.id)}
+                  style={{ marginTop: '3px' }}
+                />
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '14px', fontWeight: '600', color: isChecked ? '#0f172a' : '#475569' }}>
+                    <Icono size={16} style={{ color: isChecked ? '#3b82f6' : '#94a3b8' }} />
+                    {mod.nombre}
+                  </div>
+                  <div style={{ fontSize: '11px', color: '#64748b', marginTop: '2px', lineHeight: 1.4 }}>
+                    {mod.desc}
+                  </div>
+                </div>
+              </label>
+            );
+          })}
         </div>
       </div>
 

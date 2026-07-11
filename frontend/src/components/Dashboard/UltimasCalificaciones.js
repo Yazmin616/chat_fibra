@@ -3,9 +3,11 @@ import { User, Bot } from 'lucide-react';
 import RatingBadge from './RatingBadge';
 
 const RATING_COLOR = {
-  Bien:    '#22c55e',
-  Regular: '#f97316',
-  Mal:     '#ef4444',
+  '5': '#22c55e',
+  '4': '#eab308',
+  '3': '#f97316',
+  '2': '#ef4444',
+  '1': '#dc2626',
 };
 
 const UltimasCalificaciones = ({ calificaciones }) => (

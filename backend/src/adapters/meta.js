@@ -92,7 +92,7 @@ async function _descargarMedia(media_id, empresa_id) {
   }
 }
 
-const GRAPH_URL                = 'https://graph.facebook.com/v18.0';
+const GRAPH_URL                = process.env.META_GRAPH_URL || 'https://graph.facebook.com/v18.0';
 const VERIFY_TOKEN             = process.env.META_WEBHOOK_VERIFY_TOKEN || 'isp_chatbot_meta_verify';
 const META_APP_SECRET          = process.env.META_APP_SECRET || '';
 const META_INSTAGRAM_APP_SECRET = process.env.META_INSTAGRAM_APP_SECRET || '';

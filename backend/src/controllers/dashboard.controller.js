@@ -23,4 +23,33 @@ const getAgenteStats = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
-module.exports = { getKpis, getCalificaciones, getAgenteStats };
+const getNpsStats = async (req, res, next) => {
+  try {
+    const { empresa_id } = req.query;
+    const agente_id = req.agente?.id;
+    const rows = await dashboardService.getNpsStats(empresa_id, agente_id);
+    res.json(rows);
+  } catch (err) { next(err); }
+};
+
+const getSolucionesStaff = async (req, res, next) => {
+  try {
+    const { empresa_id, area, agente_id: filtro_agente, desde, hasta, q, page, limit } = req.query;
+    const solicitante_id = req.agente?.id;
+    const rows = await dashboardService.getSolucionesStaff({
+      solicitante_id,
+      empresa_id,
+      area,
+      filtro_agente,
+      desde,
+      hasta,
+      q,
+      page:  parseInt(page  || 1),
+      limit: parseInt(limit || 50),
+    });
+    res.json(rows);
+  } catch (err) { next(err); }
+};
+
+module.exports = { getKpis, getCalificaciones, getAgenteStats, getNpsStats, getSolucionesStaff };
+
