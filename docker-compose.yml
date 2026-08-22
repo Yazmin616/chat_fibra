@@ -1,0 +1,20 @@
+version: '3.8'
+
+services:
+  backend:
+    build: ./backend
+    container_name: isp-backend
+    restart: always
+    ports:
+      - "127.0.0.1:3001:3001"   # Solo accesible localmente por Nginx
+    env_file:
+      - ./backend/.env
+    extra_hosts:
+      - "host.docker.internal:host-gateway" # Para que el backend pueda ver el Postgres de la VM
+
+  frontend:
+    build: ./frontend
+    container_name: isp-frontend
+    restart: always
+    ports:
+      - "127.0.0.1:3000:3000"   # Solo accesible localmente por Nginx
