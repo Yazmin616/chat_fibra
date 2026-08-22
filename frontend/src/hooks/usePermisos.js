@@ -1,10 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
 import { apiService } from '../services/api';
-import { MessageSquare, Users, AlertTriangle, LayoutDashboard, Key, Settings, Tags, FileText, Shield, BarChart2, ClipboardList } from 'lucide-react';
+import { MessageSquare, Users, AlertTriangle, LayoutDashboard, Key, Settings, Tags, FileText, Shield, BarChart2, ClipboardList, Megaphone } from 'lucide-react';
 
 // ── Catálogo de módulos (espejo del backend) ──────────────────────────────────
 export const MODULOS = [
-  { id: 'chat',          nombre: 'Chat',              desc: 'Panel de conversaciones y atención al cliente', icono: MessageSquare },
+  { id: 'comunicados',   nombre: 'Avisos y Mural',     desc: 'Mural corporativo de avisos, efemérides y cumpleaños', icono: Megaphone },
+  { id: 'chat_interno',  nombre: 'Chat Interno',      desc: 'Mensajería interna corporativa entre colaboradores', icono: MessageSquare },
+  { id: 'chat',          nombre: 'Chat Clientes',              desc: 'Panel de conversaciones y atención al cliente', icono: MessageSquare },
   { id: 'contactos',     nombre: 'Contactos',          desc: 'Directorio de clientes',                        icono: Users },
   { id: 'infracciones',  nombre: 'Infracciones',       desc: 'Registro de infracciones del equipo',           icono: AlertTriangle },
   { id: 'dashboard',     nombre: 'Dashboard',          desc: 'Analíticas y métricas del sistema',             icono: LayoutDashboard },
@@ -22,7 +24,22 @@ export const EMPRESAS_DEF = [
   { id: 'compusemmm', label: 'Compusemmm' },
 ];
 
-export const AREAS_DEF = ['Soporte Técnico', 'Ventas', 'Cobranza'];
+export const AREAS_DEF = [
+  'NOC (Centro de Operaciones de Red)',
+  'Dirección General',
+  'Recursos Humanos (RH)',
+  'Administración y Finanzas',
+  'Contabilidad',
+  'Sistemas / TI',
+  'Soporte Técnico',
+  'Ventas',
+  'Cobranza',
+  'Planta Externa / Fibra Óptica',
+  'Instalaciones y Mantenimiento',
+  'Almacén y Logística',
+  'Atención a Clientes',
+  'General',
+];
 
 // Permisos vacíos por defecto (usuario sin permisos definidos)
 const EMPTY = { empresas: [], areas: [], modulos: [] };
@@ -84,10 +101,14 @@ export function usePermisos(user, socket) {
   /** ¿Tiene acceso al módulo? Admin siempre sí. Coordinadores ven nps, soluciones y configuracion. */
   const hasModulo = useCallback((mod) => {
     if (user?.rol === 'admin') return true;
+    // Todos los colaboradores y agentes tienen acceso al mural corporativo de avisos
+    if (mod === 'comunicados') return true;
+    // Colaboradores (chat interno) nunca deben ver soluciones
+    if (user?.rol === 'colaborador' && (mod === 'soluciones' || mod === 'nps')) return false;
     // Coordinadores siempre ven sus módulos de staff y su panel de configuración
     if ((mod === 'nps' || mod === 'soluciones' || mod === 'configuracion') && esCoordinador) return true;
-    // Asesores normales también ven sus propias soluciones
-    if (mod === 'soluciones') return true;
+    // Asesores de atención a clientes ven sus soluciones si tienen asignado el chat o módulo soluciones
+    if (mod === 'soluciones' && user?.rol === 'asesor' && (permisos?.modulos?.includes('chat') || permisos?.modulos?.includes('soluciones'))) return true;
     if (!permisos) return false;
     return permisos.modulos?.includes(mod) ?? false;
   }, [user, permisos, esCoordinador]);

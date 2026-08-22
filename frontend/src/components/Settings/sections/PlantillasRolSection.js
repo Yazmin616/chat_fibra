@@ -5,9 +5,10 @@ import { usePermisosForm } from '../../../hooks/usePermisosForm';
 import PermisosFormPanel from '../../Agents/PermisosFormPanel';
 
 const ROLES_DEF = [
-  { id: 'admin',  label: 'Administrador', desc: 'Acceso total al sistema',              color: '#dc2626', bg: '#fef2f2' },
-  { id: 'asesor', label: 'Asesor',        desc: 'Atención a clientes en chat',          color: '#2563eb', bg: '#eff6ff' },
-  { id: 'ti',     label: 'Soporte TI',    desc: 'Infracciones, dashboard y técnico',    color: '#7c3aed', bg: '#f5f3ff' },
+  { id: 'admin',       label: 'Administrador', desc: 'Acceso total al sistema',                                    color: '#dc2626', bg: '#fef2f2' },
+  { id: 'colaborador', label: 'Colaborador',   desc: 'Acceso exclusivo a Chat Interno y comunicación corporativa', color: '#0ea5e9', bg: '#f0f9ff' },
+  { id: 'asesor',      label: 'Asesor',        desc: 'Atención a clientes en chat de WhatsApp',                   color: '#2563eb', bg: '#eff6ff' },
+  { id: 'ti',          label: 'Soporte TI',    desc: 'Infracciones, dashboard y soporte técnico',                  color: '#7c3aed', bg: '#f5f3ff' },
 ];
 
 function RolCard({ rol, activo, onClick }) {

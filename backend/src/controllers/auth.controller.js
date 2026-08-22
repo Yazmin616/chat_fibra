@@ -58,8 +58,15 @@ const login = async (req, res, next) => {
 const logout = async (req, res, next) => {
   try {
     await agenteService.logout(req.agente.id);
+    const pollingService = require('../services/pollingService');
+    pollingService.setAgentOffline(req.agente.id);
     const io = req.app.get('io');
-    if (io) io.emit('agentes_actualizados');
+    if (io) {
+      io.emit('agentes_actualizados');
+      const activeList = pollingService.getActiveAgents ? pollingService.getActiveAgents() : [];
+      io.emit('agente:offline', { id: Number(req.agente.id), esta_online: false });
+      io.emit('agentes:active_list', activeList);
+    }
     res.json({ ok: true });
   } catch (err) {
     next(err);

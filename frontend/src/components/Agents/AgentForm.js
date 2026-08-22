@@ -3,8 +3,9 @@ import { Camera, User, Shield } from 'lucide-react';
 import { apiService, resolveAvatar } from '../../services/api';
 import { usePermisosForm } from '../../hooks/usePermisosForm';
 import PermisosFormPanel from './PermisosFormPanel';
+import { AREAS_DEF } from '../../hooks/usePermisos';
 
-const AREAS = ['Ventas', 'Cobranza', 'Soporte Técnico', 'General'];
+const AREAS = AREAS_DEF;
 
 const AgentForm = ({ agente, onSubmit, onClose }) => {
   const esEdicion = Boolean(agente);
@@ -13,7 +14,7 @@ const AgentForm = ({ agente, onSubmit, onClose }) => {
     nombre:   agente?.nombre   ?? '',
     email:    agente?.email    ?? '',
     password: '',
-    rol:      agente?.rol      ?? 'asesor',
+    rol:      agente?.rol      ?? 'colaborador',
     area:     agente?.area     ?? 'Ventas',
   });
   const [submitting,       setSubmitting]       = useState(false);
@@ -142,10 +143,11 @@ const AgentForm = ({ agente, onSubmit, onClose }) => {
         <div className="form-group">
           <label>Rol del Sistema</label>
           <select value={formData.rol} onChange={e => set('rol', e.target.value)}>
-            <option value="asesor">Asesor</option>
-            <option value="admin">Administrador</option>
-            <option value="ti">Soporte TI</option>
-          </select>
+              <option value="colaborador">Colaborador (Chat Interno)</option>
+              <option value="asesor">Asesor</option>
+              <option value="ti">Soporte TI</option>
+              <option value="admin">Administrador</option>
+            </select>
         </div>
         <div className="form-group">
           <label>Área / Departamento</label>

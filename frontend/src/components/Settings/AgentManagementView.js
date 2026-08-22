@@ -89,10 +89,12 @@ const AgentManagementView = ({ user, actualizarUsuario }) => {
         <div className="agent-filter-select">
           <label>Rol</label>
           <select value={rolFiltro} onChange={(e) => setRolFiltro(e.target.value)}>
-            <option value="todos">Todos</option>
-            <option value="asesor">Asesor</option>
-            <option value="admin">Administrador</option>
-          </select>
+              <option value="todos">Todos los roles</option>
+              <option value="colaborador">Colaboradores</option>
+              <option value="asesor">Asesores</option>
+              <option value="ti">Soporte TI</option>
+              <option value="admin">Administradores</option>
+            </select>
         </div>
 
         <div className="agent-filter-select">

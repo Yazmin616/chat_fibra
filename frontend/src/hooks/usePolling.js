@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { API_URL } from '../services/api';
 
 /**
  * Hook de Polling Cliente -> Servidor Local
@@ -27,9 +28,7 @@ const usePolling = ({
     abortControllerRef.current = new AbortController();
 
     try {
-      // Ajusta la URL si tu endpoint backend corre en otro puerto diferente al frontend
-      // Asumimos que usa el proxy del package.json o la ruta relativa.
-      const url = `/api/polling/updates?since=${lastTimestampRef.current}`;
+      const url = `${API_URL}/api/polling/updates?since=${lastTimestampRef.current}`;
       
       const response = await fetch(url, {
         signal: abortControllerRef.current.signal

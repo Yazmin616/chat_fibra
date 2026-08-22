@@ -188,5 +188,6 @@ module.exports = {
   disableTelegramPolling,
   setupPollingEndpoint,
   setAgentOnline,
-  setAgentOffline
+  setAgentOffline,
+  getActiveAgents: () => Array.from(state.activeAgents)
 };

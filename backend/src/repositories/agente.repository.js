@@ -34,7 +34,7 @@ const findByEmail = (email) =>
 const findAll = () =>
   db.query(
     `SELECT 
-      id, nombre, email, rol, area, esta_online, last_seen, created_at, foto_perfil,
+      id, nombre, email, rol, area, esta_online, estado_presencia, mensaje_presencia, last_seen, created_at, foto_perfil,
       EXISTS(SELECT 1 FROM public.areas_soluciones WHERE coordinador_id = agentes.id) AS es_coordinador
      FROM agentes 
      WHERE rol != 'ti' 
@@ -160,4 +160,21 @@ const getNextAgentForRoundRobin = (area) =>
 const updateUltimoChatAsignado = (id) =>
   db.query('UPDATE agentes SET ultimo_chat_asignado = NOW() WHERE id = $1', [id]);
 
-module.exports = { findById, findByEmail, findAll, findAllDirectorio, create, remove, update, updateWithPassword, setOnline, touchLastSeen, marcarInactivos, getNextAgentForRoundRobin, updateUltimoChatAsignado };
+/**
+ * Actualiza el estado de presencia personalizado del agente (disponible, reunion, ocupado, comida, ausente).
+ * @param {number} id
+ * @param {string} estado
+ * @param {string|null} mensaje
+ * @returns {Promise<import('pg').QueryResult>}
+ */
+const setEstadoPresencia = (id, estado, mensaje = null) =>
+  db.query(
+    'UPDATE agentes SET estado_presencia = $1, mensaje_presencia = $2 WHERE id = $3 RETURNING id, estado_presencia, mensaje_presencia',
+    [estado, mensaje, id]
+  );
+
+module.exports = { 
+  findById, findByEmail, findAll, findAllDirectorio, create, remove, update, updateWithPassword, 
+  setOnline, touchLastSeen, marcarInactivos, getNextAgentForRoundRobin, updateUltimoChatAsignado,
+  setEstadoPresencia
+};

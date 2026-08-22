@@ -1,18 +1,5 @@
-/*
- * index.css — Punto de entrada de estilos
- *
- * Este archivo únicamente importa las hojas de estilo por módulo.
- * Para editar un estilo, busca el archivo correspondiente en src/styles/.
- *
- *  styles/base.css         → Reset, body, contenedor raíz, spinner
- *  styles/sidebar.css      → Barra lateral de navegación
- *  styles/layout.css       → TopBar, selector de empresa, perfil de usuario
- *  styles/chat-list.css    → Panel de lista de conversaciones
- *  styles/chat-window.css  → Ventana de mensajes, burbujas, input
- *  styles/login.css        → Pantalla de inicio de sesión
- *  styles/settings.css     → Vista de configuración, .btn-save (compartido)
- *  styles/agents.css       → Gestión de agentes, tarjetas, formulario
- *  styles/dashboard.css    → KPIs, gráficas, tablas, variables de tema
+﻿/*
+ * index.css - Punto de entrada de estilos
  */
 
 @import './styles/base.css';
@@ -24,7 +11,6 @@
 @import './styles/settings.css';
 @import './styles/agents.css';
 @import './styles/dashboard.css';
+@import './styles/chat-interno.css';
 
-
-
-
+@import './styles/facebook-messenger.css';

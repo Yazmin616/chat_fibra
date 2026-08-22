@@ -1,0 +1,699 @@
+/* ==========================================================================
+   Notificaciones y Messenger Flotante Estilo Facebook
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   1. Botón de Campana en el TopBar
+   -------------------------------------------------------------------------- */
+.fb-topbar-btn-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.fb-bell-btn {
+  background: #f8fafc;
+  color: #475569;
+  border: 1px solid #e2e8f0;
+  border-radius: 50%;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  position: relative;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.fb-bell-btn:hover {
+  background: #f1f5f9;
+  color: #0f172a;
+  border-color: #cbd5e1;
+}
+
+.fb-bell-btn.active {
+  background: #eff6ff;
+  color: #2563eb;
+  border-color: #bfdbfe;
+}
+
+/* Badge rojo estilo Facebook */
+.fb-badge-count {
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  background: #e41e3f;
+  color: #ffffff;
+  font-size: 0.72rem;
+  font-weight: 700;
+  min-width: 18px;
+  height: 18px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 4px;
+  border: 2px solid var(--bg-primary, #ffffff);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  animation: bounceIn 0.25s ease;
+}
+
+/* --------------------------------------------------------------------------
+   2. Dropdown de Notificaciones (Estilo Facebook)
+   -------------------------------------------------------------------------- */
+.fb-notif-dropdown {
+  position: absolute;
+  top: 52px;
+  right: 0;
+  width: 360px;
+  max-width: 90vw;
+  max-height: 480px;
+  background: var(--bg-primary, #ffffff);
+  border: 1px solid var(--border-color, #e2e8f0);
+  border-radius: 14px;
+  box-shadow: 0 12px 28px 0 rgba(0, 0, 0, 0.2), 0 2px 4px 0 rgba(0, 0, 0, 0.1);
+  display: flex;
+  flex-direction: column;
+  z-index: 10000;
+  overflow: hidden;
+  animation: fbFadeDown 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.fb-notif-header {
+  padding: 14px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--border-color, #f1f5f9);
+}
+
+.fb-notif-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.fb-notif-title {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--text-primary, #050505);
+  margin: 0;
+}
+
+.fb-notif-unread-count {
+  background: #e7f3ff;
+  color: #1877f2;
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 10px;
+}
+
+.fb-notif-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.fb-notif-action-btn {
+  background: transparent;
+  border: none;
+  color: #1877f2;
+  font-size: 0.8rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 6px;
+  transition: background 0.15s ease;
+}
+
+.fb-notif-action-btn:hover {
+  background: #f0f2f5;
+}
+
+.fb-notif-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 6px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.fb-notif-item {
+  display: flex;
+  align-items: center;
+  padding: 10px;
+  border-radius: 10px;
+  cursor: pointer;
+  gap: 12px;
+  transition: background 0.15s ease;
+  position: relative;
+}
+
+.fb-notif-item:hover {
+  background: var(--hover-bg, #f0f2f5);
+}
+
+.fb-notif-item.unread {
+  background: var(--unread-bg, #edf2f7);
+}
+
+.fb-notif-avatar-wrap {
+  position: relative;
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+}
+
+.fb-notif-avatar, .fb-notif-avatar-placeholder {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.fb-notif-avatar-placeholder {
+  background: #1877f2;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 1.1rem;
+}
+
+.fb-notif-badge-icon {
+  position: absolute;
+  bottom: -2px;
+  right: -2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #1877f2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid var(--bg-primary, #ffffff);
+}
+
+.fb-notif-badge-icon.miembro_removido,
+.fb-notif-badge-icon.canal_cerrado {
+  background: #e41e3f;
+}
+
+.fb-notif-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.fb-notif-text {
+  font-size: 0.84rem;
+  line-height: 1.35;
+  color: var(--text-primary, #050505);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.fb-notif-time {
+  font-size: 0.72rem;
+  color: var(--text-secondary, #65676b);
+  margin-top: 3px;
+}
+
+.fb-notif-right-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.fb-notif-blue-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #1877f2;
+  flex-shrink: 0;
+}
+
+.fb-notif-delete-btn {
+  background: transparent;
+  border: none;
+  color: #65676b;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 50%;
+  opacity: 0;
+  transition: all 0.15s ease;
+}
+
+.fb-notif-item:hover .fb-notif-delete-btn {
+  opacity: 1;
+}
+
+.fb-notif-delete-btn:hover {
+  background: #e4e6eb;
+  color: #e41e3f;
+}
+
+.fb-notif-empty {
+  padding: 36px 16px;
+  text-align: center;
+  color: #65676b;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.88rem;
+}
+
+/* --------------------------------------------------------------------------
+   3. Ventana Flotante de Messenger (Dock inferior derecho)
+   -------------------------------------------------------------------------- */
+.fb-messenger-dock {
+  position: fixed;
+  bottom: 16px;
+  right: 24px;
+  width: 330px;
+  height: 430px;
+  background: var(--bg-primary, #ffffff);
+  border-radius: 12px 12px 0 0;
+  box-shadow: 0 12px 28px 0 rgba(0, 0, 0, 0.25), 0 2px 4px 0 rgba(0, 0, 0, 0.1);
+  display: flex;
+  flex-direction: column;
+  z-index: 99999;
+  overflow: hidden;
+  border: 1px solid var(--border-color, #e4e6eb);
+  border-bottom: none;
+  animation: fbSlideUp 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  font-family: inherit;
+}
+
+.fb-messenger-header {
+  height: 50px;
+  padding: 0 12px;
+  background: var(--bg-primary, #ffffff);
+  border-bottom: 1px solid var(--border-color, #e4e6eb);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.fb-messenger-header-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  cursor: pointer;
+}
+
+.fb-messenger-avatar-wrap {
+  position: relative;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+}
+
+.fb-messenger-avatar-wrap img, .fb-messenger-avatar-placeholder {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.fb-messenger-avatar-placeholder {
+  background: #1877f2;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 0.85rem;
+}
+
+.fb-messenger-online-dot {
+  position: absolute;
+  bottom: -1px;
+  right: -1px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #31a24c;
+  border: 2px solid var(--bg-primary, #ffffff);
+}
+
+.fb-messenger-titles {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.fb-messenger-name {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--text-primary, #050505);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.fb-messenger-status {
+  font-size: 0.68rem;
+  color: #65676b;
+}
+
+.fb-messenger-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.fb-messenger-btn {
+  background: transparent;
+  border: none;
+  color: #1877f2;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.fb-messenger-btn:hover {
+  background: #f0f2f5;
+}
+
+.fb-messenger-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: var(--bg-primary, #ffffff);
+}
+
+.fb-messenger-empty, .fb-messenger-loading {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.84rem;
+  color: #65676b;
+}
+
+.fb-msg-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  max-width: 85%;
+}
+
+.fb-msg-row.own {
+  align-self: flex-end;
+  flex-direction: row-reverse;
+}
+
+.fb-msg-avatar {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.fb-msg-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.fb-msg-avatar-placeholder {
+  width: 100%;
+  height: 100%;
+  background: #1877f2;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+.fb-msg-bubble {
+  padding: 8px 12px;
+  border-radius: 18px;
+  font-size: 0.86rem;
+  line-height: 1.35;
+  background: #f0f2f5;
+  color: #050505;
+  word-break: break-word;
+}
+
+.fb-msg-row.own .fb-msg-bubble {
+  background: #0084ff;
+  color: #ffffff;
+}
+
+.fb-msg-img {
+  max-width: 180px;
+  border-radius: 10px;
+  margin-top: 4px;
+  display: block;
+}
+
+.fb-messenger-footer {
+  padding: 8px 10px;
+  background: var(--bg-primary, #ffffff);
+  border-top: 1px solid var(--border-color, #e4e6eb);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.fb-messenger-input {
+  flex: 1;
+  background: #f0f2f5;
+  border: none;
+  border-radius: 20px;
+  padding: 7px 14px;
+  font-size: 0.85rem;
+  outline: none;
+  color: inherit;
+}
+
+.fb-messenger-like-btn, .fb-messenger-send-btn {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  transition: transform 0.12s ease;
+}
+
+.fb-messenger-like-btn:hover {
+  transform: scale(1.15);
+}
+
+.fb-messenger-send-btn.active {
+  background: #0084ff;
+  color: #fff;
+}
+
+/* --------------------------------------------------------------------------
+   4. Chat Head Flotante (Burbuja circular minimizada)
+   -------------------------------------------------------------------------- */
+.fb-chat-head-bubble {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+  cursor: pointer;
+  z-index: 99999;
+  transition: transform 0.15s ease;
+  animation: bounceIn 0.25s ease;
+}
+
+.fb-chat-head-bubble:hover {
+  transform: scale(1.08);
+}
+
+.fb-chat-head-avatar-wrap {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+.fb-chat-head-avatar-wrap img, .fb-chat-head-placeholder {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid #ffffff;
+}
+
+.fb-chat-head-placeholder {
+  background: #0084ff;
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 1.3rem;
+}
+
+.fb-chat-head-online-dot {
+  position: absolute;
+  bottom: 2px;
+  right: 2px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #31a24c;
+  border: 2px solid #ffffff;
+}
+
+.fb-chat-head-close-btn {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #e4e6eb;
+  color: #050505;
+  border: 1px solid #cbd5e1;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.fb-chat-head-bubble:hover .fb-chat-head-close-btn {
+  display: flex;
+}
+
+/* Modo Oscuro */
+.chat-dark .fb-bell-btn {
+  --btn-circle-bg: #3a3b3c;
+  --btn-circle-color: #e4e6eb;
+  --btn-circle-hover: #4e4f50;
+}
+
+.chat-dark .fb-notif-dropdown,
+.chat-dark .fb-messenger-dock,
+.chat-dark .fb-messenger-header,
+.chat-dark .fb-messenger-body,
+.chat-dark .fb-messenger-footer {
+  --bg-primary: #242526;
+  --text-primary: #e4e6eb;
+  --text-secondary: #b0b3b8;
+  --border-color: #3e4042;
+  background: #242526;
+  color: #e4e6eb;
+}
+
+.chat-dark .fb-notif-item:hover,
+.chat-dark .fb-notif-action-btn:hover,
+.chat-dark .fb-messenger-btn:hover {
+  background: #3a3b3c;
+}
+
+.chat-dark .fb-notif-item.unread {
+  background: #2d3846;
+}
+
+.chat-dark .fb-messenger-input,
+.chat-dark .fb-msg-bubble {
+  background: #3a3b3c;
+  color: #e4e6eb;
+}
+
+.chat-dark .fb-msg-row.own .fb-msg-bubble {
+  background: #0084ff;
+  color: #ffffff;
+}
+
+@keyframes fbFadeDown {
+  from { opacity: 0; transform: translateY(-8px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes fbSlideUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes bounceIn {
+  from { opacity: 0; transform: scale(0.6); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.fb-notif-count-pill {
+  background: #fee2e2;
+  color: #dc2626;
+  font-size: 0.68rem;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 6px;
+  margin-left: 6px;
+  display: inline-block;
+}
+
+.fb-notif-body-preview {
+  font-size: 0.8rem;
+  color: var(--text-secondary, #64748b);
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 220px;
+}
+
+.chat-dark .fb-notif-count-pill {
+  background: #450a0a;
+  color: #f87171;
+}
+
+.fb-notif-avatar-placeholder.channel-bg {
+  background: #475569;
+}
+
+.fb-notif-channel-title {
+  font-weight: 700;
+  color: var(--text-primary, #0f172a);
+}
+
+.fb-notif-status-tag {
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 4px;
+  margin-left: 6px;
+}
+
+.fb-notif-status-tag.red {
+  background: #fee2e2;
+  color: #dc2626;
+}
+
+.fb-notif-status-tag.orange {
+  background: #ffedd5;
+  color: #c2410c;
+}

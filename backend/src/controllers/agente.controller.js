@@ -33,24 +33,24 @@ const crearSchema = Joi.object({
   nombre:   Joi.string().min(2).max(100).required(),
   email:    Joi.string().email().required(),
   password: Joi.string().min(6).required(),
-  rol:      Joi.string().valid('admin', 'asesor', 'ti').required(),
-  area:     Joi.string().min(1).max(50).required(),
+  rol:      Joi.string().valid('admin', 'asesor', 'colaborador', 'ti').required(),
+  area:     Joi.string().min(1).max(100).required(),
   permisos: Joi.object({
-    empresas: Joi.array().items(Joi.string()).min(1).required(),
+    empresas: Joi.array().items(Joi.string()).allow(null).optional(),
     areas:    Joi.array().items(Joi.object({
-      empresa_id: Joi.string().required(),
-      areas:      Joi.array().items(Joi.string()).min(1).required(),
-    })).required(),
-    modulos:  Joi.array().items(Joi.string()).required(),
-  }).optional(),
+      empresa_id: Joi.string().allow('', null).optional(),
+      areas:      Joi.array().items(Joi.string()).allow(null).optional(),
+    })).allow(null).optional(),
+    modulos:  Joi.array().items(Joi.string()).allow(null).optional(),
+  }).allow(null).optional().unknown(true),
 });
 
 const editarSchema = Joi.object({
   nombre:   Joi.string().min(2).max(100).required(),
   email:    Joi.string().email().required(),
   password: Joi.string().min(6).optional().allow(''),
-  rol:      Joi.string().valid('admin', 'asesor', 'ti').required(),
-  area:     Joi.string().min(1).max(50).required(),
+  rol:      Joi.string().valid('admin', 'asesor', 'colaborador', 'ti').required(),
+  area:     Joi.string().min(1).max(100).required(),
 });
 
 const responderSchema = Joi.object({

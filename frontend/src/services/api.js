@@ -1045,5 +1045,32 @@ export const apiService = {
       headers: _authHeaders()
     });
     return _parseJson(res);
+  },
+
+  // ─────────────────────────────────────────────
+  // COMUNICADOS & CUMPLEAÑOS (GESTIÓN PERSONAL)
+  // ─────────────────────────────────────────────
+  async getResumenComunicados() {
+    const res = await fetch(`${API_URL}/comunicados/resumen`, { headers: _authHeaders() });
+    return _parseJson(res);
+  },
+  async getComunicados() {
+    const res = await fetch(`${API_URL}/comunicados`, { headers: _authHeaders() });
+    return _parseJson(res);
+  },
+  async crearComunicado(data) {
+    const res = await fetch(`${API_URL}/comunicados`, {
+      method: 'POST',
+      headers: _authHeaders(),
+      body: JSON.stringify(data)
+    });
+    return _parseJson(res);
+  },
+  async eliminarComunicado(id) {
+    const res = await fetch(`${API_URL}/comunicados/${id}`, {
+      method: 'DELETE',
+      headers: _authHeaders()
+    });
+    return _parseJson(res);
   }
 };

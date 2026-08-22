@@ -57,6 +57,11 @@ import TransferModal       from './components/Chat/TransferModal';
 import Login               from './components/Auth/Login';
 import TIPanel             from './components/TI/TIPanel';
 import EquiposView         from './components/Equipos/EquiposView';
+import ChatInternoView     from './components/ChatInterno/ChatInternoView';
+import MuralComunicadosView from './components/Comunicados/MuralComunicadosView';
+import LogoutModal         from './components/Layout/LogoutModal';
+import { useNotificacionesCenter } from './hooks/useNotificacionesCenter';
+import FloatingMessengerDock from './components/Messenger/FloatingMessengerDock';
 import './styles/ti-panel.css';
 
 /** Conexión Socket.io (singleton): se crea una vez al cargar la app. */
@@ -74,9 +79,10 @@ const socket = io(SOCKET_URL);
 const ESTADOS_PURO_BOT = ['abierta', 'MENU_PRINCIPAL', 'SELECCION_EMPRESA', 'SELECCION_AREA'];
 
 function App() {
-  const { user, login, logout, actualizarUsuario } = useAuth();
+  const { user, login, logout, actualizarUsuario } = useAuth(socket);
   const { notify }                = useNotifications();
-  const { hasModulo, filtrarEmpresas, esCoordinador } = usePermisos(user, socket);
+  const { hasModulo, esCoordinador } = usePermisos(user, socket);
+
   const [mantenimiento, setMantenimiento] = useState(false);
 
   // Escuchar evento de mantenimiento:
@@ -106,9 +112,23 @@ function App() {
   // En móvil el sidebar arranca oculto para no tapar el contenido
   const [sidebarVisible, setSidebarVisible] = useState(() => window.innerWidth > 768);
   const [currentView,       setCurrentView]       = useState(() => localStorage.getItem('app_current_view') || 'dashboard');
+  const [canalInternoActivoId, setCanalInternoActivoId] = useState(null);
+
+  const {
+    notificaciones,
+    unreadCount: notifUnreadCount,
+    marcarLeida: notifMarcarLeida,
+    marcarTodasLeidas: notifMarcarTodasLeidas,
+    eliminarNotificacion: notifEliminar,
+    limpiarTodas: notifLimpiarTodas,
+    miniChat,
+    minimizarMiniChat,
+    cerrarMiniChat,
+  } = useNotificacionesCenter({ socket, user, currentView, setCurrentView });
   const [totalInfracciones, setTotalInfracciones] = useState(0);
   const [cerrarModalId,     setCerrarModalId]     = useState(null);
   const [transferModalId,   setTransferModalId]   = useState(null);
+  const [showLogoutModal,   setShowLogoutModal]   = useState(false);
   const [darkMode,          setDarkMode]          = useState(() => localStorage.getItem('app_theme') === 'dark');
 
   // Empresa activa: usada solo como filtro visual y para configuración.
@@ -260,6 +280,41 @@ function App() {
     socket.on('connect', joinRoom);
     return () => socket.off('connect', joinRoom);
   }, [user]);
+
+  
+  // Redirección inteligente si el usuario solo tiene acceso al Chat Interno o módulos específicos
+  useEffect(() => {
+    if (!user || user.rol === 'admin') return;
+    const modMap = {
+      'comunicados': 'comunicados',
+      'chat-interno': 'chat_interno',
+      'chat': 'chat',
+      'dashboard': 'dashboard',
+      'nps': 'nps',
+      'soluciones': 'soluciones',
+      'contactos': 'contactos',
+      'infracciones': 'infracciones',
+      'etiquetas': 'etiquetas',
+      'categorias-cierre': 'notas_cierre',
+      'flow-editor': 'flujo_bot',
+      'agents': 'usuarios',
+      'equipos': 'equipos',
+      'config': 'configuracion'
+    };
+
+    const modActual = modMap[currentView] || currentView;
+    if (!hasModulo(modActual)) {
+      if (hasModulo('chat_interno')) {
+        setCurrentView('chat-interno');
+      } else if (hasModulo('chat')) {
+        setCurrentView('chat');
+      } else if (hasModulo('dashboard')) {
+        setCurrentView('dashboard');
+      } else if (hasModulo('soluciones')) {
+        setCurrentView('soluciones');
+      }
+    }
+  }, [user, currentView, hasModulo]);
 
   // Al cerrar sesión (user es null), resetear estados locales de UI para la siguiente sesión
   useEffect(() => {
@@ -456,7 +511,7 @@ function App() {
         currentView={currentView}
         setView={(v) => { setCurrentView(v); if (window.innerWidth <= 768) setSidebarVisible(false); }}
         user={user}
-        onLogout={logout}
+        onLogout={() => setShowLogoutModal(true)}
         totalNoLeidos={totalNoLeidos}
         totalInfracciones={totalInfracciones}
         hasModulo={hasModulo}
@@ -469,10 +524,23 @@ function App() {
           empresaId={empresaId}
           setEmpresaId={setEmpresaId}
           user={user}
+          socket={socket}
           darkMode={darkMode}
           setDarkMode={setDarkMode}
           currentView={currentView}
-          onLogout={logout}
+          onLogout={() => setShowLogoutModal(true)}
+          notificaciones={notificaciones}
+          unreadCount={notifUnreadCount}
+          onMarcarLeida={notifMarcarLeida}
+          onMarcarTodasLeidas={notifMarcarTodasLeidas}
+          onEliminarNotificacion={notifEliminar}
+          onLimpiarTodas={notifLimpiarTodas}
+          onSelectNotificacion={(notif) => {
+            if (notif?.canalId) {
+              setCanalInternoActivoId(notif.canalId);
+            }
+            setCurrentView('chat-interno');
+          }}
         />
         <div className={`main-content${conversacionActiva ? ' has-active-chat' : ''}${darkMode && currentView === 'chat' ? ' chat-dark' : ''}`}>
 
@@ -565,7 +633,23 @@ function App() {
             <EquiposView empresaId={empresaId} user={user} />
           )}
 
-          {!['chat','agents','config','dashboard','nps','soluciones','contactos','infracciones','etiquetas','categorias-cierre','flow-editor','equipos'].includes(currentView) && (
+          {currentView === 'comunicados' && (
+            <MuralComunicadosView
+              user={user}
+              onAbrirChatDirecto={(contactoId) => {
+                setCanalInternoActivoId(null);
+                setCurrentView('chat-interno');
+                // Disparar evento para abrir directo
+                window.dispatchEvent(new CustomEvent('chat_interno:abrir_directo', { detail: { contactoId } }));
+              }}
+            />
+          )}
+
+          {currentView === 'chat-interno' && (
+            <ChatInternoView socket={socket} user={user} darkMode={darkMode} canalInicialId={canalInternoActivoId} />
+          )}
+
+          {!['chat','chat-interno','comunicados','agents','config','dashboard','nps','soluciones','contactos','infracciones','etiquetas','categorias-cierre','flow-editor','equipos'].includes(currentView) && (
             <div className="empty-chat">
               <div className="empty-content"><h2>Próximamente</h2></div>
             </div>
@@ -591,6 +675,32 @@ function App() {
           }
           onConfirmar={handleConfirmarTransferencia}
           onCancelar={() => setTransferModalId(null)}
+        />
+      )}
+
+      {/* Modal Visual de Confirmación de Cierre de Sesión */}
+      <LogoutModal
+        isOpen={showLogoutModal}
+        user={user}
+        onConfirm={() => {
+          setShowLogoutModal(false);
+          logout();
+        }}
+        onCancel={() => setShowLogoutModal(false)}
+      />
+
+      {/* Ventana Flotante Estilo Facebook Messenger */}
+      {user && currentView !== 'chat-interno' && (
+        <FloatingMessengerDock
+          miniChat={miniChat}
+          onClose={cerrarMiniChat}
+          onMinimize={minimizarMiniChat}
+          onExpand={() => {
+            cerrarMiniChat();
+            setCurrentView('chat-interno');
+          }}
+          socket={socket}
+          userActual={user}
         />
       )}
     </div>

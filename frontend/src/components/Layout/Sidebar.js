@@ -1,7 +1,7 @@
 import React from 'react';
 import {
-  LayoutDashboard, MessageCircle, Settings, Users,
-  LogOut, Shield, AlertTriangle, Tag, FileText, GitBranch, BarChart2, ClipboardList
+  LayoutDashboard, MessageCircle, MessagesSquare, Settings, Users,
+  LogOut, Shield, AlertTriangle, Tag, FileText, GitBranch, BarChart2, ClipboardList, Megaphone
 } from 'lucide-react';
 
 const Sidebar = ({
@@ -52,9 +52,11 @@ const Sidebar = ({
 
       <div className="menu-section">
         {item('dashboard',     'dashboard',         <LayoutDashboard size={20} />, esAdmin ? 'Dashboard General' : 'Dashboard Propio')}
+        {item('comunicados',   'comunicados',       <Megaphone size={20} />,       'Avisos y Mural')}
         {item('nps',           'nps',               <BarChart2 size={20} />,       esCoordinador ? 'Dashboard de mi Staff' : 'Evaluación Staff')}
         {item('soluciones',    'soluciones',         <ClipboardList size={20} />,   esAdmin ? 'Soluciones Globales' : (esCoordinador ? 'Soluciones de mi Staff' : 'Mis Soluciones'))}
-        {item('chat',          'chat',              <MessageCircle size={20} />,  'Chat')}
+        {item('chat_interno',  'chat-interno',      <MessagesSquare size={20} />, 'Chat Interno')}
+        {item('chat',          'chat',              <MessageCircle size={20} />,  'Chat Clientes')}
         {item('contactos',     'contactos',         <Users size={20} />,          'Contactos')}
         {item('infracciones',  'infracciones',      <AlertTriangle size={20} />,  'Infracciones',      totalInfracciones)}
         {item('etiquetas',     'etiquetas',         <Tag size={20} />,            'Etiquetas')}
@@ -72,8 +74,8 @@ const Sidebar = ({
             <strong style={{ color: '#fff' }}>{user?.nombre}</strong>
           </div>
           <span style={{ textTransform: 'capitalize' }}>
-            {user?.rol} · {user?.area}
-            {esCoordinador && ' · Coordinador'}
+            {user?.rol} • {user?.area}
+            {esCoordinador && ' • Coordinador'}
           </span>
         </div>
 

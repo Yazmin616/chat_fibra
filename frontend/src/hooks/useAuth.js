@@ -17,7 +17,7 @@ function limpiarSesion() {
   localStorage.clear();
 }
 
-export function useAuth() {
+export function useAuth(socket) {
   const [user, setUser] = useState(() => {
     const token = localStorage.getItem('agente_token');
     const saved = localStorage.getItem('agente_user');
@@ -71,7 +71,10 @@ export function useAuth() {
 
   const logout = async () => {
     try {
-      if (user) await apiService.logout();
+      if (user) {
+        if (socket) socket.emit('agente:leave', { id: user.id });
+        await apiService.logout();
+      }
     } catch (_) {
       // Token expirado o sin red — igual limpiamos la sesión local
     }

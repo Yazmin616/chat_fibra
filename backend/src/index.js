@@ -49,6 +49,9 @@ const palabrasClaveRoutes    = require('./routes/palabrasClave.routes');
 const flujoRoutes            = require('./routes/flujo.routes');
 const plantillasMetaRoutes   = require('./routes/plantillasMeta.routes');
 const areasSolucionesRoutes  = require('./routes/areasSoluciones.routes');
+const chatInternoRoutes      = require('./routes/chatInterno.routes');
+const comunicadosRoutes      = require('./routes/comunicados.routes');
+const { initChatInternoSockets } = require('./sockets/chatInterno.socket');
 
 const app    = express();
 const server = http.createServer(app);
@@ -138,6 +141,7 @@ app.use(express.json());
 const uploadsDir = path.join(__dirname, '..', 'uploads');
 fs.mkdirSync(path.join(uploadsDir, 'avatars'),   { recursive: true });
 fs.mkdirSync(path.join(uploadsDir, 'rr-media'),  { recursive: true });
+fs.mkdirSync(path.join(uploadsDir, 'chat-interno'), { recursive: true });
 app.use('/uploads', express.static(uploadsDir, {
   setHeaders: (res) => res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin'),
 }));
@@ -159,18 +163,33 @@ app.use((req, res, next) => {
   res.status(503).json({ error: 'Sistema en mantenimiento. Por favor espere.', mantenimiento: true });
 });
 
-// Eventos de conexión Socket.io
+  // Eventos de conexión Socket.io
 io.on('connection', (socket) => {
   logger.info('Cliente conectado', { socketId: socket.id });
+
+  // Responder a petición de lista de agentes activos
+  socket.on('agentes:pedir_activos', () => {
+    const pollingService = require('./services/pollingService');
+    const activeList = pollingService.getActiveAgents ? pollingService.getActiveAgents() : [];
+    socket.emit('agentes:active_list', activeList);
+  });
 
   // El agente emite este evento al iniciar sesión para unirse a su sala
   socket.on('agente:join', async ({ rol, area, id }) => {
     if (id) {
-      socket.agenteId = id;
-      require('./services/pollingService').setAgentOnline(id);
+      socket.agenteId = Number(id);
+      const pollingService = require('./services/pollingService');
+      const agenteRepo = require('./repositories/agente.repository');
+      
+      pollingService.setAgentOnline(Number(id));
+      agenteRepo.setOnline(Number(id), true).catch(() => {});
+      
+      const activeList = pollingService.getActiveAgents ? pollingService.getActiveAgents() : [];
+      io.emit('agente:online', { id: Number(id), esta_online: true });
+      io.emit('agentes:active_list', activeList);
       
       try {
-        const { rows } = await require('./repositories/agente.repository').findById(id);
+        const { rows } = await agenteRepo.findById(id);
         if (rows.length > 0) {
           const agente = rows[0];
           if (agente.rol === 'admin') {
@@ -180,7 +199,6 @@ io.on('connection', (socket) => {
             const permisosRepo = require('./repositories/permisos.repository');
             const permisos = await permisosRepo.getPermisos(id);
             if (permisos && permisos.areas && permisos.areas.length > 0) {
-              // Extraer todas las áreas únicas de todas las empresas a las que tiene acceso
               const allAreas = new Set();
               permisos.areas.forEach(p => {
                 if (p.areas) p.areas.forEach(a => allAreas.add(a));
@@ -189,13 +207,11 @@ io.on('connection', (socket) => {
                 socket.join(`area:${a}`);
                 logger.info(`Socket ${socket.id} (Agent ${id}) joined room: area:${a}`);
               });
-              // Si tiene acceso a __todas__ las áreas, unirse también como admin
               if (allAreas.has('__todas__')) {
                 socket.join('admin');
                 logger.info(`Socket ${socket.id} (Agent ${id}) joined room: admin (via __todas__)`);
               }
             } else if (agente.area) {
-              // Fallback legacy
               socket.join(`area:${agente.area}`);
               logger.info(`Socket ${socket.id} (Agent ${id}) joined room: area:${agente.area} (legacy)`);
             }
@@ -205,7 +221,6 @@ io.on('connection', (socket) => {
         logger.error(`Error joining rooms for agent ${id}:`, err);
       }
     } else {
-      // Legacy fallback si no hay ID
       if (rol === 'admin') {
         socket.join('admin');
       } else if (area) {
@@ -214,14 +229,35 @@ io.on('connection', (socket) => {
     }
   });
 
+  socket.on('agente:leave', ({ id }) => {
+    const targetId = id || socket.agenteId;
+    if (targetId) {
+      socket.agenteId = null;
+      const pollingService = require('./services/pollingService');
+      const agenteRepo = require('./repositories/agente.repository');
+      pollingService.setAgentOffline(targetId);
+      agenteRepo.setOnline(targetId, false).catch(() => {});
+      const activeList = pollingService.getActiveAgents ? pollingService.getActiveAgents() : [];
+      io.emit('agente:offline', { id: Number(targetId), esta_online: false });
+      io.emit('agentes:active_list', activeList);
+    }
+  });
+
   socket.on('disconnect', () => {
     if (socket.agenteId) {
-      require('./services/pollingService').setAgentOffline(socket.agenteId);
+      const pollingService = require('./services/pollingService');
+      const agenteRepo = require('./repositories/agente.repository');
+      
+      pollingService.setAgentOffline(socket.agenteId);
+      agenteRepo.setOnline(socket.agenteId, false).catch(() => {});
+      
+      const activeList = pollingService.getActiveAgents ? pollingService.getActiveAgents() : [];
+      io.emit('agente:offline', { id: Number(socket.agenteId), esta_online: false });
+      io.emit('agentes:active_list', activeList);
     }
     logger.info('Cliente desconectado', { socketId: socket.id });
   });
 });
-
 // Rutas de la API (con rate limiting por IP)
 app.use('/auth',             apiLimiter, authRoutes);
 app.use('/ti',               tiRoutes);
@@ -239,6 +275,8 @@ app.use('/palabras-clave',   apiLimiter, palabrasClaveRoutes);
 app.use('/flujos',           apiLimiter, flujoRoutes);
 app.use('/plantillas-meta',  apiLimiter, plantillasMetaRoutes);
 app.use('/areas-soluciones', apiLimiter, areasSolucionesRoutes);
+app.use('/chat-interno',      apiLimiter, chatInternoRoutes);
+app.use('/comunicados',       apiLimiter, comunicadosRoutes);
 // Los webhooks de Telegram usan el webhookLimiter; Meta se registra en iniciarMeta()
 app.use('/telegram',       webhookLimiter);
 
@@ -258,6 +296,7 @@ const PORT = process.env.PORT || 3009;
 runMigrations()
   .then(() => server.listen(PORT, () => {
     logger.info(`Servidor corriendo en puerto ${PORT}`, { env: process.env.NODE_ENV || 'development' });
+    initChatInternoSockets(io);  // Inicializar WebSockets de Chat Interno
     iniciarTelegram(io, app); // Escuchar mensajes de Telegram (polling o webhook según .env)
     iniciarMeta(app, io);     // Registrar webhook de WhatsApp / Facebook / Instagram
     iniciarAutoCierre(io);    // Timer de cierre por inactividad
