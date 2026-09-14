@@ -54,7 +54,7 @@ async function obtenerOCrearDirecto(agenteIdActual, otroAgenteId) {
   return canal;
 }
 
-async function crearCanalGrupal(agenteIdActual, { nombre, descripcion, esPrivado, soloLectura, miembroIds }) {
+async function crearCanalGrupal(agenteIdActual, { nombre, descripcion, esPrivado, soloLectura, miembroIds, adminIds }) {
   if (!nombre || !nombre.trim()) {
     const err = new Error('El nombre del canal es requerido');
     err.status = 400;
@@ -67,7 +67,8 @@ async function crearCanalGrupal(agenteIdActual, { nombre, descripcion, esPrivado
     Boolean(esPrivado),
     Boolean(soloLectura),
     agenteIdActual,
-    miembroIds || []
+    miembroIds || [],
+    adminIds || []
   );
 
   return await chatInternoRepo.getCanalById(canal.id, agenteIdActual);
@@ -191,16 +192,34 @@ async function agregarMiembroCanal(canalId, solicitanteId, solicitanteRol, nuevo
     throw err;
   }
 
+  const { miembros } = await chatInternoRepo.getDetallesCanal(canalId);
+  const solicitanteMiembro = miembros.find(m => Number(m.id) === Number(solicitanteId));
+  const esCanalAdmin = solicitanteMiembro?.canal_rol === 'admin';
   const esAdmin = solicitanteRol === 'admin';
   const esCreador = Number(canal.creador_id) === Number(solicitanteId);
-  if (!esAdmin && !esCreador) {
+
+  if (!esAdmin && !esCreador && !esCanalAdmin) {
     const err = new Error('Solo el creador o administradores pueden agregar miembros');
     err.status = 403;
     throw err;
   }
 
   await chatInternoRepo.agregarMiembro(canalId, nuevoAgenteId);
-  return await obtenerDetallesCanal(canalId, solicitanteId);
+
+  const { rows: [solicitante] } = await agenteRepo.findById(solicitanteId);
+  const { rows: [target] } = await agenteRepo.findById(nuevoAgenteId);
+
+  const mensajeTexto = `📢 ${solicitante?.nombre || 'Un administrador'} agregó a ${target?.nombre || 'un colaborador'} al grupo.`;
+  const mensajeSistema = await chatInternoRepo.insertMensaje(canalId, solicitanteId, mensajeTexto, 'texto');
+  const detalles = await obtenerDetallesCanal(canalId, solicitanteId);
+
+  return {
+    detalles,
+    mensajeSistema,
+    canalNombre: canal.nombre,
+    nuevoMiembro: target ? { id: target.id, nombre: target.nombre } : null,
+    agregadoPorNombre: solicitante?.nombre || 'Un administrador'
+  };
 }
 
 async function removerMiembroCanal(canalId, solicitanteId, solicitanteRol, agenteIdRemover) {
@@ -211,26 +230,125 @@ async function removerMiembroCanal(canalId, solicitanteId, solicitanteRol, agent
     throw err;
   }
 
+  const { miembros } = await chatInternoRepo.getDetallesCanal(canalId);
+  const solicitanteMiembro = miembros.find(m => Number(m.id) === Number(solicitanteId));
+  const esCanalAdmin = solicitanteMiembro?.canal_rol === 'admin';
   const esAdmin = solicitanteRol === 'admin';
   const esCreador = Number(canal.creador_id) === Number(solicitanteId);
   const esAutoRemover = Number(solicitanteId) === Number(agenteIdRemover);
 
-  if (!esAdmin && !esCreador && !esAutoRemover) {
+  if (!esAdmin && !esCreador && !esCanalAdmin && !esAutoRemover) {
     const err = new Error('No tienes permisos para remover a este miembro');
     err.status = 403;
     throw err;
   }
 
-  await chatInternoRepo.removerMiembro(canalId, agenteIdRemover, solicitanteId);
+  // REGLA FUNDAMENTAL ESTILO WHATSAPP:
+  // Ningún administrador puede sacar al Administrador Anfitrión / Creador.
+  if (Number(agenteIdRemover) === Number(canal.creador_id) && !esAutoRemover) {
+    const err = new Error('El administrador anfitrión no puede ser eliminado por otro administrador');
+    err.status = 403;
+    throw err;
+  }
 
-  // Obtener info del solicitante para notificar
   const { rows: [solicitante] } = await agenteRepo.findById(solicitanteId);
+  const { rows: [target] } = await agenteRepo.findById(agenteIdRemover);
+  let nuevoAnfitrion = null;
+  let mensajeSistema = null;
+
+  // SUCESIÓN AUTOMÁTICA SI EL ANFITRIÓN SALE VOLUNTARIAMENTE:
+  if (esAutoRemover && Number(agenteIdRemover) === Number(canal.creador_id)) {
+    const siguienteHost = await chatInternoRepo.obtenerSiguienteAnfitrion(canalId, agenteIdRemover);
+    if (siguienteHost) {
+      await chatInternoRepo.transferirAnfitrion(canalId, siguienteHost.agente_id);
+      nuevoAnfitrion = {
+        id: siguienteHost.agente_id,
+        nombre: siguienteHost.nombre,
+      };
+
+      // Notificar en el chat con mensaje de sistema
+      mensajeSistema = await chatInternoRepo.insertMensaje(
+        canalId,
+        solicitanteId,
+        `📢 ${solicitante?.nombre || 'El anfitrión'} salió del grupo. ${siguienteHost.nombre} es ahora el Administrador Anfitrión.`,
+        'texto'
+      );
+    }
+  } else {
+    // Mensaje de sistema normal de salida o expulsión
+    const msgTexto = esAutoRemover
+      ? `📢 ${solicitante?.nombre || 'Un miembro'} salió del grupo.`
+      : `📢 ${solicitante?.nombre || 'Un administrador'} eliminó a ${target?.nombre || 'un miembro'} del grupo.`;
+    mensajeSistema = await chatInternoRepo.insertMensaje(canalId, solicitanteId, msgTexto, 'texto');
+  }
+
+  await chatInternoRepo.removerMiembro(canalId, agenteIdRemover, solicitanteId);
 
   return {
     canalId: Number(canalId),
     canalNombre: canal.nombre,
     agenteIdRemovido: Number(agenteIdRemover),
     removidoPorNombre: solicitante?.nombre || 'Un administrador',
+    esSalidaVoluntaria: esAutoRemover,
+    nuevoAnfitrion,
+    mensajeSistema,
+  };
+}
+
+async function cambiarRolMiembro(canalId, solicitanteId, solicitanteRol, targetAgenteId, nuevoRol) {
+  const canal = await chatInternoRepo.getCanalById(canalId, solicitanteId);
+  if (!canal) {
+    const err = new Error('Canal no encontrado');
+    err.status = 404;
+    throw err;
+  }
+
+  if (canal.tipo !== 'canal') {
+    const err = new Error('Solo se pueden gestionar roles en canales grupales');
+    err.status = 400;
+    throw err;
+  }
+
+  if (!['admin', 'miembro'].includes(nuevoRol)) {
+    const err = new Error('Rol inválido. Debe ser "admin" o "miembro"');
+    err.status = 400;
+    throw err;
+  }
+
+  const { miembros } = await chatInternoRepo.getDetallesCanal(canalId);
+  const solicitanteMiembro = miembros.find(m => Number(m.id) === Number(solicitanteId));
+  const esCanalAdmin = solicitanteMiembro?.canal_rol === 'admin';
+  const esAdmin = solicitanteRol === 'admin';
+  const esCreador = Number(canal.creador_id) === Number(solicitanteId);
+
+  if (!esAdmin && !esCreador && !esCanalAdmin) {
+    const err = new Error('Solo el anfitrión o administradores pueden cambiar roles de miembros');
+    err.status = 403;
+    throw err;
+  }
+
+  if (Number(targetAgenteId) === Number(canal.creador_id) && nuevoRol !== 'admin') {
+    const err = new Error('No se puede revocar el rol de administrador al Anfitrión del grupo');
+    err.status = 403;
+    throw err;
+  }
+
+  await chatInternoRepo.cambiarRolMiembro(canalId, targetAgenteId, nuevoRol);
+
+  const { rows: [target] } = await agenteRepo.findById(targetAgenteId);
+  const mensajeTexto = nuevoRol === 'admin'
+    ? `📢 ${target?.nombre || 'Un miembro'} ahora es Administrador del grupo.`
+    : `📢 ${target?.nombre || 'Un miembro'} ya no es Administrador del grupo.`;
+
+  const mensajeSistema = await chatInternoRepo.insertMensaje(canalId, solicitanteId, mensajeTexto, 'texto');
+  const detalles = await obtenerDetallesCanal(canalId, solicitanteId);
+
+  return {
+    detalles,
+    mensajeSistema,
+    canalNombre: canal.nombre,
+    nuevoRol,
+    targetAgente: target ? { id: target.id, nombre: target.nombre } : null
   };
 }
 
@@ -272,7 +390,13 @@ async function ocultarConversacion(canalId, agenteId) {
   return { success: true, canalId: Number(canalId) };
 }
 
+async function toggleFijarCanal(canalId, agenteId) {
+  const fijado = await chatInternoRepo.toggleFijarCanal(canalId, agenteId);
+  return { success: true, canalId: Number(canalId), fijado };
+}
+
 module.exports = {
+  toggleFijarCanal,
   ocultarConversacion,
   eliminarCanal,
   listarCanales,
@@ -285,5 +409,6 @@ module.exports = {
   obtenerDetallesCanal,
   agregarMiembroCanal,
   removerMiembroCanal,
+  cambiarRolMiembro,
   marcarLeido,
 };

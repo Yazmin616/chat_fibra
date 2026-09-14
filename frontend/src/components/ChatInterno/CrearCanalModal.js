@@ -1,18 +1,36 @@
 import React, { useState } from 'react';
-import { X, Lock, Shield } from 'lucide-react';
+import { X, Lock, Shield, Crown, UserCheck } from 'lucide-react';
 
-const CrearCanalModal = ({ contactos, onCrear, onClose }) => {
+const CrearCanalModal = ({ contactos = [], onCrear, onClose }) => {
   const [nombre, setNombre] = useState('');
   const [descripcion, setDescripcion] = useState('');
   const [esPrivado, setEsPrivado] = useState(false);
   const [soloLectura, setSoloLectura] = useState(false);
   const [miembrosSeleccionados, setMiembrosSeleccionados] = useState([]);
+  const [adminsSeleccionados, setAdminsSeleccionados] = useState([]);
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState('');
 
   const toggleMiembro = (id) => {
-    setMiembrosSeleccionados(prev =>
-      prev.includes(id) ? prev.filter(mId => mId !== id) : [...prev, id]
+    setMiembrosSeleccionados(prev => {
+      const exists = prev.includes(id);
+      if (exists) {
+        // Si se deselecciona como miembro, también se quita de admins
+        setAdminsSeleccionados(aPrev => aPrev.filter(aId => aId !== id));
+        return prev.filter(mId => mId !== id);
+      }
+      return [...prev, id];
+    });
+  };
+
+  const toggleAdmin = (e, id) => {
+    e.stopPropagation();
+    // Si no estaba en miembros, lo agregamos automáticamente
+    if (!miembrosSeleccionados.includes(id)) {
+      setMiembrosSeleccionados(prev => [...prev, id]);
+    }
+    setAdminsSeleccionados(prev =>
+      prev.includes(id) ? prev.filter(aId => aId !== id) : [...prev, id]
     );
   };
 
@@ -32,6 +50,7 @@ const CrearCanalModal = ({ contactos, onCrear, onClose }) => {
         esPrivado,
         soloLectura,
         miembroIds: esPrivado ? miembrosSeleccionados : [],
+        adminIds: adminsSeleccionados,
       });
       onClose();
     } catch (err) {
@@ -43,7 +62,7 @@ const CrearCanalModal = ({ contactos, onCrear, onClose }) => {
 
   return (
     <div className="ci-modal-backdrop" onClick={onClose}>
-      <div className="ci-modal-card" onClick={(e) => e.stopPropagation()}>
+      <div className="ci-modal-card" style={{ maxWidth: '520px' }} onClick={(e) => e.stopPropagation()}>
         <div className="ci-modal-header">
           <h3>Crear Nuevo Canal Corporativo</h3>
           <button className="ci-btn-icon" onClick={onClose}>
@@ -58,6 +77,24 @@ const CrearCanalModal = ({ contactos, onCrear, onClose }) => {
                 {error}
               </div>
             )}
+
+            {/* Aviso informativo de Creador/Anfitrión */}
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              background: '#f8fafc',
+              border: '1px solid #e2e8f0',
+              padding: '8px 12px',
+              borderRadius: '8px',
+              fontSize: '0.82rem',
+              color: '#334155'
+            }}>
+              <Crown size={18} color="#d97706" style={{ flexShrink: 0 }} />
+              <span>
+                <strong>Tú serás el Administrador Anfitrión.</strong> Tendrás control total y ningún otro administrador podrá sacarte del grupo.
+              </span>
+            </div>
 
             <div className="ci-form-group">
               <label>Nombre del canal</label>
@@ -115,37 +152,95 @@ const CrearCanalModal = ({ contactos, onCrear, onClose }) => {
               </div>
             </div>
 
-            {esPrivado && (
-              <div className="ci-form-group">
-                <label>Seleccionar miembros iniciales</label>
-                <div style={{ maxHeight: '160px', overflowY: 'auto', border: '1px solid var(--border-color, #cbd5e1)', borderRadius: '8px', padding: '6px' }}>
-                  {contactos.map((c) => (
-                    <div
-                      key={c.id}
-                      onClick={() => toggleMiembro(c.id)}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '8px',
-                        padding: '6px 8px',
-                        borderRadius: '6px',
-                        cursor: 'pointer',
-                        background: miembrosSeleccionados.includes(c.id) ? '#eff6ff' : 'transparent',
-                      }}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={miembrosSeleccionados.includes(c.id)}
-                        onChange={() => {}}
-                        style={{ pointerEvents: 'none' }}
-                      />
-                      <span style={{ fontSize: '0.85rem', fontWeight: 500 }}>{c.nombre}</span>
-                      <span style={{ fontSize: '0.75rem', color: '#64748b' }}>({c.area || c.rol})</span>
-                    </div>
-                  ))}
-                </div>
+            {/* Sección de Miembros y Asignación de Administradores */}
+            <div className="ci-form-group">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                <label style={{ margin: 0 }}>
+                  {esPrivado ? 'Seleccionar miembros y administradores' : 'Designar administradores adicionales (Opcional)'}
+                </label>
+                {adminsSeleccionados.length > 0 && (
+                  <span style={{ fontSize: '0.75rem', background: '#dbeafe', color: '#1e40af', padding: '2px 8px', borderRadius: '12px', fontWeight: 600 }}>
+                    {adminsSeleccionados.length} Admin{adminsSeleccionados.length > 1 ? 's' : ''} adicional{adminsSeleccionados.length > 1 ? 'es' : ''}
+                  </span>
+                )}
               </div>
-            )}
+
+              <div style={{ maxHeight: '190px', overflowY: 'auto', border: '1px solid var(--border-color, #cbd5e1)', borderRadius: '8px', padding: '6px' }}>
+                {contactos.length === 0 ? (
+                  <div style={{ padding: '12px', textAlign: 'center', color: '#94a3b8', fontSize: '0.85rem' }}>
+                    No hay colaboradores disponibles
+                  </div>
+                ) : (
+                  contactos.map((c) => {
+                    const isSelected = esPrivado ? miembrosSeleccionados.includes(c.id) : true;
+                    const isAdmin = adminsSeleccionados.includes(c.id);
+
+                    return (
+                      <div
+                        key={c.id}
+                        onClick={() => esPrivado ? toggleMiembro(c.id) : toggleAdmin({ stopPropagation: () => {} }, c.id)}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          padding: '6px 10px',
+                          borderRadius: '6px',
+                          cursor: 'pointer',
+                          marginBottom: '3px',
+                          background: isAdmin ? '#eff6ff' : (isSelected && esPrivado ? '#f8fafc' : 'transparent'),
+                          border: isAdmin ? '1px solid #bfdbfe' : '1px solid transparent'
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: 0 }}>
+                          {esPrivado && (
+                            <input
+                              type="checkbox"
+                              checked={miembrosSeleccionados.includes(c.id)}
+                              onChange={() => {}}
+                              style={{ pointerEvents: 'none' }}
+                            />
+                          )}
+                          <div style={{ display: 'flex', flexDirection: 'column' }}>
+                            <span style={{ fontSize: '0.85rem', fontWeight: isAdmin ? 600 : 500, color: isAdmin ? '#1e40af' : '#1e293b' }}>
+                              {c.nombre}
+                            </span>
+                            <span style={{ fontSize: '0.73rem', color: '#64748b' }}>
+                              {c.area || c.rol}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Botón para Alternar Rol de Administrador */}
+                        {(isSelected || !esPrivado) && (
+                          <button
+                            type="button"
+                            onClick={(e) => toggleAdmin(e, c.id)}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              padding: '4px 8px',
+                              borderRadius: '6px',
+                              fontSize: '0.75rem',
+                              fontWeight: 600,
+                              cursor: 'pointer',
+                              border: 'none',
+                              transition: 'all 0.15s ease',
+                              background: isAdmin ? '#2563eb' : '#f1f5f9',
+                              color: isAdmin ? '#ffffff' : '#64748b'
+                            }}
+                            title={isAdmin ? 'Quitar rol de Administrador' : 'Nombrar Administrador'}
+                          >
+                            <Shield size={13} />
+                            <span>{isAdmin ? '🛡️ Admin' : '+ Hacer Admin'}</span>
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
           </div>
 
           <div className="ci-modal-footer">

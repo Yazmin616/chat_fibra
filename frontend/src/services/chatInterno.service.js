@@ -47,11 +47,11 @@ export const chatInternoService = {
     return _parseJson(res);
   },
 
-  async crearCanal({ nombre, descripcion, esPrivado, soloLectura, miembroIds }) {
+  async crearCanal({ nombre, descripcion, esPrivado, soloLectura, miembroIds, adminIds }) {
     const res = await fetch(`${API_URL}/chat-interno/canales`, {
       method: 'POST',
       headers: _authHeaders(),
-      body: JSON.stringify({ nombre, descripcion, esPrivado, soloLectura, miembroIds }),
+      body: JSON.stringify({ nombre, descripcion, esPrivado, soloLectura, miembroIds, adminIds }),
     });
     return _parseJson(res);
   },
@@ -145,6 +145,23 @@ export const chatInternoService = {
   async removerMiembro(canalId, agenteId) {
     const res = await fetch(`${API_URL}/chat-interno/canales/${canalId}/miembros/${agenteId}`, {
       method: 'DELETE',
+      headers: _authHeaders(),
+    });
+    return _parseJson(res);
+  },
+
+  async cambiarRolMiembro(canalId, agenteId, rol) {
+    const res = await fetch(`${API_URL}/chat-interno/canales/${canalId}/miembros/${agenteId}/rol`, {
+      method: 'PUT',
+      headers: _authHeaders(),
+      body: JSON.stringify({ rol }),
+    });
+    return _parseJson(res);
+  },
+
+  async toggleFijarCanal(canalId) {
+    const res = await fetch(`${API_URL}/chat-interno/canales/${canalId}/fijar`, {
+      method: 'POST',
       headers: _authHeaders(),
     });
     return _parseJson(res);

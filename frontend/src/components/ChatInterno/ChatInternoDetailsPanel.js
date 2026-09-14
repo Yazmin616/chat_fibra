@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   X, Hash, Lock, Users, FileText, Download, UserPlus, Trash2,
-  Mail, Briefcase, Shield, Image, File
+  Mail, Briefcase, Shield, Image, File, Crown, LogOut
 } from 'lucide-react';
 import { API_URL, resolveAvatar } from '../../services/api';
 import { chatInternoService } from '../../services/chatInterno.service';
@@ -60,7 +60,9 @@ const ChatInternoDetailsPanel = ({
   const otro = canal.otro_participante;
   const esAdmin = userActual?.rol === 'admin';
   const esCreador = Number(canal.creador_id) === Number(userActual?.id);
-  const puedeGestionar = esAdmin || esCreador;
+  const miMiembro = (detalles?.miembros || []).find(m => Number(m.id) === Number(userActual?.id));
+  const soyAdminCanal = miMiembro?.canal_rol === 'admin';
+  const puedeGestionar = esAdmin || esCreador || soyAdminCanal;
 
   // Filtrar contactos que aún no están en el canal
   const idsMiembrosActuales = new Set((detalles?.miembros || []).map(m => Number(m.id)));
@@ -78,6 +80,28 @@ const ChatInternoDetailsPanel = ({
     }
   };
 
+  const handleCambiarRolClick = (agenteId, agenteNombre, nuevoRol) => {
+    const esHacerAdmin = nuevoRol === 'admin';
+    setConfirmDialog({
+      isOpen: true,
+      title: esHacerAdmin ? '¿Nombrar Administrador?' : '¿Quitar rol de Administrador?',
+      message: esHacerAdmin
+        ? `¿Deseas nombrar a ${agenteNombre} como Administrador del canal #${canal.nombre}? Podrá agregar y remover miembros.`
+        : `¿Deseas revocar los permisos de Administrador a ${agenteNombre}? Pasará a ser miembro regular.`,
+      confirmText: esHacerAdmin ? 'Hacer Admin' : 'Quitar Admin',
+      isDanger: !esHacerAdmin,
+      onConfirm: async () => {
+        setConfirmDialog(d => ({ ...d, isOpen: false }));
+        try {
+          const data = await chatInternoService.cambiarRolMiembro(canal.id, agenteId, nuevoRol);
+          setDetalles(data);
+        } catch (err) {
+          console.error(err);
+        }
+      }
+    });
+  };
+
   const handleRemoverMiembroClick = (agenteId, agenteNombre) => {
     setConfirmDialog({
       isOpen: true,
@@ -93,6 +117,27 @@ const ChatInternoDetailsPanel = ({
             ...prev,
             miembros: prev.miembros.filter(m => Number(m.id) !== Number(agenteId)),
           }));
+        } catch (err) {
+          console.error(err);
+        }
+      }
+    });
+  };
+
+  const handleSalirCanalClick = () => {
+    setConfirmDialog({
+      isOpen: true,
+      title: '¿Salir del grupo?',
+      message: esCreador
+        ? `¿Deseas salir de #${canal.nombre}? Al ser el Administrador Anfitrión, el liderazgo se transferirá automáticamente a otro administrador o miembro del grupo.`
+        : `¿Deseas salir de #${canal.nombre}? Dejarás de recibir nuevos mensajes de este canal.`,
+      confirmText: 'Salir del Grupo',
+      isDanger: true,
+      onConfirm: async () => {
+        setConfirmDialog(d => ({ ...d, isOpen: false }));
+        try {
+          await chatInternoService.removerMiembro(canal.id, userActual?.id);
+          onClose();
         } catch (err) {
           console.error(err);
         }
@@ -313,40 +358,102 @@ const ChatInternoDetailsPanel = ({
                     Cargando miembros...
                   </div>
                 ) : (
-                  (detalles?.miembros || []).map((m) => (
-                    <div key={m.id} className="ci-member-item">
-                      <div className="ci-member-avatar-wrap">
-                        {m.foto_perfil ? (
-                          <img src={resolveAvatar(m.foto_perfil)} alt={m.nombre} />
-                        ) : (
-                          <div className="ci-member-placeholder">
-                            {m.nombre.charAt(0).toUpperCase()}
+                  (detalles?.miembros || []).map((m) => {
+                    const esAnfitrion = Number(m.id) === Number(canal.creador_id);
+                    const esAdminDelCanal = m.canal_rol === 'admin';
+                    const esElUsuarioActual = Number(m.id) === Number(userActual?.id);
+
+                    return (
+                      <div key={m.id} className="ci-member-item">
+                        <div className="ci-member-avatar-wrap">
+                          {m.foto_perfil ? (
+                            <img src={resolveAvatar(m.foto_perfil)} alt={m.nombre} />
+                          ) : (
+                            <div className="ci-member-placeholder">
+                              {m.nombre.charAt(0).toUpperCase()}
+                            </div>
+                          )}
+                          <div className={`ci-online-dot ${m.esta_online ? (m.estado_presencia || 'disponible') : 'offline'}`} />
+                        </div>
+
+                        <div className="ci-member-info">
+                          <div className="ci-member-name">
+                            <span>{m.nombre}</span>
+                            {esElUsuarioActual && <span style={{ opacity: 0.6 }}>(Tú)</span>}
                           </div>
-                        )}
-                        <div className={`ci-online-dot ${m.esta_online ? (m.estado_presencia || 'disponible') : 'offline'}`} />
-                      </div>
-
-                      <div className="ci-member-info">
-                        <div className="ci-member-name">
-                          <span>{m.nombre}</span>
-                          {Number(m.id) === Number(userActual?.id) && <span style={{ opacity: 0.6 }}>(Tú)</span>}
+                          <div className="ci-member-sub" style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', marginTop: '2px' }}>
+                            <span>{m.area || m.rol}</span>
+                            {esAnfitrion ? (
+                              <span style={{
+                                background: '#fef3c7',
+                                color: '#b45309',
+                                border: '1px solid #fde68a',
+                                padding: '1px 6px',
+                                borderRadius: '4px',
+                                fontSize: '0.7rem',
+                                fontWeight: 700,
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '3px'
+                              }}>
+                                <Crown size={11} color="#d97706" /> Anfitrión
+                              </span>
+                            ) : esAdminDelCanal ? (
+                              <span style={{
+                                background: '#dbeafe',
+                                color: '#1e40af',
+                                border: '1px solid #bfdbfe',
+                                padding: '1px 6px',
+                                borderRadius: '4px',
+                                fontSize: '0.7rem',
+                                fontWeight: 600,
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '3px'
+                              }}>
+                                <Shield size={11} color="#2563eb" /> Admin
+                              </span>
+                            ) : null}
+                          </div>
                         </div>
-                        <div className="ci-member-sub">
-                          {m.area || m.rol} {m.canal_rol === 'admin' ? '• Admin del canal' : ''}
+
+                        {/* Botones de Gestión sobre el miembro */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginLeft: 'auto' }}>
+                          {/* Botón para Nombrar/Quitar Administrador (Solo para Creador o Admins, y no sobre el anfitrión ni sobre uno mismo) */}
+                          {puedeGestionar && !esAnfitrion && !esElUsuarioActual && (
+                            <button
+                              type="button"
+                              className="ci-btn-icon"
+                              style={{
+                                padding: '4px 6px',
+                                height: '28px',
+                                background: esAdminDelCanal ? '#eff6ff' : '#f8fafc',
+                                border: '1px solid #e2e8f0',
+                                borderRadius: '6px',
+                                cursor: 'pointer'
+                              }}
+                              title={esAdminDelCanal ? 'Quitar rol de Administrador' : 'Nombrar Administrador'}
+                              onClick={() => handleCambiarRolClick(m.id, m.nombre, esAdminDelCanal ? 'miembro' : 'admin')}
+                            >
+                              <Shield size={13} color={esAdminDelCanal ? '#2563eb' : '#64748b'} />
+                            </button>
+                          )}
+
+                          {/* Botón para Remover Miembro (Inmunidad total para el Anfitrión) */}
+                          {puedeGestionar && !esAnfitrion && !esElUsuarioActual && (
+                            <button
+                              type="button"
+                              className="ci-btn-remove-member"
+                              title="Remover del canal"
+                              onClick={() => handleRemoverMiembroClick(m.id, m.nombre)}
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          )}
                         </div>
                       </div>
-
-                      {puedeGestionar && Number(m.id) !== Number(userActual?.id) && (
-                        <button
-                          className="ci-btn-remove-member"
-                          title="Remover del canal"
-                          onClick={() => handleRemoverMiembroClick(m.id, m.nombre)}
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      )}
-                    </div>
-                  ))
+                    );
+                  })
                 )}
               </div>
             </div>
@@ -398,9 +505,37 @@ const ChatInternoDetailsPanel = ({
 
           {/* ================= Acciones de Gestión y Salida ================= */}
           <div style={{ marginTop: 'auto', paddingTop: '16px', borderTop: '1px solid var(--border-color, #e2e8f0)', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            {/* Botón Salir del Grupo (Estilo WhatsApp con auto-traspaso de Anfitrión) */}
+            {!esDirecto && canal.soy_miembro_activo !== false && !canal.canal_eliminado && (
+              <button
+                type="button"
+                onClick={handleSalirCanalClick}
+                style={{
+                  width: '100%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px',
+                  padding: '8px 12px',
+                  background: '#fff7ed',
+                  color: '#c2410c',
+                  border: '1px solid #fed7aa',
+                  borderRadius: '8px',
+                  fontWeight: 600,
+                  fontSize: '0.82rem',
+                  cursor: 'pointer',
+                  transition: 'background 0.15s ease'
+                }}
+              >
+                <LogOut size={15} />
+                <span>Salir del Grupo</span>
+              </button>
+            )}
+
             {/* Botón para Administrador / Creador: Cerrar y eliminar canal a nivel global */}
             {!esDirecto && puedeGestionar && !canal.canal_eliminado && (
               <button
+                type="button"
                 onClick={handleEliminarCanalClick}
                 style={{
                   width: '100%',
@@ -426,6 +561,7 @@ const ChatInternoDetailsPanel = ({
             {/* Botón individual: Eliminar conversación */}
             {(canal.canal_eliminado || canal.soy_miembro_activo === false || esDirecto) && (
               <button
+                type="button"
                 onClick={handleOcultarConversacionClick}
                 style={{
                   width: '100%',

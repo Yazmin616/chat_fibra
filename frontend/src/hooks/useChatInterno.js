@@ -200,6 +200,35 @@ export function useChatInterno({ socket, user, canalInicialId }) {
     }
   }, []);
 
+  // Fijar / Desfijar canal o chat (WhatsApp Style)
+  const toggleFijarCanal = useCallback(async (canalId) => {
+    try {
+      const res = await chatInternoService.toggleFijarCanal(canalId);
+      setCanales(prev => {
+        const updated = prev.map(c => c.id === canalId ? { ...c, fijado: res.fijado, fijado_en: res.fijado ? new Date().toISOString() : null } : c);
+        return [...updated].sort((a, b) => {
+          if (a.fijado && !b.fijado) return -1;
+          if (!a.fijado && b.fijado) return 1;
+          if (a.fijado && b.fijado) {
+            return new Date(b.fijado_en || 0) - new Date(a.fijado_en || 0);
+          }
+          const timeA = new Date(a.ultimo_mensaje?.created_at || a.created_at).getTime();
+          const timeB = new Date(b.ultimo_mensaje?.created_at || b.created_at).getTime();
+          return timeB - timeA;
+        });
+      });
+      setCanalActivo(prev => {
+        if (prev && prev.id === canalId) {
+          return { ...prev, fijado: res.fijado };
+        }
+        return prev;
+      });
+      notify('Chat Fijado', res.fijado ? 'Chat fijado en la parte superior.' : 'Chat desfijado.');
+    } catch (err) {
+      console.error('Error al fijar/desfijar canal:', err);
+    }
+  }, [notify]);
+
   // 5. Enviar mensaje de texto
   const enviarTexto = useCallback(async (texto) => {
     const canal = canalActivoRef.current;
@@ -516,7 +545,61 @@ export function useChatInterno({ socket, user, canalInicialId }) {
       });
     };
 
+    const handleAnfitrionCambiado = ({ canalId, canalNombre, nuevoAnfitrion }) => {
+      setCanales(prev =>
+        prev.map(c => c.id === canalId ? { ...c, creador_id: nuevoAnfitrion.id } : c)
+      );
+      setCanalActivo(prev => {
+        if (prev && prev.id === canalId) {
+          return { ...prev, creador_id: nuevoAnfitrion.id };
+        }
+        return prev;
+      });
+
+      const channelTag = canalNombre ? ` #${canalNombre}` : '';
+      if (Number(nuevoAnfitrion.id) === Number(user?.id)) {
+        notify('Administrador Anfitrión', `¡Has sido nombrado Administrador Anfitrión del canal${channelTag}!`);
+      } else {
+        notify('Administrador Anfitrión', `${nuevoAnfitrion.nombre} es ahora el Administrador Anfitrión del canal${channelTag}.`);
+      }
+      cargarDatos();
+    };
+
+    const handleRolCambiado = ({ canalId, canalNombre, agenteId, nuevoRol, asignadoPorNombre }) => {
+      if (Number(agenteId) === Number(user?.id)) {
+        if (nuevoRol === 'admin') {
+          notify('Permisos Actualizados', `¡Has sido nombrado Administrador del canal #${canalNombre}!`);
+        } else {
+          notify('Permisos Actualizados', `Tu rol en el canal #${canalNombre} ahora es Miembro.`);
+        }
+        cargarDatos();
+      }
+    };
+
+    const handleMiembroAgregado = ({ canalId, canalNombre, agenteId, agregadoPorNombre }) => {
+      if (Number(agenteId) === Number(user?.id)) {
+        notify('Nuevo Canal', `Has sido agregado al canal #${canalNombre} por ${agregadoPorNombre || 'un administrador'}.`);
+        cargarDatos();
+      }
+    };
+
+    const handleCanalActualizado = ({ canalId, canal }) => {
+      setCanales(prev =>
+        prev.map(c => c.id === canalId ? { ...c, ...canal } : c)
+      );
+      setCanalActivo(prev => {
+        if (prev && prev.id === canalId) {
+          return { ...prev, ...canal };
+        }
+        return prev;
+      });
+    };
+
     socket.on('chat_interno:fuiste_removido', handleFuisteRemovido);
+    socket.on('chat_interno:anfitrion_cambiado', handleAnfitrionCambiado);
+    socket.on('chat_interno:rol_cambiado', handleRolCambiado);
+    socket.on('chat_interno:miembro_agregado', handleMiembroAgregado);
+    socket.on('chat_interno:canal_actualizado', handleCanalActualizado);
     socket.on('chat_interno:nuevo_mensaje', handleNuevoMensaje);
     socket.on('chat_interno:notificacion_mensaje', handleNotificacionMensaje);
     socket.on('chat_interno:reaccion_actualizada', handleReaccionActualizada);
@@ -531,6 +614,10 @@ export function useChatInterno({ socket, user, canalInicialId }) {
 
     return () => {
       socket.off('chat_interno:fuiste_removido', handleFuisteRemovido);
+      socket.off('chat_interno:anfitrion_cambiado', handleAnfitrionCambiado);
+      socket.off('chat_interno:rol_cambiado', handleRolCambiado);
+      socket.off('chat_interno:miembro_agregado', handleMiembroAgregado);
+      socket.off('chat_interno:canal_actualizado', handleCanalActualizado);
       socket.off('chat_interno:nuevo_mensaje', handleNuevoMensaje);
       socket.off('chat_interno:notificacion_mensaje', handleNotificacionMensaje);
       socket.off('chat_interno:reaccion_actualizada', handleReaccionActualizada);
@@ -558,6 +645,7 @@ export function useChatInterno({ socket, user, canalInicialId }) {
     crearCanal,
     eliminarCanal,
     ocultarConversacion,
+    toggleFijarCanal,
     enviarTexto,
     enviarAdjunto,
     toggleReaccion,

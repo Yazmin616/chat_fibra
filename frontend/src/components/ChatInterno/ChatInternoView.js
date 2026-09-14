@@ -21,6 +21,7 @@ const ChatInternoView = ({ socket, user, darkMode, canalInicialId }) => {
     crearCanal,
     eliminarCanal,
     ocultarConversacion,
+    toggleFijarCanal,
     enviarTexto,
     enviarAdjunto,
     toggleReaccion,
@@ -43,6 +44,7 @@ const ChatInternoView = ({ socket, user, darkMode, canalInicialId }) => {
         onSeleccionarCanal={seleccionarCanal}
         onAbrirDirecto={abrirChatDirecto}
         onAbrirModalCrearCanal={() => setModalCrearOpen(true)}
+        onToggleFijar={toggleFijarCanal}
         userActual={user}
       />
 
@@ -57,6 +59,7 @@ const ChatInternoView = ({ socket, user, darkMode, canalInicialId }) => {
         onTyping={emitTyping}
         onToggleReaccion={toggleReaccion}
         onToggleDetalles={() => setDetallesOpen(prev => !prev)}
+        onToggleFijar={toggleFijarCanal}
         detallesOpen={detallesOpen}
         userActual={user}
       />

@@ -39,13 +39,14 @@ async function abrirDirecto(req, res, next) {
 
 async function crearCanal(req, res, next) {
   try {
-    const { nombre, descripcion, esPrivado, soloLectura, miembroIds } = req.body;
+    const { nombre, descripcion, esPrivado, soloLectura, miembroIds, adminIds } = req.body;
     const canal = await chatInternoService.crearCanalGrupal(req.agente.id, {
       nombre,
       descripcion,
       esPrivado,
       soloLectura,
       miembroIds,
+      adminIds,
     });
     
     const io = req.app.get('io');
@@ -198,13 +199,28 @@ async function agregarMiembro(req, res, next) {
 
     const io = req.app.get('io');
     if (io) {
-      io.to(`chat_interno:canal:${canalId}`).emit('chat_interno:miembros_actualizados', {
+      const room = `chat_interno:canal:${canalId}`;
+      if (data.mensajeSistema) {
+        io.to(room).emit('chat_interno:nuevo_mensaje', {
+          canalId: Number(canalId),
+          mensaje: data.mensajeSistema,
+        });
+      }
+
+      io.to(room).emit('chat_interno:miembros_actualizados', {
         canalId: Number(canalId),
-        miembros: data.miembros,
+        miembros: data.detalles.miembros,
+      });
+
+      io.emit('chat_interno:miembro_agregado', {
+        canalId: Number(canalId),
+        canalNombre: data.canalNombre,
+        agenteId: Number(agenteId),
+        agregadoPorNombre: data.agregadoPorNombre,
       });
     }
 
-    res.json(data);
+    res.json(data.detalles);
   } catch (err) {
     next(err);
   }
@@ -231,17 +247,88 @@ async function removerMiembro(req, res, next) {
         }
       }
 
-      // 2. Notificar a los miembros activos del canal
+      // 2. Emitir mensaje de sistema en la sala si hubo
+      if (resultado.mensajeSistema) {
+        io.to(room).emit('chat_interno:nuevo_mensaje', {
+          canalId: Number(canalId),
+          mensaje: resultado.mensajeSistema,
+        });
+      }
+
+      // 3. Notificar a los miembros activos del canal
       io.to(room).emit('chat_interno:miembro_removido', {
         canalId: Number(canalId),
         agenteId: Number(agenteId),
+        nuevoAnfitrion: resultado.nuevoAnfitrion,
       });
 
-      // 3. Notificar directamente al usuario afectado
+      // 4. Si hubo traspaso de anfitrión, notificar a todos para actualizar UI
+      if (resultado.nuevoAnfitrion) {
+        io.emit('chat_interno:anfitrion_cambiado', {
+          canalId: Number(canalId),
+          canalNombre: resultado.canalNombre,
+          nuevoAnfitrion: resultado.nuevoAnfitrion,
+        });
+      }
+
+      // 5. Notificar directamente al usuario afectado
       io.emit('chat_interno:fuiste_removido', resultado);
     }
 
     res.json({ success: true, ...resultado });
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function cambiarRolMiembro(req, res, next) {
+  try {
+    const { canalId, agenteId } = req.params;
+    const { rol } = req.body;
+    if (!rol) return res.status(400).json({ error: 'rol es requerido' });
+
+    const data = await chatInternoService.cambiarRolMiembro(
+      Number(canalId),
+      req.agente.id,
+      req.agente.rol,
+      Number(agenteId),
+      rol
+    );
+
+    const io = req.app.get('io');
+    if (io) {
+      const room = `chat_interno:canal:${canalId}`;
+
+      // 1. Emitir mensaje de sistema en la conversación
+      if (data.mensajeSistema) {
+        io.to(room).emit('chat_interno:nuevo_mensaje', {
+          canalId: Number(canalId),
+          mensaje: data.mensajeSistema,
+        });
+      }
+
+      // 2. Actualizar lista de miembros en tiempo real
+      io.to(room).emit('chat_interno:miembros_actualizados', {
+        canalId: Number(canalId),
+        miembros: data.detalles.miembros,
+      });
+
+      // 3. Notificar individual y globalmente sobre el cambio de rol
+      io.emit('chat_interno:rol_cambiado', {
+        canalId: Number(canalId),
+        canalNombre: data.canalNombre,
+        agenteId: Number(agenteId),
+        nuevoRol: rol,
+        asignadoPorNombre: req.agente.nombre,
+      });
+
+      io.emit('chat_interno:canal_actualizado', {
+        canalId: Number(canalId),
+        canal: data.detalles.canal,
+      });
+    }
+
+    res.json(data.detalles);
   } catch (err) {
     next(err);
   }
@@ -298,7 +385,21 @@ async function ocultarConversacion(req, res, next) {
   }
 }
 
+async function toggleFijarCanal(req, res, next) {
+  try {
+    const { canalId } = req.params;
+    const resultado = await chatInternoService.toggleFijarCanal(
+      Number(canalId),
+      req.agente.id
+    );
+    res.json(resultado);
+  } catch (err) {
+    next(err);
+  }
+}
+
 module.exports = {
+  toggleFijarCanal,
   ocultarConversacion,
   eliminarCanal,
   getCanales,
@@ -311,5 +412,6 @@ module.exports = {
   getDetalles,
   agregarMiembro,
   removerMiembro,
+  cambiarRolMiembro,
   marcarLeido,
 };

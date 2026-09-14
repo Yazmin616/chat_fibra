@@ -23,6 +23,7 @@ router.post('/directo',                          chatInternoController.abrirDire
 router.post('/canales',                          chatInternoController.crearCanal);
 router.delete('/canales/:canalId',                  chatInternoController.eliminarCanal);
 router.post('/canales/:canalId/ocultar',           chatInternoController.ocultarConversacion);
+router.post('/canales/:canalId/fijar',             chatInternoController.toggleFijarCanal);
 
 // Mensajes y acciones del canal
 router.get('/canales/:canalId/mensajes',         chatInternoController.getMensajes);
@@ -35,6 +36,7 @@ router.post('/mensajes/:mensajeId/reacciones',   chatInternoController.toggleRea
 // Panel de detalles y miembros del canal
 router.get('/canales/:canalId/detalles',         chatInternoController.getDetalles);
 router.post('/canales/:canalId/miembros',        chatInternoController.agregarMiembro);
+router.put('/canales/:canalId/miembros/:agenteId/rol', chatInternoController.cambiarRolMiembro);
 router.delete('/canales/:canalId/miembros/:agenteId', chatInternoController.removerMiembro);
 
 module.exports = router;

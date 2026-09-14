@@ -26,6 +26,8 @@ async function getCanalesByAgente(agenteId) {
       c.eliminado_en,
       COALESCE(m_me.activo, TRUE) AS soy_miembro_activo,
       m_me.salido_en,
+      COALESCE(m_me.fijado, FALSE) AS fijado,
+      m_me.fijado_en,
       CASE 
         WHEN c.tipo = 'directo' THEN (
           SELECT json_build_object(
@@ -84,6 +86,8 @@ async function getCanalesByAgente(agenteId) {
         OR (m_me.agente_id IS NOT NULL)
       )
     ORDER BY 
+      COALESCE(m_me.fijado, FALSE) DESC,
+      m_me.fijado_en DESC,
       COALESCE(
         (SELECT MAX(created_at) FROM chat_interno_mensajes WHERE canal_id = c.id),
         c.created_at
@@ -144,7 +148,7 @@ async function createDirectChannel(agente1Id, agente2Id) {
 /**
  * Crea un nuevo canal grupal.
  */
-async function createCanal(nombre, descripcion, esPrivado, soloLectura, creadorId, miembroIds = []) {
+async function createCanal(nombre, descripcion, esPrivado, soloLectura, creadorId, miembroIds = [], adminIds = []) {
   const client = await db.connect();
   try {
     await client.query('BEGIN');
@@ -156,22 +160,38 @@ async function createCanal(nombre, descripcion, esPrivado, soloLectura, creadorI
     );
     const canal = rows[0];
 
+    const adminSet = new Set([Number(creadorId), ...adminIds.map(Number)]);
+
     if (!esPrivado) {
-      await client.query(
-        `INSERT INTO chat_interno_miembros(canal_id, agente_id, rol, activo)
-         SELECT $1, id, CASE WHEN id = $2 THEN 'admin' ELSE 'miembro' END, TRUE
-         FROM agentes
-         ON CONFLICT DO NOTHING`,
-        [canal.id, creadorId]
-      );
-    } else {
-      const allMembers = Array.from(new Set([creadorId, ...miembroIds]));
-      for (const agId of allMembers) {
+      const { rows: agentes } = await client.query('SELECT id FROM agentes WHERE rol != $1', ['ti']);
+      for (const ag of agentes) {
+        const rol = adminSet.has(Number(ag.id)) ? 'admin' : 'miembro';
         await client.query(
           `INSERT INTO chat_interno_miembros(canal_id, agente_id, rol, activo)
            VALUES ($1, $2, $3, TRUE)
-           ON CONFLICT DO NOTHING`,
-          [canal.id, agId, agId === creadorId ? 'admin' : 'miembro']
+           ON CONFLICT (canal_id, agente_id) DO UPDATE SET activo = TRUE, rol = EXCLUDED.rol`,
+          [canal.id, ag.id, rol]
+        );
+        await client.query(
+          `INSERT INTO chat_interno_periodos_membresia(canal_id, agente_id, unido_en)
+           VALUES ($1, $2, NOW())`,
+          [canal.id, ag.id]
+        );
+      }
+    } else {
+      const allMembers = Array.from(new Set([Number(creadorId), ...miembroIds.map(Number), ...adminIds.map(Number)]));
+      for (const agId of allMembers) {
+        const rol = adminSet.has(Number(agId)) ? 'admin' : 'miembro';
+        await client.query(
+          `INSERT INTO chat_interno_miembros(canal_id, agente_id, rol, activo)
+           VALUES ($1, $2, $3, TRUE)
+           ON CONFLICT (canal_id, agente_id) DO UPDATE SET activo = TRUE, rol = EXCLUDED.rol`,
+          [canal.id, agId, rol]
+        );
+        await client.query(
+          `INSERT INTO chat_interno_periodos_membresia(canal_id, agente_id, unido_en)
+           VALUES ($1, $2, NOW())`,
+          [canal.id, agId]
         );
       }
     }
@@ -234,10 +254,10 @@ async function getCanalById(canalId, agenteId) {
  * Si el usuario fue removido, solo devuelve el historial hasta la fecha de su salida.
  */
 async function getMensajesByCanal(canalId, agenteId, limit = 50, beforeId = null) {
-  // Verificar si el agente fue removido del canal
-  const { rows: [member] } = await db.query(
-    'SELECT activo, salido_en FROM chat_interno_miembros WHERE canal_id = $1 AND agente_id = $2',
-    [canalId, agenteId]
+  // Obtener info del canal y creador
+  const { rows: [canal] } = await db.query(
+    'SELECT tipo, creador_id FROM chat_interno_canales WHERE id = $1',
+    [canalId]
   );
 
   let query = `
@@ -285,10 +305,25 @@ async function getMensajesByCanal(canalId, agenteId, limit = 50, beforeId = null
   `;
   const params = [canalId, agenteId];
 
-  // Si fue removido, limitar mensajes hasta salido_en
-  if (member && member.activo === false && member.salido_en) {
-    params.push(member.salido_en);
-    query += ` AND m.created_at <= $${params.length}`;
+  // FILTRADO ESTRICTO POR PERÍODOS DE MEMBRESÍA:
+  // En canales grupales, el colaborador SOLO puede ver los mensajes emitidos durante
+  // los lapsos de tiempo en los que estuvo activo (nunca mensajes durante sus períodos de expulsión).
+  if (canal?.tipo === 'canal') {
+    query += `
+      AND (
+        EXISTS (
+          SELECT 1 FROM chat_interno_periodos_membresia p
+          WHERE p.canal_id = m.canal_id
+            AND p.agente_id = $2
+            AND m.created_at >= p.unido_en
+            AND (p.salido_en IS NULL OR m.created_at <= p.salido_en)
+        )
+        OR NOT EXISTS (
+          SELECT 1 FROM chat_interno_periodos_membresia p2
+          WHERE p2.canal_id = m.canal_id AND p2.agente_id = $2
+        )
+      )
+    `;
   }
 
   if (beforeId) {
@@ -371,11 +406,21 @@ async function getDetallesCanal(canalId) {
  */
 async function agregarMiembro(canalId, agenteId, rol = 'miembro') {
   await db.query(
-    `INSERT INTO chat_interno_miembros(canal_id, agente_id, rol, activo, salido_en, removido_por_id)
-     VALUES ($1, $2, $3, TRUE, NULL, NULL)
+    `INSERT INTO chat_interno_miembros(canal_id, agente_id, rol, activo, salido_en, removido_por_id, unido_en)
+     VALUES ($1, $2, $3, TRUE, NULL, NULL, NOW())
      ON CONFLICT (canal_id, agente_id)
      DO UPDATE SET activo = TRUE, salido_en = NULL, removido_por_id = NULL, rol = EXCLUDED.rol`,
     [canalId, agenteId, rol]
+  );
+  // Iniciar nuevo período de membresía si no hay uno abierto actualmente
+  await db.query(
+    `INSERT INTO chat_interno_periodos_membresia(canal_id, agente_id, unido_en)
+     SELECT $1, $2, NOW()
+     WHERE NOT EXISTS (
+       SELECT 1 FROM chat_interno_periodos_membresia
+       WHERE canal_id = $1 AND agente_id = $2 AND salido_en IS NULL
+     )`,
+    [canalId, agenteId]
   );
 }
 
@@ -390,6 +435,64 @@ async function removerMiembro(canalId, agenteId, solicitanteId) {
      WHERE canal_id = $1 AND agente_id = $2`,
     [canalId, agenteId, solicitanteId]
   );
+  // Cerrar el período de membresía activo
+  await db.query(
+    `UPDATE chat_interno_periodos_membresia
+     SET salido_en = NOW()
+     WHERE canal_id = $1 AND agente_id = $2 AND salido_en IS NULL`,
+    [canalId, agenteId]
+  );
+}
+
+/**
+ * Cambia el rol de un miembro en el canal ('admin' o 'miembro').
+ */
+async function cambiarRolMiembro(canalId, agenteId, nuevoRol) {
+  await db.query(
+    `UPDATE chat_interno_miembros
+     SET rol = $3
+     WHERE canal_id = $1 AND agente_id = $2 AND activo = TRUE`,
+    [canalId, agenteId, nuevoRol]
+  );
+}
+
+/**
+ * Transfiere la titularidad/anfitrión del canal a un nuevo agente.
+ */
+async function transferirAnfitrion(canalId, nuevoCreadorId) {
+  await db.query(
+    `UPDATE chat_interno_canales
+     SET creador_id = $2
+     WHERE id = $1`,
+    [canalId, nuevoCreadorId]
+  );
+  // Asegurar que el nuevo anfitrión tenga rol de admin en el canal
+  await db.query(
+    `UPDATE chat_interno_miembros
+     SET rol = 'admin'
+     WHERE canal_id = $1 AND agente_id = $2`,
+    [canalId, nuevoCreadorId]
+  );
+}
+
+/**
+ * Busca al siguiente candidato para ser anfitrión entre los miembros activos restantes:
+ * 1. Prioridad: Administradores activos ordenados por antigüedad en el canal (unido_en ASC).
+ * 2. Fallback: Miembros activos ordenados por antigüedad (unido_en ASC).
+ */
+async function obtenerSiguienteAnfitrion(canalId, excluirAgenteId) {
+  const query = `
+    SELECT m.agente_id, m.rol, a.nombre, a.email
+    FROM chat_interno_miembros m
+    JOIN agentes a ON a.id = m.agente_id
+    WHERE m.canal_id = $1
+      AND m.activo = TRUE
+      AND m.agente_id != $2
+    ORDER BY (m.rol = 'admin') DESC, m.unido_en ASC, m.agente_id ASC
+    LIMIT 1
+  `;
+  const { rows } = await db.query(query, [canalId, excluirAgenteId]);
+  return rows[0] || null;
 }
 
 async function insertMensaje(canalId, emisorId, mensaje, tipo = 'texto', urlAdjunto = null, nombreAdjunto = null, tamanoAdjunto = null) {
@@ -483,6 +586,23 @@ async function ocultarCanalParaAgente(canalId, agenteId) {
 }
 
 /**
+ * Alterna el estado fijado (Pin / Unpin) de un canal o chat para un agente específico.
+ */
+async function toggleFijarCanal(canalId, agenteId) {
+  const { rows } = await db.query(
+    `INSERT INTO chat_interno_miembros(canal_id, agente_id, rol, activo, fijado, fijado_en)
+     VALUES ($1, $2, 'miembro', TRUE, TRUE, NOW())
+     ON CONFLICT (canal_id, agente_id)
+     DO UPDATE SET 
+       fijado = NOT COALESCE(chat_interno_miembros.fijado, FALSE),
+       fijado_en = CASE WHEN NOT COALESCE(chat_interno_miembros.fijado, FALSE) THEN NOW() ELSE NULL END
+     RETURNING fijado`,
+    [canalId, agenteId]
+  );
+  return rows[0]?.fijado || false;
+}
+
+/**
  * Elimina un canal y toda su información relacionada por cascada.
  */
 async function deleteCanal(canalId) {
@@ -503,6 +623,10 @@ module.exports = {
   getDetallesCanal,
   agregarMiembro,
   removerMiembro,
+  cambiarRolMiembro,
+  transferirAnfitrion,
+  obtenerSiguienteAnfitrion,
+  toggleFijarCanal,
   insertMensaje,
   marcarLeido,
   getContactos,

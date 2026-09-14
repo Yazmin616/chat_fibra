@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
   Hash, Lock, Send, Paperclip, File, Download,
-  X, MessageSquare, Info, Shield, ShieldAlert, User
+  X, MessageSquare, Info, Shield, ShieldAlert, User, Pin
 } from 'lucide-react';
 import { API_URL, resolveAvatar } from '../../services/api';
 
@@ -17,6 +17,7 @@ const ChatInternoWindow = ({
   onTyping,
   onToggleReaccion,
   onToggleDetalles,
+  onToggleFijar,
   detallesOpen,
   userActual,
 }) => {
@@ -118,41 +119,62 @@ const ChatInternoWindow = ({
       <header className="ci-window-header">
         <div className="ci-header-left">
           {esDirecto ? (
-            <div className="ci-item-avatar-wrap">
+            <div className="ci-header-avatar-wrap">
               {otro?.foto_perfil ? (
-                <img src={resolveAvatar(otro.foto_perfil)} alt={otro.nombre} className="ci-avatar-img" />
+                <img src={resolveAvatar(otro.foto_perfil)} alt={otro.nombre} className="ci-header-avatar-img" />
               ) : (
-                <div className="ci-avatar-placeholder">
-                  {otro?.nombre ? otro.nombre.charAt(0).toUpperCase() : <User size={16} />}
+                <div className="ci-header-avatar-placeholder">
+                  {otro?.nombre ? otro.nombre.charAt(0).toUpperCase() : <User size={18} />}
                 </div>
               )}
               <div className={`ci-online-dot ${otro?.esta_online ? '' : 'offline'}`} />
             </div>
           ) : (
-            <div className="ci-avatar-placeholder" style={{ background: canalActivo.es_privado ? '#475569' : '#2563eb' }}>
-              {canalActivo.es_privado ? <Lock size={16} /> : <Hash size={18} />}
+            <div className={`ci-header-channel-icon ${canalActivo.es_privado ? 'privado' : 'publico'}`}>
+              {canalActivo.es_privado ? <Lock size={19} /> : <Hash size={21} />}
             </div>
           )}
 
-          <div>
+          <div className="ci-header-text-block">
             <div className="ci-header-title">
-              <span>{headerTitulo}</span>
+              <span className="ci-header-title-text">{headerTitulo}</span>
+              {canalActivo.es_privado && (
+                <span className="ci-pill-private" title="Canal Privado">
+                  <Lock size={11} /> Privado
+                </span>
+              )}
+              {canalActivo.fijado && (
+                <span className="ci-pill-pinned" title="Chat Fijado">
+                  <Pin size={11} style={{ transform: 'rotate(45deg)' }} /> Fijado
+                </span>
+              )}
               {(canalActivo.canal_eliminado || canalActivo.soy_miembro_activo === false) && (
                 <span className="ci-pill-removed" title="Has sido removido de este canal">
-                  <ShieldAlert size={12} /> Acceso de Historial
+                  <ShieldAlert size={11} /> Historial
                 </span>
               )}
               {canalActivo.solo_lectura && (
                 <span className="ci-pill-readonly" title="Solo creador y administradores pueden publicar">
-                  <Shield size={12} /> Solo Lectura
+                  <Shield size={11} /> Solo Lectura
                 </span>
               )}
             </div>
-            <div className="ci-header-desc">{headerSub}</div>
+            <div className="ci-header-desc" title={headerSub}>{headerSub}</div>
           </div>
         </div>
 
-        <div className="ci-header-actions">
+        <div className="ci-header-actions" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          {onToggleFijar && (
+            <button
+              type="button"
+              className={`ci-btn-icon ${canalActivo.fijado ? 'active' : ''}`}
+              title={canalActivo.fijado ? 'Desfijar de la parte superior' : 'Fijar en la parte superior'}
+              onClick={() => onToggleFijar(canalActivo.id)}
+            >
+              <Pin size={18} color={canalActivo.fijado ? '#2563eb' : 'currentColor'} fill={canalActivo.fijado ? '#2563eb' : 'none'} style={{ transform: 'rotate(45deg)' }} />
+            </button>
+          )}
+
           <button
             className={`ci-btn-icon ${detallesOpen ? 'active' : ''}`}
             title="Detalles y archivos compartidos"
@@ -178,6 +200,32 @@ const ChatInternoWindow = ({
             const isOwn = Number(msg.emisor_id) === Number(userActual?.id);
             const timeStr = new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
             const reacciones = Array.isArray(msg.reacciones) ? msg.reacciones : [];
+
+            // Mensajes de actualización del sistema (Estilo WhatsApp)
+            if (msg.tipo === 'sistema' || (msg.mensaje && msg.mensaje.startsWith('📢'))) {
+              return (
+                <div key={`msg-${msg.id}`} style={{ display: 'flex', justifyContent: 'center', margin: '10px 0', width: '100%' }}>
+                  <div style={{
+                    background: '#f8fafc',
+                    color: '#334155',
+                    fontSize: '0.78rem',
+                    fontWeight: 500,
+                    padding: '5px 14px',
+                    borderRadius: '20px',
+                    border: '1px solid #e2e8f0',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
+                    textAlign: 'center',
+                    maxWidth: '85%'
+                  }}>
+                    <span>{msg.mensaje}</span>
+                    <span style={{ fontSize: '0.68rem', color: '#94a3b8', marginLeft: '4px' }}>{timeStr}</span>
+                  </div>
+                </div>
+              );
+            }
 
             return (
               <div

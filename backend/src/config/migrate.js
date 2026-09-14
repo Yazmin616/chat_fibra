@@ -50,7 +50,9 @@ async function run() {
         continue;
       }
 
-      const sql = fs.readFileSync(path.join(MIGRATIONS_DIR, file), 'utf8');
+      const rawSql = fs.readFileSync(path.join(MIGRATIONS_DIR, file), 'utf8');
+      const sql = rawSql.replace(/^\uFEFF/, '').trim();
+      if (!sql) continue;
       console.log(`[migrate] aplicando:   ${file} ...`);
       await client.query(sql);
       await client.query('INSERT INTO migrations (filename) VALUES ($1)', [file]);
