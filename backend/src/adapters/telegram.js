@@ -646,7 +646,7 @@ async function resolveFileLink(file_id, empresa_id) {
 }
 
 // Apagado limpio: detener todos los bots al recibir señales del SO
-process.once('SIGINT',  () => bots.forEach(bot => bot.stop('SIGINT')));
-process.once('SIGTERM', () => bots.forEach(bot => bot.stop('SIGTERM')));
+process.once('SIGINT',  () => bots.forEach(bot => { try { bot.stop('SIGINT'); } catch (_) {} }));
+process.once('SIGTERM', () => bots.forEach(bot => { try { bot.stop('SIGTERM'); } catch (_) {} }));
 
 module.exports = { iniciarTelegram, enviarMensajeTelegram, enviarAccionEscribiendo, resolveFileLink, enviarFotoTelegram, enviarVozTelegram, enviarDocumentoTelegram, enviarReaccionTelegram };
