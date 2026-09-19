@@ -78,6 +78,23 @@ const consultarCoordinador = async (req, res, next) => {
 };
 
 /**
+ * Solicita el envío de una contraseña temporal por correo electrónico.
+ * Endpoint público protegido por rate limit.
+ */
+const solicitarRecuperacionPassword = async (req, res, next) => {
+  try {
+    const identifier = (req.body.identifier || req.body.usuario || req.body.email || '').trim();
+    if (!identifier) {
+      return res.status(400).json({ error: 'Debes ingresar tu usuario o correo electrónico' });
+    }
+    const result = await agenteService.solicitarRecuperacionPassword(identifier);
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
  * Cierra sesión de un agente (lo marca como offline en DB).
  * El agente_id se toma del token JWT decodificado (req.agente.id).
  * Respuesta 200: { ok: true }
@@ -144,5 +161,6 @@ const canalesStatus = async (req, res, next) => {
 
 module.exports = { 
   login, logout, heartbeat, canalesStatus, 
-  cambiarPasswordObligatorio, consultarCoordinador 
+  cambiarPasswordObligatorio, consultarCoordinador,
+  solicitarRecuperacionPassword
 };

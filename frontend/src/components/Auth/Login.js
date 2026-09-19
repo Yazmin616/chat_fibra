@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Lock, User, Loader2, Headphones, HelpCircle, X, Shield, Search, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Lock, User, Loader2, Headphones, HelpCircle, X, Shield, Search, CheckCircle2, AlertCircle, Sparkles, Mail, Info, Send } from 'lucide-react';
 import { apiService } from '../../services/api';
 
 const Login = ({ onLoginSuccess }) => {
@@ -14,6 +14,9 @@ const Login = ({ onLoginSuccess }) => {
   const [coordLoading,    setCoordLoading]    = useState(false);
   const [coordData,       setCoordData]       = useState(null);
   const [coordError,      setCoordError]      = useState('');
+  const [recoveryLoading, setRecoveryLoading] = useState(false);
+  const [recoverySuccess, setRecoverySuccess] = useState('');
+  const [recoveryError,   setRecoveryError]   = useState('');
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -39,6 +42,8 @@ const Login = ({ onLoginSuccess }) => {
     setCoordLoading(true);
     setCoordError('');
     setCoordData(null);
+    setRecoverySuccess('');
+    setRecoveryError('');
     try {
       const data = await apiService.consultarCoordinador(forgotInput.trim());
       if (data?.encontrado) {
@@ -53,11 +58,33 @@ const Login = ({ onLoginSuccess }) => {
     }
   };
 
+  const handleSolicitarRecuperacion = async () => {
+    if (!coordData) return;
+    const identifier = coordData.usuario || coordData.email || forgotInput.trim();
+    setRecoveryLoading(true);
+    setRecoveryError('');
+    setRecoverySuccess('');
+    try {
+      const data = await apiService.solicitarRecuperacionPassword(identifier);
+      if (data?.ok) {
+        setRecoverySuccess(data.mensaje || 'Contraseña temporal enviada a tu correo.');
+      } else {
+        setRecoveryError(data?.error || 'No se pudo generar la recuperación.');
+      }
+    } catch (err) {
+      setRecoveryError(err?.message || 'Error al solicitar recuperación de contraseña.');
+    } finally {
+      setRecoveryLoading(false);
+    }
+  };
+
   const handleOpenForgot = (e) => {
     e.preventDefault();
     setForgotInput(usuario || '');
     setCoordData(null);
     setCoordError('');
+    setRecoverySuccess('');
+    setRecoveryError('');
     setShowForgotModal(true);
   };
 
@@ -262,27 +289,123 @@ const Login = ({ onLoginSuccess }) => {
                   display: 'flex', alignItems: 'flex-start', gap: '10px'
                 }}>
                   <CheckCircle2 size={18} color="#16a34a" style={{ flexShrink: 0, marginTop: '2px' }} />
-                  <div style={{ fontSize: '0.82rem', color: '#166534', lineHeight: 1.4 }}>
+                  <div style={{ fontSize: '0.82rem', color: '#166534', lineHeight: 1.4, width: '100%' }}>
                     <strong>{coordData.nombre}</strong> (Área: {coordData.area})
                     {coordData.puede_recuperar_auto ? (
                       <div style={{ marginTop: '6px', color: '#15803d' }}>
-                        ✨ <strong>Cuenta Independiente:</strong> Tienes habilitada la recuperación autónoma por correo. No dependes de ningún coordinador para restablecer tu cuenta.
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 700 }}>
+                          <Sparkles size={14} color="#15803d" />
+                          <span>Cuenta Independiente:</span>
+                        </div>
+                        <div style={{ marginTop: '2px' }}>
+                          Tienes habilitada la recuperación autónoma por correo. No dependes de ningún coordinador para restablecer tu cuenta.
+                        </div>
                         {coordData.email && (
-                          <div style={{ marginTop: '4px', color: '#166534', fontWeight: 600 }}>
-                            📧 Correo registrado: {coordData.email}
+                          <div style={{ marginTop: '6px', color: '#166534', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <Mail size={14} />
+                            <span>Correo registrado: {coordData.email}</span>
                           </div>
                         )}
                         <div style={{ marginTop: '4px', fontStyle: 'italic', fontSize: '0.78rem' }}>
                           Puedes restablecer tu acceso directamente por correo o solicitar apoyo con el área de TI.
                         </div>
+
+                        {coordData.email && (
+                          <div style={{ marginTop: '12px' }}>
+                            <button
+                              type="button"
+                              onClick={handleSolicitarRecuperacion}
+                              disabled={recoveryLoading || !!recoverySuccess}
+                              style={{
+                                width: '100%',
+                                padding: '9px 14px',
+                                backgroundColor: recoverySuccess ? '#16a34a' : '#dc2626',
+                                color: '#ffffff',
+                                border: 'none',
+                                borderRadius: '8px',
+                                fontSize: '0.82rem',
+                                fontWeight: 600,
+                                cursor: recoverySuccess ? 'default' : 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                gap: '8px',
+                                transition: 'background-color 0.2s'
+                              }}
+                            >
+                              {recoveryLoading ? (
+                                <><Loader2 size={15} className="spinner" /> Generando y enviando correo...</>
+                              ) : recoverySuccess ? (
+                                <><CheckCircle2 size={15} /> Clave enviada exitosamente</>
+                              ) : (
+                                <><Send size={15} /> Enviar contraseña temporal a mi correo</>
+                              )}
+                            </button>
+                          </div>
+                        )}
                       </div>
                     ) : (
                       <div style={{ marginTop: '4px', color: '#14532d' }}>
                         Tu Coordinador asignado es: <strong>{coordData.coordinador_nombre}</strong>
                         {coordData.coordinador_email && ` (${coordData.coordinador_email})`}.
+
+                        {coordData.email && (
+                          <div style={{ marginTop: '10px' }}>
+                            <button
+                              type="button"
+                              onClick={handleSolicitarRecuperacion}
+                              disabled={recoveryLoading || !!recoverySuccess}
+                              style={{
+                                width: '100%',
+                                padding: '8px 12px',
+                                backgroundColor: recoverySuccess ? '#16a34a' : '#2563eb',
+                                color: '#ffffff',
+                                border: 'none',
+                                borderRadius: '6px',
+                                fontSize: '0.8rem',
+                                fontWeight: 600,
+                                cursor: recoverySuccess ? 'default' : 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                gap: '8px'
+                              }}
+                            >
+                              {recoveryLoading ? (
+                                <><Loader2 size={14} className="spinner" /> Enviando...</>
+                              ) : recoverySuccess ? (
+                                <><CheckCircle2 size={14} /> Clave enviada</>
+                              ) : (
+                                <><Send size={14} /> Enviar clave temporal a mi correo</>
+                              )}
+                            </button>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
+                </div>
+              )}
+
+              {recoverySuccess && (
+                <div style={{
+                  backgroundColor: '#f0fdf4', border: '1px solid #86efac',
+                  borderRadius: '10px', padding: '10px 12px', marginBottom: '14px',
+                  display: 'flex', alignItems: 'center', gap: '8px', color: '#166534', fontSize: '0.8rem'
+                }}>
+                  <CheckCircle2 size={16} color="#16a34a" style={{ flexShrink: 0 }} />
+                  <span>{recoverySuccess}</span>
+                </div>
+              )}
+
+              {recoveryError && (
+                <div style={{
+                  backgroundColor: '#fef2f2', border: '1px solid #fecaca',
+                  borderRadius: '10px', padding: '10px 12px', marginBottom: '14px',
+                  display: 'flex', alignItems: 'center', gap: '8px', color: '#b91c1c', fontSize: '0.8rem'
+                }}>
+                  <AlertCircle size={16} style={{ flexShrink: 0 }} />
+                  <span>{recoveryError}</span>
                 </div>
               )}
 
@@ -299,11 +422,15 @@ const Login = ({ onLoginSuccess }) => {
 
               <div style={{
                 fontSize: '0.78rem', color: '#64748b', backgroundColor: '#f1f5f9',
-                padding: '10px 12px', borderRadius: '8px', lineHeight: 1.4
+                padding: '10px 12px', borderRadius: '8px', lineHeight: 1.4,
+                display: 'flex', alignItems: 'flex-start', gap: '8px'
               }}>
-                ℹ️ <strong>Nota:</strong> {coordData?.puede_recuperar_auto
-                  ? 'Al recibir tu clave de recuperación, el sistema te solicitará establecer tu contraseña definitiva al iniciar sesión.'
-                  : 'Cuando tu Coordinador te entregue la clave temporal, el sistema te solicitará automáticamente establecer tu contraseña definitiva al iniciar sesión.'}
+                <Info size={16} color="#64748b" style={{ flexShrink: 0, marginTop: '1px' }} />
+                <span>
+                  <strong>Nota:</strong> {coordData?.puede_recuperar_auto
+                    ? 'Al recibir tu clave de recuperación, el sistema te solicitará establecer tu contraseña definitiva al iniciar sesión.'
+                    : 'Cuando recibas o tu Coordinador te entregue la clave temporal, el sistema te solicitará automáticamente establecer tu contraseña definitiva al iniciar sesión.'}
+                </span>
               </div>
             </div>
 

@@ -16,6 +16,7 @@ const crypto          = require('crypto');
 const db              = require('../config/db');
 const agenteRepo      = require('../repositories/agente.repository');
 const conversacionRepo = require('../repositories/conversacion.repository');
+const emailService    = require('./email.service');
 
 const JWT_SECRET = process.env.JWT_SECRET;
 const JWT_EXPIRY = process.env.JWT_EXPIRY || '10h';
@@ -320,13 +321,63 @@ async function obtenerCoordinadorDeAgente(identifier) {
     usuario: agente.usuario,
     nombre: agente.nombre,
     area: agente.area,
+    email: agente.email,
     coordinador_nombre: coordinadorNombre || 'Administración / TI',
     coordinador_email: coordinadorEmail || null,
     puede_recuperar_auto: Boolean(agente.puede_recuperar_auto && agente.email)
   };
 }
 
+/**
+ * Solicita el restablecimiento de contraseña enviando una clave temporal por correo electrónico.
+ * @param {string} identifier - Usuario o email del agente.
+ */
+async function solicitarRecuperacionPassword(identifier) {
+  const { rows } = await agenteRepo.findByUsuarioOrEmail(identifier);
+  if (rows.length === 0) {
+    const err = new Error('No se encontró una cuenta con ese usuario o correo');
+    err.status = 404;
+    throw err;
+  }
+
+  const agente = rows[0];
+  if (!agente.email) {
+    const err = new Error('Esta cuenta no tiene un correo electrónico registrado. Contacta a tu Coordinador o al Administrador.');
+    err.status = 400;
+    throw err;
+  }
+
+  // Generar contraseña temporal segura
+  const sufijo = Math.floor(1000 + Math.random() * 9000);
+  const temporalPassword = `Fibri_${sufijo}`;
+
+  // Actualizar hash y forzar debe_cambiar_password = true
+  const hashedPassword = await bcrypt.hash(temporalPassword, 10);
+  await agenteRepo.updatePasswordAndDebeCambiar(agente.id, hashedPassword, true);
+
+  // Enviar correo
+  const emailRes = await emailService.enviarPasswordTemporal(agente.email, agente.nombre, temporalPassword);
+
+  // Ocultar parcialmente el correo para privacidad (ej: des*****@fibratec.mx)
+  const partes = agente.email.split('@');
+  const userPart = partes[0];
+  const domPart = partes[1] || '';
+  const emailOculto = userPart.length > 2 
+    ? `${userPart.slice(0, 2)}***@${domPart}` 
+    : `***@${domPart}`;
+
+  return {
+    ok: true,
+    email: emailOculto,
+    simulado: emailRes.simulado,
+    mensaje: emailRes.simulado 
+      ? `Clave temporal generada. Como SMTP aún no está configurado en .env, se registró en los logs del servidor.`
+      : `Se ha enviado una contraseña temporal a ${emailOculto}. Revisa tu bandeja de entrada o spam.`
+  };
+}
+
 module.exports = { 
   login, logout, listar, crear, eliminar, actualizar,
-  cambiarPasswordObligatorio, generarPasswordTemporal, obtenerCoordinadorDeAgente
+  cambiarPasswordObligatorio, generarPasswordTemporal, obtenerCoordinadorDeAgente,
+  solicitarRecuperacionPassword
 };

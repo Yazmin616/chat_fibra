@@ -135,6 +135,15 @@ export const apiService = {
     return _parseJson(res);
   },
 
+  async solicitarRecuperacionPassword(identifier) {
+    const res = await fetch(`${API_URL}/auth/solicitar-recuperacion`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ identifier }),
+    });
+    return _parseJson(res);
+  },
+
   async resetPasswordTemporal(agenteId) {
     const res = await fetch(`${API_URL}/agente/${agenteId}/reset-password-temporal`, {
       method:  'POST',

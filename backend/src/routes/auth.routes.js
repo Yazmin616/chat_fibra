@@ -27,6 +27,7 @@ router.post('/logout',                         verifyToken,  authController.logo
 router.post('/heartbeat',                      verifyToken,  authController.heartbeat);
 router.post('/cambiar-password-obligatorio',   verifyToken,  authController.cambiarPasswordObligatorio);
 router.post('/consultar-coordinador',          loginLimiter, authController.consultarCoordinador);
+router.post('/solicitar-recuperacion',         loginLimiter, authController.solicitarRecuperacionPassword);
 router.get ('/canales-status',                               authController.canalesStatus);
 
 module.exports = router;
