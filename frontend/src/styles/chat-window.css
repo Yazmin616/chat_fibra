@@ -415,6 +415,48 @@
   margin: 0 4px;
 }
 
+.chat-input-wrapper {
+  flex: 1;
+  background: var(--bg-input, #ffffff);
+  border-radius: 21px;
+  padding: 8px 16px;
+  display: flex;
+  align-items: center;
+  min-height: 40px;
+  max-height: 180px;
+  box-sizing: border-box;
+  overflow: visible;
+  cursor: text;
+  transition: background-color 0.2s ease, border-color 0.2s ease;
+}
+
+.chat-input-wrapper .wa-textarea-editable {
+  width: 100% !important;
+  border: none !important;
+  background: transparent !important;
+  outline: none !important;
+  font-size: 14.5px !important;
+  line-height: 1.55 !important;
+  color: var(--text-primary) !important;
+  min-height: 24px;
+  max-height: 140px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-y: auto;
+  user-select: text;
+  cursor: text;
+  padding: 4px 0 2px !important;
+  box-sizing: border-box;
+}
+
+.chat-input-wrapper .wa-textarea-editable:empty:before {
+  content: attr(data-placeholder);
+  color: var(--text-hint);
+  pointer-events: none;
+  display: block;
+}
+
 .chat-input-area textarea {
   flex: 1;
   background: var(--bg-input);
@@ -429,9 +471,10 @@
   overflow-y: hidden;
   min-height: 40px;
   max-height: 180px;
-  font-family: 'Segoe UI', Helvetica, Arial, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
   display: block;
   overflow-wrap: break-word;
+  box-sizing: border-box;
 }
 
 .chat-input-area textarea.has-overflow {
@@ -1726,3 +1769,295 @@
   color: var(--text-hint, #9ca3af);
   line-height: 1.5;
 }
+
+/* =============================================================
+   MODO OSCURO — Chat Window (Clientes)
+   ============================================================= */
+.chat-dark .chat-main {
+  background-color: #0b141a;
+}
+
+.chat-dark .chat-header {
+  background: #202c33;
+  border-bottom: 1px solid #222e35;
+}
+
+.chat-dark .header-info h3 {
+  color: #e9edef;
+}
+
+.chat-dark .header-info .status {
+  color: #8696a0;
+}
+
+.chat-dark .chat-input-area {
+  background: #202c33;
+  border-top: 1px solid #222e35;
+}
+
+.chat-dark .chat-input-wrapper {
+  background: #2a3942 !important;
+}
+
+.chat-dark .chat-input-wrapper .wa-textarea-editable {
+  background: transparent !important;
+  color: #e9edef !important;
+  caret-color: #00a884 !important;
+}
+
+.chat-dark .chat-input-area textarea {
+  background: #2a3942;
+  color: #e9edef;
+  caret-color: #00a884;
+}
+
+.chat-dark .chat-input-area .wa-textarea-editable:empty:before,
+.chat-dark .chat-input-area textarea::placeholder {
+  color: #8696a0;
+}
+
+.chat-dark .chat-input-area .wa-textarea-editable::-webkit-scrollbar,
+.chat-dark .chat-input-area textarea::-webkit-scrollbar {
+  width: 6px;
+}
+
+.chat-dark .chat-input-area .wa-textarea-editable::-webkit-scrollbar-thumb,
+.chat-dark .chat-input-area textarea::-webkit-scrollbar-thumb {
+  background: #374248;
+  border-radius: 4px;
+}
+
+/* Burbujas en modo oscuro */
+.chat-dark .received .message-bubble {
+  background: #202c33;
+  color: #e9edef;
+  box-shadow: 0 1px 1.5px rgba(0, 0, 0, 0.3);
+}
+
+.chat-dark .received .message-bubble::before {
+  border-top-color: #202c33;
+}
+
+.chat-dark .sent .message-bubble {
+  background: #005c4b;
+  color: #ffffff !important;
+  box-shadow: 0 1px 1.5px rgba(0, 0, 0, 0.3);
+}
+
+.chat-dark .sent .message-bubble::before {
+  border-top-color: #005c4b;
+}
+
+.chat-dark .sent .message-time {
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.chat-dark .received .message-time {
+  color: #8696a0;
+}
+
+.chat-dark .day-separator span {
+  background-color: #182229;
+  color: #8696a0;
+  border: 1px solid #222e35;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+}
+
+/* Panel lateral info cliente */
+.chat-dark .info-panel {
+  background: #111b21;
+  border-left-color: #222e35;
+}
+
+.chat-dark .info-panel-header {
+  background: #202c33;
+  border-bottom: 1px solid #222e35;
+}
+
+.chat-dark .info-panel-title {
+  color: #e9edef;
+}
+
+.chat-dark .info-panel-profile {
+  border-bottom: 1px solid #222e35;
+}
+
+.chat-dark .info-panel-name {
+  color: #e9edef;
+}
+
+.chat-dark .info-panel-phone {
+  color: #8696a0;
+}
+
+/* ── Tablas de datos y bloques de código WhatsApp ── */
+.wa-code-block {
+  font-family: Consolas, Monaco, "Courier New", monospace !important;
+  font-size: 12px !important;
+  line-height: 1.4 !important;
+  border-radius: 6px;
+  max-width: 100%;
+  overflow-x: auto;
+  scrollbar-width: thin;
+  tab-size: 8;
+  -moz-tab-size: 8;
+  white-space: pre !important;
+}
+
+.wa-code-block code {
+  font-family: inherit;
+  font-size: inherit;
+}
+
+.msg-table-text {
+  tab-size: 8;
+  -moz-tab-size: 8;
+  white-space: pre-wrap;
+  word-break: normal;
+}
+
+.msg-copy-excel-btn {
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  cursor: pointer;
+  outline: none;
+}
+
+.msg-copy-excel-btn:hover {
+  filter: brightness(1.1);
+  transform: translateY(-1px);
+}
+
+.msg-copy-excel-btn:active {
+  transform: translateY(0);
+}
+
+/* ── Emojis oficiales de Apple renderizados en línea o destacados ── */
+.wa-apple-emoji {
+  display: inline-block;
+  vertical-align: -0.16em;
+  user-select: text;
+  pointer-events: none;
+  overflow: visible;
+}
+
+.wa-apple-emoji.inline {
+  width: 1.3em;
+  height: 1.3em;
+  margin: 0 1.5px;
+  vertical-align: -0.16em;
+}
+
+.wa-emojis-only {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 2px;
+  flex-wrap: wrap;
+}
+
+.wa-emojis-only.count-1 .wa-apple-emoji {
+  width: 3.2rem;
+  height: 3.2rem;
+}
+
+.wa-emojis-only.count-2 .wa-apple-emoji,
+.wa-emojis-only.count-3 .wa-apple-emoji {
+  width: 2.2rem;
+  height: 2.2rem;
+}
+
+.wa-snippet-text .wa-apple-emoji,
+.wa-item-title .wa-apple-emoji,
+.header-name .wa-apple-emoji,
+.info-panel-name .wa-apple-emoji {
+  width: 1.18em;
+  height: 1.18em;
+  margin: 0 1.5px;
+  vertical-align: -0.15em;
+  flex-shrink: 0;
+}
+
+/* Burbuja con solo emojis grandes (sin fondo sólido, como WhatsApp oficial) */
+.message-bubble.msg-bubble-emojis-only {
+  background: transparent !important;
+  box-shadow: none !important;
+  padding: 4px 6px 2px !important;
+}
+
+.message-bubble.msg-bubble-emojis-only::before {
+  display: none !important;
+}
+
+.message-bubble.msg-bubble-emojis-only .message-time {
+  margin-top: 4px;
+  background: rgba(11, 20, 26, 0.55);
+  color: #ffffff !important;
+  padding: 2px 7px;
+  border-radius: 12px;
+  font-size: 10.5px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.chat-dark .message-bubble.msg-bubble-emojis-only .message-time {
+  background: rgba(0, 0, 0, 0.65);
+  color: #e9edef !important;
+}
+
+/* Banner flotante temporal "X nuevo mensaje" estilo WhatsApp */
+.wa-unread-floating-banner {
+  position: absolute;
+  bottom: 74px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #ffffff;
+  color: #111b21;
+  padding: 8px 18px;
+  border-radius: 20px;
+  box-shadow: 0 4px 14px rgba(11, 20, 26, 0.18);
+  border: 1px solid rgba(11, 20, 26, 0.08);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  z-index: 30;
+  font-size: 0.85rem;
+  font-weight: 500;
+  user-select: none;
+  animation: waBannerSlideUp 0.2s cubic-bezier(0.1, 0.9, 0.2, 1);
+  transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+}
+
+.wa-unread-floating-banner:hover {
+  background: #f8fafc;
+  transform: translateX(-50%) translateY(-2px);
+  box-shadow: 0 6px 18px rgba(11, 20, 26, 0.24);
+}
+
+.chat-dark .wa-unread-floating-banner {
+  background: #202c33;
+  color: #e9edef;
+  border-color: rgba(255, 255, 255, 0.1);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.45);
+}
+
+.chat-dark .wa-unread-floating-banner:hover {
+  background: #2a3942;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.6);
+}
+
+@keyframes waBannerSlideUp {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 12px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0) scale(1);
+  }
+}
+
+
+
+

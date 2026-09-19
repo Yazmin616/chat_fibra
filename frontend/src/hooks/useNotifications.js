@@ -12,6 +12,7 @@
  */
 
 import { useEffect } from 'react';
+import { mostrarNotificacionDesktop } from '../utils/desktopNotificationHelper';
 
 /* ── CSS de los toasts (inyectado una sola vez en <head>) ── */
 const TOAST_STYLES = `
@@ -265,16 +266,16 @@ export function useNotifications() {
     }
   }, []);
 
-  const notify = (titulo, cuerpo) => {
+  const notify = (titulo, cuerpo, opciones = {}) => {
     // Toast in-app — funciona en HTTP y HTTPS
     _showToast(titulo, cuerpo);
 
-    // Notificación nativa del OS — funciona en Firefox/HTTP y en cualquier HTTPS
-    if ('Notification' in window && Notification.permission === 'granted') {
-      try {
-        new Notification(titulo, { body: cuerpo, icon: '/favicon.ico' });
-      } catch (_) {}
-    }
+    // Notificación nativa del OS estilizada con avatar y branding
+    mostrarNotificacionDesktop({
+      titulo,
+      cuerpo,
+      ...opciones,
+    });
 
     // Sonido de alerta
     const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2354/2354-preview.mp3');

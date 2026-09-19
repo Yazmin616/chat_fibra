@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { FileText } from 'lucide-react';
 import { resolveMedia } from '../../services/api';
+import { renderContentWithAppleEmojis } from '../../utils/appleEmojiHelper';
 
 /**
  * Picker flotante que aparece encima del input cuando el agente escribe "/".
@@ -85,14 +86,14 @@ const QuickReplyPicker = ({ query, items, onSelect, onClose }) => {
             )}
             <div className="qr-picker-text">
               <span className="qr-item-titulo">
-                {r.titulo}
+                {renderContentWithAppleEmojis(r.titulo)}
                 {r.tipo_media && (
                   <span className="qr-media-badge" style={{ marginLeft: 4 }}>
                     {r.tipo_media === 'image' ? '📷' : '📎'}
                   </span>
                 )}
               </span>
-              {r.contenido && <span className="qr-item-preview">{r.contenido}</span>}
+              {r.contenido && <span className="qr-item-preview">{renderContentWithAppleEmojis(r.contenido)}</span>}
             </div>
           </div>
         ))}

@@ -46,19 +46,30 @@ function initChatInternoSockets(io) {
     // Evento: un compañero está escribiendo
     socket.on('chat_interno:typing', ({ canalId, agenteNombre, agenteId }) => {
       if (!canalId) return;
-      socket.to(`chat_interno:canal:${canalId}`).emit('chat_interno:typing', {
+      socket.broadcast.emit('chat_interno:typing', {
         canalId: Number(canalId),
         agenteNombre,
-        agenteId
+        agenteId: Number(agenteId || socket.agenteId)
       });
     });
 
     // Evento: dejó de escribir
     socket.on('chat_interno:stop_typing', ({ canalId, agenteId }) => {
       if (!canalId) return;
-      socket.to(`chat_interno:canal:${canalId}`).emit('chat_interno:stop_typing', {
+      socket.broadcast.emit('chat_interno:stop_typing', {
         canalId: Number(canalId),
-        agenteId
+        agenteId: Number(agenteId || socket.agenteId)
+      });
+    });
+
+    // Evento: acuse de recibo / notificación de entrega de mensaje (2 palomitas grises)
+    socket.on('chat_interno:ack_entrega', ({ canalId, mensajeId, emisorId }) => {
+      if (!canalId || !mensajeId) return;
+      io.emit('chat_interno:mensaje_entregado', {
+        canalId: Number(canalId),
+        mensajeId: Number(mensajeId),
+        emisorId: Number(emisorId),
+        entregadoA: Number(socket.agenteId)
       });
     });
 
@@ -68,14 +79,24 @@ function initChatInternoSockets(io) {
       if (!targetId) return;
       if (!socket.agenteId) socket.agenteId = Number(targetId);
       const agenteRepo = require('../repositories/agente.repository');
+      const pollingService = require('../services/pollingService');
       try {
         await agenteRepo.setEstadoPresencia(targetId, estado, mensaje);
+        const estaOnline = estado !== 'desconectado';
+        if (estaOnline) {
+          await agenteRepo.setOnline(targetId, true).catch(() => {});
+          pollingService.setAgentOnline(targetId);
+        } else {
+          await agenteRepo.setOnline(targetId, false).catch(() => {});
+          pollingService.setAgentOffline(targetId);
+        }
         io.emit('agente:presencia_cambiada', {
           id: Number(targetId),
           estado_presencia: estado,
-          mensaje_presencia: mensaje
+          mensaje_presencia: mensaje,
+          esta_online: estaOnline
         });
-        logger.info(`[Presencia] Agente ${targetId} cambió su estado a: ${estado}`);
+        logger.info(`[Presencia] Agente ${targetId} cambió su estado a: ${estado} (online: ${estaOnline})`);
       } catch (err) {
         logger.error('Error al actualizar estado_presencia:', err);
       }

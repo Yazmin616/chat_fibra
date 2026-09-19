@@ -39,14 +39,45 @@ async function abrirDirecto(req, res, next) {
 
 async function crearCanal(req, res, next) {
   try {
-    const { nombre, descripcion, esPrivado, soloLectura, miembroIds, adminIds } = req.body;
+    let fotoUrl = null;
+    if (req.file) {
+      const uploadsDir = path.join(__dirname, '..', '..', 'uploads', 'chat-interno');
+      if (!fs.existsSync(uploadsDir)) {
+        fs.mkdirSync(uploadsDir, { recursive: true });
+      }
+
+      const ext = path.extname(req.file.originalname) || '.jpg';
+      const filename = `grp_${Date.now()}_${Math.random().toString(36).substring(2, 8)}${ext}`;
+      const filePath = path.join(uploadsDir, filename);
+
+      fs.writeFileSync(filePath, req.file.buffer);
+      fotoUrl = `/uploads/chat-interno/${filename}`;
+    }
+
+    let miembroIdsParsed = req.body.miembroIds;
+    if (typeof miembroIdsParsed === 'string') {
+      try { miembroIdsParsed = JSON.parse(miembroIdsParsed); } catch (_) { miembroIdsParsed = []; }
+    }
+    let adminIdsParsed = req.body.adminIds;
+    if (typeof adminIdsParsed === 'string') {
+      try { adminIdsParsed = JSON.parse(adminIdsParsed); } catch (_) { adminIdsParsed = []; }
+    }
+    let permisosParsed = req.body.permisos;
+    if (typeof permisosParsed === 'string') {
+      try { permisosParsed = JSON.parse(permisosParsed); } catch (_) { permisosParsed = null; }
+    }
+
+    const { nombre, descripcion, esPrivado, soloLectura, mensajesTemporales } = req.body;
     const canal = await chatInternoService.crearCanalGrupal(req.agente.id, {
       nombre,
       descripcion,
-      esPrivado,
-      soloLectura,
-      miembroIds,
-      adminIds,
+      esPrivado: esPrivado === true || esPrivado === 'true',
+      soloLectura: soloLectura === true || soloLectura === 'true',
+      miembroIds: Array.isArray(miembroIdsParsed) ? miembroIdsParsed : [],
+      adminIds: Array.isArray(adminIdsParsed) ? adminIdsParsed : [],
+      foto: fotoUrl,
+      mensajesTemporales: mensajesTemporales || 'desactivados',
+      permisos: permisosParsed,
     });
     
     const io = req.app.get('io');
@@ -83,9 +114,9 @@ async function getMensajes(req, res, next) {
 async function enviarMensaje(req, res, next) {
   try {
     const { canalId } = req.params;
-    let { mensaje, tipo } = req.body;
-    let urlAdjunto = null;
-    let nombreAdjunto = null;
+    let { mensaje, tipo, url_adjunto, urlAdjunto: urlAdjuntoBody, nombre_adjunto, nombreAdjunto: nombreAdjuntoBody } = req.body;
+    let urlAdjunto = url_adjunto || urlAdjuntoBody || null;
+    let nombreAdjunto = nombre_adjunto || nombreAdjuntoBody || null;
     let tamanoAdjunto = null;
 
     if (req.file) {
@@ -94,18 +125,27 @@ async function enviarMensaje(req, res, next) {
         fs.mkdirSync(uploadsDir, { recursive: true });
       }
 
-      const ext = path.extname(req.file.originalname) || '';
+      let ext = path.extname(req.file.originalname) || '';
+      if (!ext && req.file.mimetype.startsWith('audio/')) {
+        ext = '.webm';
+      }
       const filename = `ci_${Date.now()}_${Math.random().toString(36).substring(2, 8)}${ext}`;
       const filePath = path.join(uploadsDir, filename);
 
       fs.writeFileSync(filePath, req.file.buffer);
 
       urlAdjunto = `/uploads/chat-interno/${filename}`;
-      nombreAdjunto = req.file.originalname;
+      nombreAdjunto = req.file.originalname || (tipo === 'audio' ? 'Nota de voz.webm' : filename);
       tamanoAdjunto = req.file.size;
 
       if (!tipo) {
-        tipo = req.file.mimetype.startsWith('image/') ? 'imagen' : 'archivo';
+        if (req.file.mimetype.startsWith('audio/')) {
+          tipo = 'audio';
+        } else if (req.file.mimetype.startsWith('image/')) {
+          tipo = 'imagen';
+        } else {
+          tipo = 'archivo';
+        }
       }
     }
 
@@ -124,13 +164,30 @@ async function enviarMensaje(req, res, next) {
 
     const io = req.app.get('io');
     if (io) {
-      io.to(`chat_interno:canal:${canalId}`).emit('chat_interno:nuevo_mensaje', {
+      const payloadNuevo = {
         canalId: Number(canalId),
+        canalNombre: resultado.canal?.nombre,
+        canalTipo: resultado.canal?.tipo,
+        canalFoto: resultado.canal?.foto,
         mensaje: resultado.mensaje,
-      });
+      };
 
+      // 1. Emitir a la sala del canal
+      io.to(`chat_interno:canal:${canalId}`).emit('chat_interno:nuevo_mensaje', payloadNuevo);
+
+      // 2. Emitir a la sala personal de cada miembro para entrega garantizada
+      if (Array.isArray(resultado.miembros)) {
+        resultado.miembros.forEach(agId => {
+          io.to(`agente:${agId}`).emit('chat_interno:nuevo_mensaje', payloadNuevo);
+        });
+      }
+
+      // 3. Notificación general a todos los clientes
       io.emit('chat_interno:notificacion_mensaje', {
         canalId: Number(canalId),
+        canalNombre: resultado.canal?.nombre,
+        canalTipo: resultado.canal?.tipo,
+        canalFoto: resultado.canal?.foto,
         mensaje: resultado.mensaje,
         emisorId: req.agente.id,
         miembros: resultado.miembros,
@@ -149,22 +206,36 @@ async function toggleReaccion(req, res, next) {
     const { emoji, canalId } = req.body;
     if (!emoji) return res.status(400).json({ error: 'emoji es requerido' });
 
-    const reacciones = await chatInternoService.toggleReaccion(
+    const resultado = await chatInternoService.toggleReaccion(
       Number(mensajeId),
       req.agente.id,
       emoji
     );
+    const { reacciones, agregado, ultimaReaccion } = resultado;
+    const cid = Number(canalId || resultado.canalId);
 
     const io = req.app.get('io');
-    if (io && canalId) {
-      io.to(`chat_interno:canal:${canalId}`).emit('chat_interno:reaccion_actualizada', {
-        canalId: Number(canalId),
+    if (io && cid) {
+      io.to(`chat_interno:canal:${cid}`).emit('chat_interno:reaccion_actualizada', {
+        canalId: cid,
         mensajeId: Number(mensajeId),
         reacciones,
+        agregado,
+        ultimaReaccion,
+      });
+
+      // Emitir también globalmente para actualizar la vista previa de la barra lateral
+      io.emit('chat_interno:notificacion_reaccion', {
+        canalId: cid,
+        mensajeId: Number(mensajeId),
+        reacciones,
+        agregado,
+        ultimaReaccion,
+        emisorId: req.agente.id,
       });
     }
 
-    res.json({ mensajeId: Number(mensajeId), reacciones });
+    res.json({ mensajeId: Number(mensajeId), reacciones, agregado, ultimaReaccion });
   } catch (err) {
     next(err);
   }
@@ -341,8 +412,21 @@ async function marcarLeido(req, res, next) {
     const resultado = await chatInternoService.marcarLeido(
       Number(canalId),
       req.agente.id,
-      Number(ultimoMensajeId)
+      ultimoMensajeId ? Number(ultimoMensajeId) : null
     );
+
+    const io = req.app.get('io');
+    if (io) {
+      io.emit('chat_interno:mensajes_leidos', {
+        canalId: Number(canalId),
+        agenteId: req.agente.id,
+        ultimoMensajeId: resultado.ultimoMensajeId,
+        tipo: resultado.tipo,
+        lecturas: resultado.lecturas,
+        miembros_activos: resultado.miembros_activos
+      });
+    }
+
     res.json(resultado);
   } catch (err) {
     next(err);
@@ -398,10 +482,160 @@ async function toggleFijarCanal(req, res, next) {
   }
 }
 
+async function editarMensaje(req, res, next) {
+  try {
+    const { mensajeId } = req.params;
+    const { mensaje } = req.body;
+    const resultado = await chatInternoService.editarMensaje(
+      Number(mensajeId),
+      req.agente.id,
+      mensaje
+    );
+
+    const io = req.app.get('io');
+    if (io && resultado.canal_id) {
+      io.to(`chat_interno:canal:${resultado.canal_id}`).emit('chat_interno:mensaje_editado', {
+        canalId: Number(resultado.canal_id),
+        mensajeId: Number(resultado.id),
+        mensaje: resultado.mensaje,
+        editado_en: resultado.editado_en,
+      });
+      io.emit('chat_interno:mensaje_editado_global', {
+        canalId: Number(resultado.canal_id),
+        mensajeId: Number(resultado.id),
+        mensaje: resultado.mensaje,
+        editado_en: resultado.editado_en,
+      });
+    }
+
+    res.json(resultado);
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function toggleFijarMensaje(req, res, next) {
+  try {
+    const { mensajeId } = req.params;
+    const { duracion } = req.body || {};
+    const resultado = await chatInternoService.toggleFijarMensaje(
+      Number(mensajeId),
+      Number(req.agente.id),
+      duracion || '7d'
+    );
+
+    const io = req.app.get('io');
+    if (io && resultado.canal_id) {
+      io.to(`chat_interno:canal:${resultado.canal_id}`).emit('chat_interno:mensaje_fijado', {
+        canalId: Number(resultado.canal_id),
+        mensajeId: Number(resultado.id),
+        fijado: Boolean(resultado.fijado),
+        fijado_por: resultado.fijado_por,
+        fijado_en: resultado.fijado_en,
+        fijado_hasta: resultado.fijado_hasta
+      });
+    }
+
+    res.json(resultado);
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function eliminarMensaje(req, res, next) {
+  try {
+    const { mensajeId } = req.params;
+    const resultado = await chatInternoService.eliminarMensaje(
+      Number(mensajeId),
+      req.agente.id,
+      req.agente.rol
+    );
+
+    const io = req.app.get('io');
+    if (io && resultado.canal_id) {
+      io.to(`chat_interno:canal:${resultado.canal_id}`).emit('chat_interno:mensaje_eliminado', {
+        canalId: Number(resultado.canal_id),
+        mensajeId: Number(resultado.id),
+        mensaje: resultado.mensaje,
+        eliminado: true,
+      });
+      io.emit('chat_interno:mensaje_eliminado_global', {
+        canalId: Number(resultado.canal_id),
+        mensajeId: Number(resultado.id),
+        mensaje: resultado.mensaje,
+        eliminado: true,
+      });
+    }
+
+    res.json(resultado);
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function actualizarCanal(req, res, next) {
+  try {
+    const { canalId } = req.params;
+    let fotoUrl = undefined;
+    if (req.file) {
+      const uploadsDir = path.join(__dirname, '..', '..', 'uploads', 'chat-interno');
+      if (!fs.existsSync(uploadsDir)) {
+        fs.mkdirSync(uploadsDir, { recursive: true });
+      }
+
+      const ext = path.extname(req.file.originalname) || '.jpg';
+      const filename = `grp_${Date.now()}_${Math.random().toString(36).substring(2, 8)}${ext}`;
+      const filePath = path.join(uploadsDir, filename);
+
+      fs.writeFileSync(filePath, req.file.buffer);
+      fotoUrl = `/uploads/chat-interno/${filename}`;
+    }
+
+    const { nombre, descripcion, mensajesTemporales, soloLectura } = req.body;
+    const canal = await chatInternoService.actualizarCanal(Number(canalId), req.agente.id, {
+      nombre,
+      descripcion,
+      foto: fotoUrl,
+      mensajesTemporales,
+      soloLectura: soloLectura !== undefined ? (soloLectura === true || soloLectura === 'true') : undefined,
+    });
+
+    const io = req.app.get('io');
+    if (io) {
+      io.emit('chat_interno:canal_actualizado', canal);
+    }
+
+    res.json(canal);
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function toggleDestacar(req, res, next) {
+  try {
+    const { id } = req.params;
+    const resultado = await chatInternoService.toggleDestacarMensaje(Number(id), req.agente.id);
+    res.json(resultado);
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function getMensajesDestacados(req, res, next) {
+  try {
+    const { canalId } = req.params;
+    const mensajes = await chatInternoService.getMensajesDestacados(Number(canalId), req.agente.id);
+    res.json(mensajes);
+  } catch (err) {
+    next(err);
+  }
+}
+
 module.exports = {
   toggleFijarCanal,
   ocultarConversacion,
   eliminarCanal,
+  actualizarCanal,
   getCanales,
   getContactos,
   abrirDirecto,
@@ -414,4 +648,9 @@ module.exports = {
   removerMiembro,
   cambiarRolMiembro,
   marcarLeido,
+  editarMensaje,
+  toggleFijarMensaje,
+  eliminarMensaje,
+  toggleDestacar,
+  getMensajesDestacados,
 };

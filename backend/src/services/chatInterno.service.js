@@ -8,16 +8,29 @@ const chatInternoRepo = require('../repositories/chatInterno.repository');
 const agenteRepo = require('../repositories/agente.repository');
 const pollingService = require('./pollingService');
 
+/**
+ * Valida si un agente está realmente conectado:
+ * 1. Tiene socket activo en activeSet, O
+ * 2. Su flag esta_online es true Y tuvo un heartbeat en los últimos 3 minutos.
+ */
+function calcularPresenciaOnline(id, dbOnline, lastSeen, activeSet) {
+  if (activeSet.has(Number(id))) return true;
+  if (!dbOnline || !lastSeen) return false;
+  const diffMin = (Date.now() - new Date(lastSeen).getTime()) / (60 * 1000);
+  return diffMin < 3;
+}
+
 async function listarCanales(agenteId) {
   const canales = await chatInternoRepo.getCanalesByAgente(agenteId);
   const activeSet = new Set(pollingService.getActiveAgents ? pollingService.getActiveAgents() : []);
   return canales.map(c => {
     if (c.tipo === 'directo' && c.otro_participante) {
+      const o = c.otro_participante;
       return {
         ...c,
         otro_participante: {
-          ...c.otro_participante,
-          esta_online: Boolean(c.otro_participante.esta_online || activeSet.has(Number(c.otro_participante.id)))
+          ...o,
+          esta_online: calcularPresenciaOnline(o.id, o.esta_online, o.last_seen, activeSet)
         }
       };
     }
@@ -30,7 +43,7 @@ async function listarContactos(agenteId) {
   const activeSet = new Set(pollingService.getActiveAgents ? pollingService.getActiveAgents() : []);
   return contactos.map(c => ({
     ...c,
-    esta_online: Boolean(c.esta_online || activeSet.has(Number(c.id)))
+    esta_online: calcularPresenciaOnline(c.id, c.esta_online, c.last_seen, activeSet)
   }));
 }
 
@@ -49,12 +62,13 @@ async function obtenerOCrearDirecto(agenteIdActual, otroAgenteId) {
   const canal = await chatInternoRepo.getCanalById(directo.id, agenteIdActual);
   const activeSet = new Set(pollingService.getActiveAgents ? pollingService.getActiveAgents() : []);
   if (canal && canal.tipo === 'directo' && canal.otro_participante) {
-    canal.otro_participante.esta_online = Boolean(canal.otro_participante.esta_online || activeSet.has(Number(canal.otro_participante.id)));
+    const o = canal.otro_participante;
+    canal.otro_participante.esta_online = calcularPresenciaOnline(o.id, o.esta_online, o.last_seen, activeSet);
   }
   return canal;
 }
 
-async function crearCanalGrupal(agenteIdActual, { nombre, descripcion, esPrivado, soloLectura, miembroIds, adminIds }) {
+async function crearCanalGrupal(agenteIdActual, { nombre, descripcion, esPrivado, soloLectura, miembroIds, adminIds, foto, mensajesTemporales, permisos }) {
   if (!nombre || !nombre.trim()) {
     const err = new Error('El nombre del canal es requerido');
     err.status = 400;
@@ -68,7 +82,10 @@ async function crearCanalGrupal(agenteIdActual, { nombre, descripcion, esPrivado
     Boolean(soloLectura),
     agenteIdActual,
     miembroIds || [],
-    adminIds || []
+    adminIds || [],
+    foto || null,
+    mensajesTemporales || 'desactivados',
+    permisos || null
   );
 
   return await chatInternoRepo.getCanalById(canal.id, agenteIdActual);
@@ -84,7 +101,8 @@ async function obtenerMensajes(canalId, agenteId, limit = 50, beforeId = null) {
 
   const activeSet = new Set(pollingService.getActiveAgents ? pollingService.getActiveAgents() : []);
   if (canal.tipo === 'directo' && canal.otro_participante) {
-    canal.otro_participante.esta_online = Boolean(canal.otro_participante.esta_online || activeSet.has(Number(canal.otro_participante.id)));
+    const o = canal.otro_participante;
+    canal.otro_participante.esta_online = calcularPresenciaOnline(o.id, o.esta_online, o.last_seen, activeSet);
   }
 
   const mensajes = await chatInternoRepo.getMensajesByCanal(canalId, agenteId, limit, beforeId);
@@ -151,8 +169,8 @@ async function enviarMensaje(canalId, agenteId, agenteRol, { mensaje, tipo = 'te
 }
 
 async function toggleReaccion(mensajeId, agenteId, emoji) {
-  const reacciones = await chatInternoRepo.toggleReaccion(mensajeId, agenteId, emoji);
-  return reacciones;
+  const resultado = await chatInternoRepo.toggleReaccion(mensajeId, agenteId, emoji);
+  return resultado;
 }
 
 async function obtenerDetallesCanal(canalId, agenteId) {
@@ -168,7 +186,7 @@ async function obtenerDetallesCanal(canalId, agenteId) {
 
   const miembrosConPresencia = miembros.map(m => ({
     ...m,
-    esta_online: Boolean(m.esta_online || activeSet.has(Number(m.id)))
+    esta_online: calcularPresenciaOnline(m.id, m.esta_online, m.last_seen, activeSet)
   }));
 
   return {
@@ -353,8 +371,7 @@ async function cambiarRolMiembro(canalId, solicitanteId, solicitanteRol, targetA
 }
 
 async function marcarLeido(canalId, agenteId, ultimoMensajeId) {
-  await chatInternoRepo.marcarLeido(canalId, agenteId, ultimoMensajeId);
-  return { success: true };
+  return await chatInternoRepo.marcarLeido(canalId, agenteId, ultimoMensajeId);
 }
 
 async function eliminarCanal(canalId, solicitanteId, solicitanteRol) {
@@ -395,10 +412,66 @@ async function toggleFijarCanal(canalId, agenteId) {
   return { success: true, canalId: Number(canalId), fijado };
 }
 
+async function editarMensaje(mensajeId, agenteId, nuevoTexto) {
+  if (!nuevoTexto || !nuevoTexto.trim()) {
+    const err = new Error('El texto del mensaje no puede estar vacío.');
+    err.status = 400;
+    throw err;
+  }
+  const actualizado = await chatInternoRepo.editarMensaje(mensajeId, agenteId, nuevoTexto.trim());
+  if (!actualizado) {
+    const err = new Error('No se pudo editar el mensaje o no tienes permisos.');
+    err.status = 403;
+    throw err;
+  }
+  return actualizado;
+}
+
+async function toggleFijarMensaje(mensajeId, agenteId, duracion = '7d') {
+  const actualizado = await chatInternoRepo.toggleFijarMensaje(mensajeId, agenteId, duracion);
+  if (!actualizado) {
+    const err = new Error('No se encontró el mensaje a fijar.');
+    err.status = 404;
+    throw err;
+  }
+  return actualizado;
+}
+
+async function eliminarMensaje(mensajeId, agenteId, agenteRol) {
+  const esAdmin = agenteRol === 'admin';
+  const eliminado = await chatInternoRepo.eliminarMensaje(mensajeId, agenteId, esAdmin);
+  if (!eliminado) {
+    const err = new Error('No se pudo eliminar el mensaje o no tienes permisos.');
+    err.status = 403;
+    throw err;
+  }
+  return eliminado;
+}
+
+async function actualizarCanal(canalId, agenteId, datos) {
+  const canal = await chatInternoRepo.getCanalById(canalId, agenteId);
+  if (!canal) {
+    const err = new Error('Canal no encontrado');
+    err.status = 404;
+    throw err;
+  }
+  await chatInternoRepo.actualizarCanal(canalId, datos);
+  return await chatInternoRepo.getCanalById(canalId, agenteId);
+}
+
+async function toggleDestacarMensaje(mensajeId, agenteId) {
+  return await chatInternoRepo.toggleDestacarMensaje(mensajeId, agenteId);
+}
+
+async function getMensajesDestacados(canalId, agenteId) {
+  return await chatInternoRepo.getMensajesDestacadosByCanal(canalId, agenteId);
+}
+
 module.exports = {
   toggleFijarCanal,
   ocultarConversacion,
   eliminarCanal,
+  actualizarCanal,
   listarCanales,
   listarContactos,
   obtenerOCrearDirecto,
@@ -411,4 +484,9 @@ module.exports = {
   removerMiembroCanal,
   cambiarRolMiembro,
   marcarLeido,
+  editarMensaje,
+  toggleFijarMensaje,
+  eliminarMensaje,
+  toggleDestacarMensaje,
+  getMensajesDestacados,
 };

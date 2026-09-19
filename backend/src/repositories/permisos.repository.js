@@ -79,13 +79,18 @@ async function setPermisos(usuario_id, { empresas, areas, modulos }, admin_id) {
       }
     }
 
-    // Insertar módulos
+    // Insertar módulos que existan en el catálogo
     if (modulos?.length) {
-      const ph = modulos.map((_, i) => `($1, $${i + 2})`).join(', ');
-      await client.query(
-        `INSERT INTO usuario_modulos(usuario_id, modulo) VALUES ${ph} ON CONFLICT DO NOTHING`,
-        [usuario_id, ...modulos]
-      );
+      const validModsRes = await client.query('SELECT id FROM modulos');
+      const validModIds = new Set(validModsRes.rows.map(r => r.id));
+      const filteredModulos = modulos.filter(m => validModIds.has(m));
+      if (filteredModulos.length) {
+        const ph = filteredModulos.map((_, i) => `($1, $${i + 2})`).join(', ');
+        await client.query(
+          `INSERT INTO usuario_modulos(usuario_id, modulo) VALUES ${ph} ON CONFLICT DO NOTHING`,
+          [usuario_id, ...filteredModulos]
+        );
+      }
     }
 
     // Log de auditoría

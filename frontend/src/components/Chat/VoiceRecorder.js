@@ -40,20 +40,76 @@ const VoiceRecorder = ({ onSend, disabled }) => {
   const timerRef         = useRef(null);
   const streamRef        = useRef(null);
 
+  const detenerTodosLosTracks = useCallback(() => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(t => {
+        try {
+          t.enabled = false;
+          t.stop();
+        } catch (e) {}
+      });
+      streamRef.current = null;
+    }
+    if (mediaRecorderRef.current && mediaRecorderRef.current.stream) {
+      mediaRecorderRef.current.stream.getTracks().forEach(t => {
+        try {
+          t.enabled = false;
+          t.stop();
+        } catch (e) {}
+      });
+    }
+  }, []);
+
   // Limpiar al desmontar
   useEffect(() => () => {
     clearInterval(timerRef.current);
     if (audioUrl) URL.revokeObjectURL(audioUrl);
-    streamRef.current?.getTracks().forEach(t => t.stop());
-  }, []); // eslint-disable-line
+    detenerTodosLosTracks();
+  }, [audioUrl, detenerTodosLosTracks]);
+
+  const detenerGrabacion = useCallback(() => {
+    clearInterval(timerRef.current);
+    if (mediaRecorderRef.current?.state !== 'inactive') {
+      try { mediaRecorderRef.current.stop(); } catch (e) {}
+    }
+    detenerTodosLosTracks();
+  }, [detenerTodosLosTracks]);
 
   const iniciarGrabacion = useCallback(async () => {
     setError('');
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      if (!navigator.mediaDevices && !navigator.getUserMedia && !navigator.webkitGetUserMedia && !navigator.mozGetUserMedia) {
+        if (!window.isSecureContext && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+          setError('El navegador bloquea el micrófono por HTTP IP. Usa localhost o habilita la bandera en chrome://flags.');
+          return;
+        }
+        setError('Navegador sin soporte para captura de audio.');
+        return;
+      }
+
+      const audioConstraints = {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+      };
+
+      let stream = null;
+      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+        stream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraints });
+      } else {
+        const legacy = navigator.getUserMedia || navigator.webkitGetUserMedia || navigator.mozGetUserMedia;
+        stream = await new Promise((resolve, reject) => {
+          legacy.call(navigator, { audio: audioConstraints }, resolve, reject);
+        });
+      }
+
       streamRef.current = stream;
       const mimeType = elegirMimeType();
-      const mr = new MediaRecorder(stream, mimeType ? { mimeType } : {});
+      const mrOptions = {};
+      if (mimeType) mrOptions.mimeType = mimeType;
+      mrOptions.audioBitsPerSecond = 128000; // 128 kbps calidad HD de voz
+
+      const mr = new MediaRecorder(stream, mrOptions);
       mediaRecorderRef.current = mr;
       chunksRef.current = [];
 
@@ -64,10 +120,10 @@ const VoiceRecorder = ({ onSend, disabled }) => {
         setAudioBlob(blob);
         setAudioUrl(url);
         setEstado('preview');
-        streamRef.current?.getTracks().forEach(t => t.stop());
+        detenerTodosLosTracks();
       };
 
-      mr.start(250); // chunks cada 250 ms (evita pérdida si la pestaña se suspende)
+      mr.start(1000); // 1000ms evita micro-cortes y artefactos de audio WebM
       setEstado('recording');
       setSegundos(0);
 
@@ -79,43 +135,40 @@ const VoiceRecorder = ({ onSend, disabled }) => {
       }, 1000);
 
     } catch (err) {
-      const msg = err.name === 'NotAllowedError'
-        ? 'Permiso de micrófono denegado.'
-        : 'No se pudo acceder al micrófono.';
-      setError(msg);
+      if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+        setError('Permiso de micrófono denegado en el navegador.');
+      } else if (!window.isSecureContext && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+        setError('El navegador bloquea el micrófono por HTTP IP. Usa localhost o chrome://flags.');
+      } else {
+        setError('No se pudo acceder al micrófono (' + (err.message || err.name || 'Error') + ').');
+      }
     }
-  }, []); // eslint-disable-line
-
-  const detenerGrabacion = useCallback(() => {
-    clearInterval(timerRef.current);
-    if (mediaRecorderRef.current?.state !== 'inactive') {
-      mediaRecorderRef.current.stop();
-    }
-  }, []);
+  }, [detenerGrabacion, detenerTodosLosTracks]);
 
   const cancelar = useCallback(() => {
     clearInterval(timerRef.current);
     if (mediaRecorderRef.current?.state !== 'inactive') {
-      mediaRecorderRef.current.stop();
+      try { mediaRecorderRef.current.stop(); } catch (e) {}
     }
-    streamRef.current?.getTracks().forEach(t => t.stop());
+    detenerTodosLosTracks();
     if (audioUrl) URL.revokeObjectURL(audioUrl);
     setEstado('idle');
     setSegundos(0);
     setAudioBlob(null);
     setAudioUrl(null);
     setError('');
-  }, [audioUrl]);
+  }, [audioUrl, detenerTodosLosTracks]);
 
   const enviar = useCallback(async () => {
     if (!audioBlob || loading) return;
     setLoading(true);
+    detenerTodosLosTracks();
     try {
-      await onSend(audioBlob);
+      await onSend(audioBlob, formatTime(segundos));
       cancelar();
     } catch { setError('Error al enviar la nota de voz.'); }
     finally  { setLoading(false); }
-  }, [audioBlob, loading, onSend, cancelar]);
+  }, [audioBlob, loading, onSend, cancelar, detenerTodosLosTracks, segundos]);
 
   if (estado === 'idle') {
     return (

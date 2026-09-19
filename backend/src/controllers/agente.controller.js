@@ -30,11 +30,14 @@ const { emitToConv } = require('../utils/rooms');
 // ── Schemas de validación ───────────────────────────────────────────────────
 
 const crearSchema = Joi.object({
-  nombre:   Joi.string().min(2).max(100).required(),
-  email:    Joi.string().email().required(),
-  password: Joi.string().min(6).required(),
-  rol:      Joi.string().valid('admin', 'asesor', 'colaborador', 'ti').required(),
-  area:     Joi.string().min(1).max(100).required(),
+  usuario:              Joi.string().min(2).max(60).required(),
+  nombre:               Joi.string().min(2).max(100).required(),
+  email:                Joi.string().email().allow('', null).optional(),
+  password:             Joi.string().min(6).optional().allow('', null),
+  rol:                  Joi.string().valid('admin', 'asesor', 'colaborador', 'ti').required(),
+  area:                 Joi.string().min(1).max(100).required(),
+  coordinador_id:       Joi.number().integer().allow(null, '').empty('').optional(),
+  puede_recuperar_auto: Joi.boolean().optional(),
   permisos: Joi.object({
     empresas: Joi.array().items(Joi.string()).allow(null).optional(),
     areas:    Joi.array().items(Joi.object({
@@ -46,11 +49,15 @@ const crearSchema = Joi.object({
 });
 
 const editarSchema = Joi.object({
-  nombre:   Joi.string().min(2).max(100).required(),
-  email:    Joi.string().email().required(),
-  password: Joi.string().min(6).optional().allow(''),
-  rol:      Joi.string().valid('admin', 'asesor', 'colaborador', 'ti').required(),
-  area:     Joi.string().min(1).max(100).required(),
+  usuario:              Joi.string().min(2).max(60).optional(),
+  nombre:               Joi.string().min(2).max(100).required(),
+  email:                Joi.string().email().allow('', null).optional(),
+  password:             Joi.string().min(6).optional().allow(''),
+  rol:                  Joi.string().valid('admin', 'asesor', 'colaborador', 'ti').required(),
+  area:                 Joi.string().min(1).max(100).required(),
+  coordinador_id:       Joi.number().integer().allow(null, '').empty('').optional(),
+  puede_recuperar_auto: Joi.boolean().optional(),
+  debe_cambiar_password: Joi.boolean().optional(),
 });
 
 const responderSchema = Joi.object({
@@ -141,7 +148,7 @@ const crear = async (req, res, next) => {
     res.status(201).json(agente);
   } catch (err) {
     if (err.code === '23505') {
-      return res.status(400).json({ error: 'Ese correo ya está registrado' });
+      return res.status(400).json({ error: 'Ese nombre de usuario o correo ya está en uso' });
     }
     next(err);
   }
@@ -149,7 +156,7 @@ const crear = async (req, res, next) => {
 
 /**
  * Actualiza los datos de un agente.
- * Body esperado: { nombre, email, rol, area, password? }
+ * Body esperado: { usuario?, nombre, email?, rol, area, password?, coordinador_id?, puede_recuperar_auto? }
  * Respuesta 200: agente actualizado.
  * Respuesta 400: errores de validación.
  */
@@ -167,8 +174,25 @@ const actualizar = async (req, res, next) => {
     res.json(agente);
   } catch (err) {
     if (err.code === '23505') {
-      return res.status(400).json({ error: 'Ese correo ya está registrado por otro agente' });
+      return res.status(400).json({ error: 'Ese nombre de usuario o correo ya está en uso' });
     }
+    next(err);
+  }
+};
+
+/**
+ * Genera una contraseña temporal para un subordinado (Admin o Coordinador).
+ * POST /agente/:id/reset-password-temporal
+ */
+const resetPasswordTemporal = async (req, res, next) => {
+  try {
+    const targetAgenteId = Number(req.params.id);
+    if (!targetAgenteId) return res.status(400).json({ error: 'ID de usuario inválido' });
+    const result = await agenteService.generarPasswordTemporal(req.agente, targetAgenteId);
+    const io = req.app.get('io');
+    if (io) io.emit('agentes_actualizados');
+    res.json(result);
+  } catch (err) {
     next(err);
   }
 };
@@ -500,4 +524,8 @@ const usarRespuestaRapida = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
-module.exports = { listar, crear, actualizar, eliminar, responder, liberar, eliminarConversacion, escribiendo, enviarMediaHandler, subirFoto, reaccionar, listarRR, crearRR, actualizarRR, eliminarRR, usarRespuestaRapida, directorio };
+module.exports = { 
+  listar, crear, actualizar, eliminar, responder, liberar, eliminarConversacion, 
+  escribiendo, enviarMediaHandler, subirFoto, reaccionar, listarRR, crearRR, 
+  actualizarRR, eliminarRR, usarRespuestaRapida, directorio, resetPasswordTemporal 
+};

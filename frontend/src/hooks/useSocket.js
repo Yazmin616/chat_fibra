@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { apiService } from '../services/api';
+import { reproducirSonidoWhatsAppInChat } from '../utils/audioNotificationPlayer';
 
 export function useSocket({
   socket,
@@ -75,6 +76,10 @@ export function useSocket({
 
       // Añadir el mensaje a la ventana solo si es la conversación abierta
       if (!convActiva || !mismoChatId) return;
+
+      if (data.remitente === 'user') {
+        reproducirSonidoWhatsAppInChat();
+      }
 
       const newMsg = {
         id:           data.mensaje_id,

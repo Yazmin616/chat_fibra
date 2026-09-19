@@ -12,31 +12,127 @@
   flex-shrink: 0;
 }
 
-/* Barra de búsqueda */
+/* Barra de búsqueda estilo WhatsApp */
+.wa-search-box,
 .search-container {
-  padding: 15px 15px 5px;
-}
-
-.search-box {
-  background: var(--bg-search);
-  border-radius: 10px;
-  padding: 10px 14px;
+  padding: 8px 12px;
+  background: var(--bg-panel, #ffffff);
+  border-bottom: 1px solid var(--border-light, #f0f2f5);
   display: flex;
   align-items: center;
 }
 
-.search-box input {
-  background: transparent;
-  border: none;
+.wa-search-input-wrap,
+.search-box {
   flex: 1;
-  outline: none;
-  font-size: 14px;
-  padding: 0 8px;
-  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--bg-search, #f0f2f5);
+  border-radius: 8px;
+  padding: 6px 12px;
+  border: 1px solid transparent;
+  transition: all 0.2s ease;
+  min-height: 36px;
+  box-sizing: border-box;
 }
 
+.wa-search-input-wrap:focus-within,
+.search-box:focus-within {
+  background: #ffffff;
+  border-color: #00a884;
+  box-shadow: 0 1px 3px rgba(0, 168, 132, 0.15);
+}
+
+.wa-search-icon {
+  color: #54656f;
+  flex-shrink: 0;
+  transition: color 0.2s ease;
+}
+
+.wa-search-input-wrap:focus-within .wa-search-icon {
+  color: #00a884;
+}
+
+.wa-search-input,
+.wa-search-input-wrap input,
+.search-box input {
+  background: transparent !important;
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+  flex: 1 !important;
+  width: 100% !important;
+  font-size: 14px !important;
+  line-height: 20px !important;
+  padding: 0 2px !important;
+  margin: 0 !important;
+  color: #111b21 !important;
+  font-family: inherit !important;
+}
+
+.wa-search-input::placeholder,
+.wa-search-input-wrap input::placeholder,
 .search-box input::placeholder {
-  color: var(--text-hint);
+  color: #8696a0 !important;
+  opacity: 1 !important;
+}
+
+.wa-clear-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  color: #8696a0;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border-radius: 50%;
+  width: 22px;
+  height: 22px;
+  transition: color 0.15s ease, background-color 0.15s ease;
+}
+
+.wa-clear-btn:hover {
+  color: #111b21;
+  background: rgba(0, 0, 0, 0.06);
+}
+
+/* Mensaje cuando no hay resultados de búsqueda */
+.wa-empty-search-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 20px 16px;
+  color: #8696a0;
+  font-size: 13px;
+  text-align: center;
+}
+
+.wa-empty-search-term {
+  color: #111b21;
+  font-weight: 600;
+  word-break: break-word;
+}
+
+.wa-empty-clear-search-btn {
+  margin-top: 6px;
+  background: none;
+  border: 1px solid #00a884;
+  color: #00a884;
+  border-radius: 16px;
+  padding: 4px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.wa-empty-clear-search-btn:hover {
+  background: rgba(0, 168, 132, 0.08);
 }
 
 /* Pestañas de filtro */
@@ -248,3 +344,151 @@
     display: none;
   }
 }
+
+/* =============================================================
+   MODO OSCURO — Chat List (Clientes)
+   ============================================================= */
+.chat-dark .chat-list-panel {
+  background: #111b21;
+  border-right: 1px solid #222e35;
+}
+
+body.chat-dark .wa-search-box,
+.chat-dark .wa-search-box,
+.chat-dark .search-container {
+  background: #111b21 !important;
+  border-bottom: 1px solid #222e35 !important;
+}
+
+body.chat-dark .wa-search-input-wrap,
+.chat-dark .wa-search-input-wrap,
+.chat-dark .search-box {
+  background: #202c33 !important;
+  border-color: transparent !important;
+}
+
+body.chat-dark .wa-search-input-wrap:focus-within,
+.chat-dark .wa-search-input-wrap:focus-within,
+.chat-dark .search-box:focus-within {
+  background: #111b21 !important;
+  border-color: #00a884 !important;
+  box-shadow: 0 1px 3px rgba(0, 168, 132, 0.25) !important;
+}
+
+body.chat-dark .wa-search-icon,
+.chat-dark .wa-search-icon {
+  color: #8696a0 !important;
+}
+
+body.chat-dark .wa-search-input-wrap:focus-within .wa-search-icon,
+.chat-dark .wa-search-input-wrap:focus-within .wa-search-icon {
+  color: #00a884 !important;
+}
+
+body.chat-dark .wa-search-input,
+body.chat-dark .wa-search-input-wrap input,
+.chat-dark .wa-search-input,
+.chat-dark .wa-search-input-wrap input,
+.chat-dark .search-box input {
+  background: transparent !important;
+  color: #e9edef !important;
+}
+
+body.chat-dark .wa-search-input::placeholder,
+body.chat-dark .wa-search-input-wrap input::placeholder,
+.chat-dark .wa-search-input::placeholder,
+.chat-dark .wa-search-input-wrap input::placeholder,
+.chat-dark .search-box input::placeholder {
+  color: #8696a0 !important;
+}
+
+body.chat-dark .wa-clear-btn,
+.chat-dark .wa-clear-btn {
+  color: #8696a0 !important;
+}
+
+body.chat-dark .wa-clear-btn:hover,
+.chat-dark .wa-clear-btn:hover {
+  color: #e9edef !important;
+  background: rgba(255, 255, 255, 0.08) !important;
+}
+
+body.chat-dark .wa-empty-search-term,
+.chat-dark .wa-empty-search-term {
+  color: #e9edef !important;
+}
+
+body.chat-dark .wa-empty-clear-search-btn,
+.chat-dark .wa-empty-clear-search-btn {
+  color: #00a884 !important;
+  border-color: #00a884 !important;
+}
+
+body.chat-dark .wa-empty-clear-search-btn:hover,
+.chat-dark .wa-empty-clear-search-btn:hover {
+  background: rgba(0, 168, 132, 0.15) !important;
+}
+
+.chat-dark .tab-pill {
+  background: #202c33;
+  color: #d1d7db;
+  border: 1px solid transparent;
+}
+
+.chat-dark .tab-pill:hover {
+  background: #2a3942;
+  color: #ffffff;
+}
+
+.chat-dark .tab-pill.active {
+  background: #0a332c;
+  color: #25d366;
+  border-color: #00a884;
+}
+
+.chat-dark .conversation-item {
+  border-bottom: 1px solid #222e35;
+}
+
+.chat-dark .conversation-item:hover {
+  background-color: #202c33;
+}
+
+.chat-dark .conversation-item.active {
+  background-color: #2a3942;
+}
+
+.chat-dark .client-name {
+  color: #e9edef !important;
+}
+
+.chat-dark .last-message {
+  color: #8696a0 !important;
+}
+
+.chat-dark .time {
+  color: #8696a0 !important;
+}
+
+.chat-dark .conversation-item.cerrado .client-name {
+  color: #8696a0 !important;
+}
+
+.chat-dark .badge-depto.ventas {
+  background: rgba(196, 125, 26, 0.18);
+  color: #fbbf24;
+  border-color: rgba(196, 125, 26, 0.45);
+}
+
+.chat-dark .badge-depto.cobranza {
+  background: rgba(25, 118, 210, 0.18);
+  color: #60a5fa;
+  border-color: rgba(25, 118, 210, 0.45);
+}
+
+.chat-dark .badge-depto.soporte {
+  background: rgba(123, 31, 162, 0.18);
+  color: #c084fc;
+  border-color: rgba(123, 31, 162, 0.45);
+}
+

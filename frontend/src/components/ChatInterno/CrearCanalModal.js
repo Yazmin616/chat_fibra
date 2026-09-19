@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { X, Lock, Shield, Crown, UserCheck } from 'lucide-react';
+import { getPresenciaInfo } from '../../utils/presenceHelper';
 
 const CrearCanalModal = ({ contactos = [], onCrear, onClose }) => {
   const [nombre, setNombre] = useState('');
@@ -204,9 +205,34 @@ const CrearCanalModal = ({ contactos = [], onCrear, onClose }) => {
                             <span style={{ fontSize: '0.85rem', fontWeight: isAdmin ? 600 : 500, color: isAdmin ? '#1e40af' : '#1e293b' }}>
                               {c.nombre}
                             </span>
-                            <span style={{ fontSize: '0.73rem', color: '#64748b' }}>
-                              {c.area || c.rol}
-                            </span>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '5px', marginTop: '1px' }}>
+                              {(() => {
+                                const pres = getPresenciaInfo(c);
+                                return (
+                                  <span
+                                    style={{
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: '3px',
+                                      padding: '0 5px',
+                                      borderRadius: '6px',
+                                      background: `${pres.color}18`,
+                                      border: `1px solid ${pres.color}40`,
+                                      color: pres.color,
+                                      fontSize: '0.66rem',
+                                      fontWeight: 600,
+                                      lineHeight: '13px'
+                                    }}
+                                  >
+                                    <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: pres.color }} />
+                                    {pres.labelConEstado}
+                                  </span>
+                                );
+                              })()}
+                              <span style={{ fontSize: '0.72rem', color: '#64748b' }}>
+                                {c.area || c.rol}
+                              </span>
+                            </div>
                           </div>
                         </div>
 

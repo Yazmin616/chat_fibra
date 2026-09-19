@@ -1,13 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { useChatInterno } from '../../hooks/useChatInterno';
+import { useChatTheme } from '../../hooks/useChatTheme';
 import ChatInternoSidebar from './ChatInternoSidebar';
 import ChatInternoWindow from './ChatInternoWindow';
 import ChatInternoDetailsPanel from './ChatInternoDetailsPanel';
-import CrearCanalModal from './CrearCanalModal';
 
 const ChatInternoView = ({ socket, user, darkMode, canalInicialId }) => {
   const [modalCrearOpen, setModalCrearOpen] = useState(false);
   const [detallesOpen, setDetallesOpen] = useState(() => typeof window !== "undefined" && window.innerWidth >= 1350);
+
+  // Hook modular de gestión de tema (claro / oscuro) sincronizado con localStorage y eventos globales
+  const { isDark, toggleTheme } = useChatTheme(darkMode);
 
   const {
     canales,
@@ -17,6 +20,7 @@ const ChatInternoView = ({ socket, user, darkMode, canalInicialId }) => {
     cargandoMensajes,
     escribiendoMap,
     seleccionarCanal,
+    deseleccionarCanal,
     abrirChatDirecto,
     crearCanal,
     eliminarCanal,
@@ -24,6 +28,11 @@ const ChatInternoView = ({ socket, user, darkMode, canalInicialId }) => {
     toggleFijarCanal,
     enviarTexto,
     enviarAdjunto,
+    enviarSticker,
+    editarMensaje,
+    toggleFijarMensaje,
+    eliminarMensaje,
+    toggleDestacarMensaje,
     toggleReaccion,
     emitTyping,
   } = useChatInterno({ socket, user, canalInicialId });
@@ -34,18 +43,49 @@ const ChatInternoView = ({ socket, user, darkMode, canalInicialId }) => {
     }
   }, [canalInicialId, seleccionarCanal]);
 
+  // Abrir canal automáticamente al hacer clic en notificación de escritorio
+  useEffect(() => {
+    const handleAbrirCanal = (e) => {
+      const cid = e.detail?.canalId;
+      if (cid) {
+        seleccionarCanal(cid);
+      }
+    };
+    window.addEventListener('sistema:abrir_canal_interno', handleAbrirCanal);
+    return () => window.removeEventListener('sistema:abrir_canal_interno', handleAbrirCanal);
+  }, [seleccionarCanal]);
+
+  // Notificar al centro de notificaciones cuál canal está actualmente abierto en pantalla
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent('chat_interno:canal_activo_changed', {
+      detail: { canalId: canalActivo?.id || null }
+    }));
+    return () => {
+      window.dispatchEvent(new CustomEvent('chat_interno:canal_activo_changed', {
+        detail: { canalId: null }
+      }));
+    };
+  }, [canalActivo?.id]);
+
   return (
-    <div className={`chat-interno-container ${darkMode ? 'chat-dark' : ''}`}>
+    <div className={`chat-interno-container ${isDark ? 'chat-dark' : ''}`}>
       {/* Columna 1: Canales y Mensajes Directos */}
       <ChatInternoSidebar
         canales={canales}
         contactos={contactos}
         canalActivo={canalActivo}
+        mensajesActivos={mensajes}
+        escribiendoMap={escribiendoMap}
         onSeleccionarCanal={seleccionarCanal}
         onAbrirDirecto={abrirChatDirecto}
         onAbrirModalCrearCanal={() => setModalCrearOpen(true)}
         onToggleFijar={toggleFijarCanal}
         userActual={user}
+        crearGrupoOpen={modalCrearOpen}
+        onCloseCrearGrupo={() => setModalCrearOpen(false)}
+        onCrearGrupo={crearCanal}
+        isDark={isDark}
+        onToggleTheme={toggleTheme}
       />
 
       {/* Columna 2: Ventana de Conversación */}
@@ -56,12 +96,20 @@ const ChatInternoView = ({ socket, user, darkMode, canalInicialId }) => {
         escribiendoMap={escribiendoMap}
         onEnviarTexto={enviarTexto}
         onEnviarAdjunto={enviarAdjunto}
+        onEnviarSticker={enviarSticker}
+        onEditarMensaje={editarMensaje}
+        onToggleFijarMensaje={toggleFijarMensaje}
+        onEliminarMensaje={eliminarMensaje}
+        onToggleDestacarMensaje={toggleDestacarMensaje}
+        onDeseleccionarCanal={deseleccionarCanal}
         onTyping={emitTyping}
         onToggleReaccion={toggleReaccion}
         onToggleDetalles={() => setDetallesOpen(prev => !prev)}
         onToggleFijar={toggleFijarCanal}
         detallesOpen={detallesOpen}
         userActual={user}
+        contactos={contactos}
+        onAbrirModalCrearCanal={() => setModalCrearOpen(true)}
       />
 
       {/* Columna 3: Panel de Información, Miembros y Archivos Compartidos (Slack/Teams) */}
@@ -73,15 +121,6 @@ const ChatInternoView = ({ socket, user, darkMode, canalInicialId }) => {
           userActual={user}
           onEliminarCanal={eliminarCanal}
           onOcultarConversacion={ocultarConversacion}
-        />
-      )}
-
-      {/* Modal para Crear Canal */}
-      {modalCrearOpen && (
-        <CrearCanalModal
-          contactos={contactos}
-          onCrear={crearCanal}
-          onClose={() => setModalCrearOpen(false)}
         />
       )}
     </div>

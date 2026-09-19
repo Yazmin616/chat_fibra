@@ -19,6 +19,30 @@ const state = {
   activeAgents: new Set()
 };
 
+// Sincronizar agentes online desde la BD (solo aquellos con actividad reciente dentro de los últimos 3 minutos)
+const syncActiveAgentsFromDB = async () => {
+  try {
+    const db = require('../config/db');
+    // Marcar offline a cualquier agente cuya sesión anterior quedó abandonada sin logout
+    await db.query(`
+      UPDATE agentes 
+      SET esta_online = false 
+      WHERE esta_online = true 
+        AND (last_seen IS NULL OR last_seen < NOW() - INTERVAL '3 minutes')
+    `);
+    const { rows } = await db.query(`
+      SELECT id FROM agentes 
+      WHERE esta_online = true 
+        AND last_seen >= NOW() - INTERVAL '3 minutes'
+    `);
+    state.activeAgents.clear();
+    rows.forEach(r => state.activeAgents.add(Number(r.id)));
+  } catch (err) {
+    setTimeout(syncActiveAgentsFromDB, 3000);
+  }
+};
+setTimeout(syncActiveAgentsFromDB, 1500);
+
 const CONFIG = {
   INTERVAL_MS: 5000,
   MAX_RETRIES: 3,
@@ -28,8 +52,8 @@ const CONFIG = {
 // ---------------------------------------------------------
 // Control en caliente (Habilitar/Deshabilitar)
 // ---------------------------------------------------------
-const setAgentOnline = (id) => state.activeAgents.add(Number(id));
-const setAgentOffline = (id) => state.activeAgents.delete(Number(id));
+const setAgentOnline = (id) => { if (id) state.activeAgents.add(Number(id)); };
+const setAgentOffline = (id) => { if (id) state.activeAgents.delete(Number(id)); };
 
 const enableMetaPolling = () => {
   if (state.meta.enabled) return;

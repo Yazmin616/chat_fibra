@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { apiService } from '../services/api';
-import { MessageSquare, Users, AlertTriangle, LayoutDashboard, Key, Settings, Tags, FileText, Shield, BarChart2, ClipboardList, Megaphone } from 'lucide-react';
+import { MessageSquare, Users, AlertTriangle, LayoutDashboard, Key, Settings, Tags, FileText, Shield, BarChart2, ClipboardList, Megaphone, Wrench } from 'lucide-react';
 
 // ── Catálogo de módulos (espejo del backend) ──────────────────────────────────
 export const MODULOS = [
@@ -17,6 +17,7 @@ export const MODULOS = [
   { id: 'etiquetas',     nombre: 'Etiquetas',          desc: 'Catálogo de etiquetas para conversaciones',     icono: Tags },
   { id: 'notas_cierre',  nombre: 'Notas de Cierre',    desc: 'Categorías de cierre de conversaciones',        icono: FileText },
   { id: 'equipos',       nombre: 'Equipos',            desc: 'Gestión de equipos y coordinadores de área',    icono: Shield },
+  { id: 'tickets',       nombre: 'Tickets / Soporte TI', desc: 'Levantar y consultar solicitudes de soporte y tareas TI', icono: Wrench },
 ];
 
 export const EMPRESAS_DEF = [
@@ -101,12 +102,12 @@ export function usePermisos(user, socket) {
   /** ¿Tiene acceso al módulo? Admin siempre sí. Coordinadores ven nps, soluciones y configuracion. */
   const hasModulo = useCallback((mod) => {
     if (user?.rol === 'admin') return true;
-    // Todos los colaboradores y agentes tienen acceso al mural corporativo de avisos
-    if (mod === 'comunicados') return true;
+    // Todos los colaboradores y agentes tienen acceso al mural corporativo de avisos y a soporte del sistema
+    if (mod === 'comunicados' || mod === 'tickets' || mod === 'soporte_sistema') return true;
     // Colaboradores (chat interno) nunca deben ver soluciones
     if (user?.rol === 'colaborador' && (mod === 'soluciones' || mod === 'nps')) return false;
-    // Coordinadores siempre ven sus módulos de staff y su panel de configuración
-    if ((mod === 'nps' || mod === 'soluciones' || mod === 'configuracion') && esCoordinador) return true;
+    // Coordinadores siempre ven sus módulos de staff, su panel de configuración y su equipo
+    if ((mod === 'nps' || mod === 'soluciones' || mod === 'configuracion' || mod === 'equipos') && esCoordinador) return true;
     // Asesores de atención a clientes ven sus soluciones si tienen asignado el chat o módulo soluciones
     if (mod === 'soluciones' && user?.rol === 'asesor' && (permisos?.modulos?.includes('chat') || permisos?.modulos?.includes('soluciones'))) return true;
     if (!permisos) return false;

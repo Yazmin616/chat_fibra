@@ -6,12 +6,17 @@ import { useAgentes }    from '../../hooks/useAgentes';
 import AgentForm         from '../Agents/AgentForm';
 import AgentCard         from '../Agents/AgentCard';
 import PermisosEditor    from '../Agents/PermisosEditor';
+import ResetTemporalModal from '../Agents/ResetTemporalModal';
+import CredencialesModal from '../Agents/CredencialesModal';
+import { AREAS_DEF } from '../../hooks/usePermisos';
 
 const AgentManagementView = ({ user, actualizarUsuario }) => {
   const { agentes, loading, crearAgente, editarAgente, eliminarAgente } = useAgentes();
-  const [creando,        setCreando]        = useState(false);
-  const [editandoAgente, setEditandoAgente] = useState(null);
-  const [tabActivo,      setTabActivo]      = useState('datos'); // 'datos' | 'permisos'
+  const [creando,             setCreando]             = useState(false);
+  const [agenteRecienCreado,  setAgenteRecienCreado]  = useState(null);
+  const [editandoAgente,      setEditandoAgente]      = useState(null);
+  const [tabActivo,           setTabActivo]           = useState('datos'); // 'datos' | 'permisos'
+  const [agenteParaReset,     setAgenteParaReset]     = useState(null);
 
   // Filtros y Buscador
   const [search, setSearch] = useState('');
@@ -29,15 +34,42 @@ const AgentManagementView = ({ user, actualizarUsuario }) => {
     setTabActivo('datos');
   };
 
+  const handleCrearAgente = async (formData) => {
+    const res = await crearAgente(formData);
+    setCreando(false);
+    const pass = res?.temporal_password || formData.password;
+    if (pass) {
+      setAgenteRecienCreado({
+        ...(res || {}),
+        nombre: formData.nombre,
+        usuario: formData.usuario,
+        temporal_password: pass,
+      });
+    }
+  };
+
   const handleGuardarEdicion = async (formData) => {
     await editarAgente(editandoAgente.id, formData);
     if (user && actualizarUsuario && editandoAgente.id === user.id) {
       actualizarUsuario({ nombre: formData.nombre, email: formData.email, rol: formData.rol, area: formData.area });
     }
+    handleCerrarEdicion();
   };
 
-  // Filtrado de la lista de agentes
-  const filteredAgentes = agentes.filter(agente => {
+  // Filtrado de la lista de agentes con sincronización del usuario actual
+  const filteredAgentes = agentes.map(agente => {
+    const esUsuarioActual = user && Number(user.id) === Number(agente.id);
+    if (esUsuarioActual) {
+      const estadoLocal = localStorage.getItem('agente_estado_presencia') || user.estado_presencia || agente.estado_presencia || 'disponible';
+      return {
+        ...agente,
+        esta_online: true,
+        estado_presencia: estadoLocal,
+        last_seen: new Date().toISOString()
+      };
+    }
+    return agente;
+  }).filter(agente => {
     const matchesSearch = 
       (agente.nombre || '').toLowerCase().includes(search.toLowerCase()) ||
       (agente.email || '').toLowerCase().includes(search.toLowerCase());
@@ -101,10 +133,9 @@ const AgentManagementView = ({ user, actualizarUsuario }) => {
           <label>Área</label>
           <select value={areaFiltro} onChange={(e) => setAreaFiltro(e.target.value)}>
             <option value="todas">Todas las áreas</option>
-            <option value="General">General</option>
-            <option value="Soporte Técnico">Soporte Técnico</option>
-            <option value="Ventas">Ventas</option>
-            <option value="Cobranza">Cobranza</option>
+            {AREAS_DEF.map(a => (
+              <option key={a} value={a}>{a}</option>
+            ))}
           </select>
         </div>
 
@@ -126,8 +157,10 @@ const AgentManagementView = ({ user, actualizarUsuario }) => {
             <AgentCard
               key={agente.id}
               agente={agente}
+              currentUser={user}
               onEditar={handleEditar}
               onEliminar={eliminarAgente}
+              onResetPassword={setAgenteParaReset}
             />
           ))}
           {filteredAgentes.length === 0 && (
@@ -156,12 +189,20 @@ const AgentManagementView = ({ user, actualizarUsuario }) => {
             </div>
             <div className="agent-edit-modal-body">
               <AgentForm
-                onSubmit={crearAgente}
+                onSubmit={handleCrearAgente}
                 onClose={() => setCreando(false)}
               />
             </div>
           </div>
         </div>
+      )}
+
+      {/* Modal de confirmación con credenciales generadas para el nuevo agente */}
+      {agenteRecienCreado && (
+        <CredencialesModal
+          agente={agenteRecienCreado}
+          onClose={() => setAgenteRecienCreado(null)}
+        />
       )}
 
       {/* Modal de edición con tabs Datos / Permisos */}
@@ -212,6 +253,17 @@ const AgentManagementView = ({ user, actualizarUsuario }) => {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Modal de generación de contraseña temporal */}
+      {agenteParaReset && (
+        <ResetTemporalModal
+          agente={agenteParaReset}
+          onClose={() => setAgenteParaReset(null)}
+          onPasswordReset={() => {
+            // Actualizar estado local si es necesario
+          }}
+        />
       )}
     </div>
   );

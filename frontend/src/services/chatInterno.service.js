@@ -47,16 +47,47 @@ export const chatInternoService = {
     return _parseJson(res);
   },
 
-  async crearCanal({ nombre, descripcion, esPrivado, soloLectura, miembroIds, adminIds }) {
+  async crearCanal(payload) {
+    if (payload instanceof FormData) {
+      const token = localStorage.getItem('agente_token') || '';
+      const res = await fetch(`${API_URL}/chat-interno/canales`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+        body: payload,
+      });
+      return _parseJson(res);
+    }
     const res = await fetch(`${API_URL}/chat-interno/canales`, {
       method: 'POST',
       headers: _authHeaders(),
-      body: JSON.stringify({ nombre, descripcion, esPrivado, soloLectura, miembroIds, adminIds }),
+      body: JSON.stringify(payload),
     });
     return _parseJson(res);
   },
 
-    async eliminarCanal(canalId) {
+  async actualizarCanal(canalId, payload) {
+    const token = localStorage.getItem('agente_token') || '';
+    if (payload instanceof FormData) {
+      const res = await fetch(`${API_URL}/chat-interno/canales/${canalId}`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+        body: payload,
+      });
+      return _parseJson(res);
+    }
+    const res = await fetch(`${API_URL}/chat-interno/canales/${canalId}`, {
+      method: 'PUT',
+      headers: _authHeaders(),
+      body: JSON.stringify(payload),
+    });
+    return _parseJson(res);
+  },
+
+  async eliminarCanal(canalId) {
     const res = await fetch(`${API_URL}/chat-interno/canales/${canalId}`, {
       method: 'DELETE',
       headers: _authHeaders(),
@@ -92,10 +123,11 @@ export const chatInternoService = {
     return _parseJson(res);
   },
 
-  async enviarMensajeAdjunto(canalId, file, mensaje = '') {
+  async enviarMensajeAdjunto(canalId, file, mensaje = '', tipo = null) {
     const formData = new FormData();
     formData.append('adjunto', file);
     if (mensaje) formData.append('mensaje', mensaje);
+    if (tipo) formData.append('tipo', tipo);
 
     const token = localStorage.getItem('agente_token') || '';
     const res = await fetch(`${API_URL}/chat-interno/canales/${canalId}/mensajes`, {
@@ -104,6 +136,23 @@ export const chatInternoService = {
         'Authorization': `Bearer ${token}`,
       },
       body: formData,
+    });
+    return _parseJson(res);
+  },
+
+  async enviarSticker(canalId, stickerUrl) {
+    const token = localStorage.getItem('agente_token') || '';
+    const res = await fetch(`${API_URL}/chat-interno/canales/${canalId}/mensajes`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        tipo: 'sticker',
+        url_adjunto: stickerUrl,
+        nombre_adjunto: 'sticker.webp'
+      }),
     });
     return _parseJson(res);
   },
@@ -162,6 +211,47 @@ export const chatInternoService = {
   async toggleFijarCanal(canalId) {
     const res = await fetch(`${API_URL}/chat-interno/canales/${canalId}/fijar`, {
       method: 'POST',
+      headers: _authHeaders(),
+    });
+    return _parseJson(res);
+  },
+
+  async editarMensaje(mensajeId, nuevoTexto) {
+    const res = await fetch(`${API_URL}/chat-interno/mensajes/${mensajeId}`, {
+      method: 'PUT',
+      headers: _authHeaders(),
+      body: JSON.stringify({ mensaje: nuevoTexto }),
+    });
+    return _parseJson(res);
+  },
+
+  async toggleFijarMensaje(mensajeId, duracion = '7d') {
+    const res = await fetch(`${API_URL}/chat-interno/mensajes/${mensajeId}/fijar`, {
+      method: 'POST',
+      headers: { ..._authHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ duracion }),
+    });
+    return _parseJson(res);
+  },
+
+  async eliminarMensaje(mensajeId) {
+    const res = await fetch(`${API_URL}/chat-interno/mensajes/${mensajeId}`, {
+      method: 'DELETE',
+      headers: _authHeaders(),
+    });
+    return _parseJson(res);
+  },
+
+  async toggleDestacarMensaje(mensajeId) {
+    const res = await fetch(`${API_URL}/chat-interno/mensajes/${mensajeId}/destacar`, {
+      method: 'POST',
+      headers: _authHeaders(),
+    });
+    return _parseJson(res);
+  },
+
+  async getMensajesDestacados(canalId) {
+    const res = await fetch(`${API_URL}/chat-interno/canales/${canalId}/destacados`, {
       headers: _authHeaders(),
     });
     return _parseJson(res);

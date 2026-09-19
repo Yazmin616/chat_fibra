@@ -55,10 +55,12 @@ import FlowEditorView     from './components/FlowEditor/FlowEditorView';
 import CerrarChatModal     from './components/Chat/CerrarChatModal';
 import TransferModal       from './components/Chat/TransferModal';
 import Login               from './components/Auth/Login';
+import CambiarPasswordPrimerLogin from './components/Auth/CambiarPasswordPrimerLogin';
 import TIPanel             from './components/TI/TIPanel';
 import EquiposView         from './components/Equipos/EquiposView';
 import ChatInternoView     from './components/ChatInterno/ChatInternoView';
 import MuralComunicadosView from './components/Comunicados/MuralComunicadosView';
+import TicketsView         from './components/TI/Tickets/TicketsView';
 import LogoutModal         from './components/Layout/LogoutModal';
 import { useNotificacionesCenter } from './hooks/useNotificacionesCenter';
 import FloatingMessengerDock from './components/Messenger/FloatingMessengerDock';
@@ -117,10 +119,15 @@ function App() {
   const {
     notificaciones,
     unreadCount: notifUnreadCount,
+    unreadChatInterno,
     marcarLeida: notifMarcarLeida,
     marcarTodasLeidas: notifMarcarTodasLeidas,
     eliminarNotificacion: notifEliminar,
     limpiarTodas: notifLimpiarTodas,
+    floatingChats,
+    abrirFloatingChat,
+    minimizarFloatingChat,
+    cerrarFloatingChat,
     miniChat,
     minimizarMiniChat,
     cerrarMiniChat,
@@ -130,6 +137,32 @@ function App() {
   const [transferModalId,   setTransferModalId]   = useState(null);
   const [showLogoutModal,   setShowLogoutModal]   = useState(false);
   const [darkMode,          setDarkMode]          = useState(() => localStorage.getItem('app_theme') === 'dark');
+
+  // Sincronizar tema claro / oscuro en tiempo real cuando se alterne desde TopBar o Chat Interno
+  useEffect(() => {
+    const handleThemeChanged = (e) => {
+      if (e.detail && typeof e.detail.isDark === 'boolean') {
+        setDarkMode(e.detail.isDark);
+      }
+    };
+    window.addEventListener('sistema:theme_changed', handleThemeChanged);
+    return () => window.removeEventListener('sistema:theme_changed', handleThemeChanged);
+  }, []);
+
+  // El modo oscuro solo aplica para los chats (Chat Clientes y Chat Interno), el resto de módulos se mantiene en claro
+  const esVistaChat = currentView === 'chat' || currentView === 'chat-interno';
+  const chatDarkModeActivo = Boolean(darkMode && esVistaChat);
+
+  useEffect(() => {
+    if (chatDarkModeActivo) {
+      document.body.classList.add('chat-dark');
+    } else {
+      document.body.classList.remove('chat-dark');
+    }
+    return () => {
+      document.body.classList.remove('chat-dark');
+    };
+  }, [chatDarkModeActivo]);
 
   // Empresa activa: usada solo como filtro visual y para configuración.
   // 'todas' por defecto para que el agente vea todo desde el primer momento.
@@ -281,10 +314,34 @@ function App() {
     return () => socket.off('connect', joinRoom);
   }, [user]);
 
+  // Reenviar eventos de presencia de socket a nivel global de la app
+  useEffect(() => {
+    const handleOnline = (data) => {
+      window.dispatchEvent(new CustomEvent('agente:socket_online', { detail: data }));
+    };
+    const handleOffline = (data) => {
+      window.dispatchEvent(new CustomEvent('agente:socket_offline', { detail: data }));
+    };
+    const handlePresencia = (data) => {
+      window.dispatchEvent(new CustomEvent('agente:socket_presencia', { detail: data }));
+    };
+
+    socket.on('agente:online', handleOnline);
+    socket.on('agente:offline', handleOffline);
+    socket.on('agente:presencia_cambiada', handlePresencia);
+
+    return () => {
+      socket.off('agente:online', handleOnline);
+      socket.off('agente:offline', handleOffline);
+      socket.off('agente:presencia_cambiada', handlePresencia);
+    };
+  }, []);
+
   
   // Redirección inteligente si el usuario solo tiene acceso al Chat Interno o módulos específicos
   useEffect(() => {
     if (!user || user.rol === 'admin') return;
+    if (currentView === 'tickets') return; // Soporte del sistema / tickets está disponible para todos
     const modMap = {
       'comunicados': 'comunicados',
       'chat-interno': 'chat_interno',
@@ -299,7 +356,8 @@ function App() {
       'flow-editor': 'flujo_bot',
       'agents': 'usuarios',
       'equipos': 'equipos',
-      'config': 'configuracion'
+      'config': 'configuracion',
+      'tickets': 'tickets'
     };
 
     const modActual = modMap[currentView] || currentView;
@@ -347,6 +405,17 @@ function App() {
       localStorage.setItem('app_theme', darkMode ? 'dark' : 'light');
     }
   }, [darkMode, user]);
+
+  // Cambiar a vista de Chat Interno al hacer clic en notificación del sistema
+  useEffect(() => {
+    const handleAbrir = (e) => {
+      if (e.detail?.canalId) {
+        setCurrentView('chat-interno');
+      }
+    };
+    window.addEventListener('sistema:abrir_canal_interno', handleAbrir);
+    return () => window.removeEventListener('sistema:abrir_canal_interno', handleAbrir);
+  }, []);
 
   // Cerrar chat activo al presionar Escape
   useEffect(() => {
@@ -400,12 +469,23 @@ function App() {
   //   4. Filtro de pestaña activa (Todos / Mis Asignados)
   // ─────────────────────────────────────────────
   const conversacionesFiltradas = conversaciones.filter(c => {
-    // 1. Búsqueda
-    const search = busqueda.toLowerCase();
+    // 1. Búsqueda exhaustiva (nombre, username, teléfono, mensaje reciente, área o agente)
+    const search = busqueda.toLowerCase().trim();
     if (search) {
+      const searchDigits = search.replace(/\D/g, '');
+      const telDigits = (c.telefono || c.external_id || '').replace(/\D/g, '');
+      const matchPhoneDigits = searchDigits.length >= 3 && telDigits.includes(searchDigits);
+
       const matchNombre   = (c.nombre   || '').toLowerCase().includes(search);
       const matchUsername = (c.username || '').toLowerCase().includes(search);
-      if (!matchNombre && !matchUsername) return false;
+      const matchTelefono = (c.telefono || c.external_id || '').toLowerCase().includes(search);
+      const matchMensaje  = (c.ultimo_mensaje || '').toLowerCase().includes(search);
+      const matchDepto    = (c.departamento || '').toLowerCase().includes(search);
+      const matchAgente   = (c.agente_nombre || '').toLowerCase().includes(search);
+
+      if (!matchNombre && !matchUsername && !matchTelefono && !matchPhoneDigits && !matchMensaje && !matchDepto && !matchAgente) {
+        return false;
+      }
     }
 
     // 2. Excluir flujo de menú del bot
@@ -476,18 +556,30 @@ function App() {
     if (window.confirm('¿Eliminar permanentemente?')) await eliminarChat(id);
   };
 
-  const handleEnviarMensaje = async () => {
-    if (!texto) return;
-    const msg = texto;
-    setTexto('');
+  const handleEnviarMensaje = async (textoDirecto) => {
+    const raw = typeof textoDirecto === 'string' ? textoDirecto : texto;
+    if (!raw || !raw.trim()) return;
+    const msg = raw.trim();
+    if (typeof textoDirecto !== 'string') {
+      setTexto('');
+    }
     await enviarMensaje(msg);
   };
 
   // ─────────────────────────────────────────────
   // Render
   // ─────────────────────────────────────────────
-  if (!user)             return <Login onLoginSuccess={login} />;
-  if (user.rol === 'ti') return <TIPanel user={user} logout={logout} />;
+  if (!user) return <Login onLoginSuccess={login} />;
+  if (user.debe_cambiar_password) {
+    return (
+      <CambiarPasswordPrimerLogin 
+        user={user} 
+        onSuccess={(updated) => actualizarUsuario(updated)} 
+        onLogout={logout} 
+      />
+    );
+  }
+  if (user.rol === 'ti') return <TIPanel user={user} logout={logout} socket={socket} />;
 
   // Pantalla de mantenimiento para admin/asesor mientras TI trabaja
   if (mantenimiento) {
@@ -513,6 +605,7 @@ function App() {
         user={user}
         onLogout={() => setShowLogoutModal(true)}
         totalNoLeidos={totalNoLeidos}
+        totalChatInterno={unreadChatInterno}
         totalInfracciones={totalInfracciones}
         hasModulo={hasModulo}
         esCoordinador={esCoordinador}
@@ -542,7 +635,7 @@ function App() {
             setCurrentView('chat-interno');
           }}
         />
-        <div className={`main-content${conversacionActiva ? ' has-active-chat' : ''}${darkMode && currentView === 'chat' ? ' chat-dark' : ''}`}>
+        <div className={`main-content${conversacionActiva ? ' has-active-chat' : ''}${chatDarkModeActivo ? ' chat-dark' : ''}${user && currentView !== 'chat-interno' && floatingChats && floatingChats.length > 0 ? ' has-floating-rail' : ''}`}>
 
           {currentView === 'chat' && (
             <>
@@ -649,7 +742,15 @@ function App() {
             <ChatInternoView socket={socket} user={user} darkMode={darkMode} canalInicialId={canalInternoActivoId} />
           )}
 
-          {!['chat','chat-interno','comunicados','agents','config','dashboard','nps','soluciones','contactos','infracciones','etiquetas','categorias-cierre','flow-editor','equipos'].includes(currentView) && (
+          {currentView === 'tickets' && (
+            <div style={{ flex: 1, overflowY: 'auto', padding: '24px 28px', background: '#f8fafc', height: '100%', boxSizing: 'border-box' }}>
+              <div style={{ maxWidth: 1200, margin: '0 auto' }}>
+                <TicketsView user={user} socket={socket} />
+              </div>
+            </div>
+          )}
+
+          {!['chat','chat-interno','comunicados','agents','config','dashboard','nps','soluciones','contactos','infracciones','etiquetas','categorias-cierre','flow-editor','equipos','tickets'].includes(currentView) && (
             <div className="empty-chat">
               <div className="empty-content"><h2>Próximamente</h2></div>
             </div>
@@ -692,6 +793,14 @@ function App() {
       {/* Ventana Flotante Estilo Facebook Messenger */}
       {user && currentView !== 'chat-interno' && (
         <FloatingMessengerDock
+          floatingChats={floatingChats}
+          onAbrirChat={abrirFloatingChat}
+          onMinimizeChat={minimizarFloatingChat}
+          onCloseChat={cerrarFloatingChat}
+          onExpandChat={(canalId) => {
+            if (canalId) setCanalInternoActivoId(canalId);
+            setCurrentView('chat-interno');
+          }}
           miniChat={miniChat}
           onClose={cerrarMiniChat}
           onMinimize={minimizarMiniChat}

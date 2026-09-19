@@ -1741,24 +1741,25 @@
 .pe-log-admin { font-weight: 600; color: var(--text-primary, #374151); }
 
 /* Agent modal tabs */
-.agent-edit-modal--wide { max-width: 640px; width: 100%; }
+.agent-edit-modal--wide { max-width: 820px; width: 95vw; }
 .agent-edit-tabs {
   display: flex; border-bottom: 1px solid var(--border, #e5e7eb);
-  padding: 0 16px; gap: 4px;
+  padding: 0 20px; gap: 6px; background: #f8fafc; flex-shrink: 0;
 }
 .agent-edit-tab {
   display: flex; align-items: center; gap: 6px;
-  padding: 10px 14px; border: none; background: none;
+  padding: 11px 16px; border: none; background: none;
   font-size: 13px; font-weight: 600; color: var(--text-secondary, #6b7280);
   cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px;
   transition: color 0.15s, border-color 0.15s;
 }
 .agent-edit-tab:hover { color: var(--text-primary, #111); }
-.agent-edit-tab--active { color: #6366f1; border-bottom-color: #6366f1; }
+.agent-edit-tab--active { color: #dc2626; border-bottom-color: #dc2626; }
 
-/* Ajuste: el modal de permisos puede ser scrollable */
+/* Ajuste: el modal de permisos fluye dentro del flex del modal */
 .agent-edit-modal--wide .agent-edit-modal-body {
-  max-height: 70vh; overflow-y: auto;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 /* ══════════════════════════════════════════════

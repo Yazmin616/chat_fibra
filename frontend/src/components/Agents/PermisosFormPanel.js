@@ -46,7 +46,7 @@ const PermisosFormPanel = ({ form }) => {
   } = form;
 
   return (
-    <div className="pe-root">
+    <div className="pe-root" style={{ maxWidth: '100%', overflowX: 'hidden', boxSizing: 'border-box' }}>
 
       {/* ── EMPRESAS ───────────────────────────────────────────────────────── */}
       <div className="pe-section">
@@ -114,7 +114,7 @@ const PermisosFormPanel = ({ form }) => {
           title="Módulos del sistema"
           subtitle="¿A qué secciones puede acceder?"
         />
-        <div className="pe-modulos-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '12px' }}>
+        <div className="pe-modulos-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(170px, 100%), 1fr))', gap: '10px', maxWidth: '100%', boxSizing: 'border-box' }}>
           {MODULOS.map(mod => {
             const Icono = mod.icono;
             const isChecked = modulos.includes(mod.id);

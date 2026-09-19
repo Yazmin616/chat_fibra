@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { BellOff, CheckCheck, Trash2, MessageSquare, ShieldAlert, X, Hash } from 'lucide-react';
 import { resolveAvatar } from '../../services/api';
 
@@ -27,7 +27,19 @@ const NotificationDropdown = ({
   onLimpiarTodas,
   onSelectNotificacion,
 }) => {
-  const unreadCount = notificaciones.filter(n => !n.leida).length;
+  // Deduplicar estrictamente por canalId para evitar entradas duplicadas en UI
+  const notificacionesUnicas = useMemo(() => {
+    const seenCanalIds = new Set();
+    return notificaciones.filter(n => {
+      if (!n.canalId) return true;
+      const cid = Number(n.canalId);
+      if (seenCanalIds.has(cid)) return false;
+      seenCanalIds.add(cid);
+      return true;
+    });
+  }, [notificaciones]);
+
+  const unreadCount = notificacionesUnicas.filter(n => !n.leida).length;
 
   return (
     <div className="fb-notif-dropdown" onClick={(e) => e.stopPropagation()}>
@@ -35,7 +47,7 @@ const NotificationDropdown = ({
       <div className="fb-notif-header">
         <div className="fb-notif-title-wrap">
           <h3 className="fb-notif-title">Notificaciones</h3>
-          {unreadCount > 0 && <span className="fb-notif-unread-count">{unreadCount} nuevas</span>}
+          {unreadCount > 0 && <span className="fb-notif-unread-count">{unreadCount} {unreadCount === 1 ? 'nueva' : 'nuevas'}</span>}
         </div>
 
         <div className="fb-notif-actions">
@@ -50,7 +62,7 @@ const NotificationDropdown = ({
             </button>
           )}
 
-          {notificaciones.length > 0 && (
+          {notificacionesUnicas.length > 0 && (
             <button
               className="fb-notif-action-btn"
               onClick={onLimpiarTodas}
@@ -64,51 +76,54 @@ const NotificationDropdown = ({
 
       {/* Lista de Notificaciones */}
       <div className="fb-notif-list">
-        {notificaciones.length === 0 ? (
+        {notificacionesUnicas.length === 0 ? (
           <div className="fb-notif-empty">
             <BellOff size={36} color="#94a3b8" />
             <p>No tienes notificaciones por el momento.</p>
           </div>
         ) : (
-          notificaciones.map((notif) => (
-            <div
-              key={notif.id}
-              className={`fb-notif-item ${!notif.leida ? 'unread' : ''}`}
-              onClick={() => {
-                onMarcarLeida(notif.id);
-                if (onSelectNotificacion) {
-                  onSelectNotificacion(notif);
-                }
-              }}
-            >
-              {/* Avatar con badge flotante de tipo de evento */}
-              <div className="fb-notif-avatar-wrap">
-                {notif.emisor_foto ? (
-                  <img
-                    src={resolveAvatar(notif.emisor_foto)}
-                    alt={notif.titulo}
-                    className="fb-notif-avatar"
-                  />
-                ) : (
-                  <div className={`fb-notif-avatar-placeholder ${notif.canalTipo === 'canal' || notif.titulo?.startsWith('#') ? 'channel-bg' : ''}`}>
-                    {notif.canalTipo === 'canal' || notif.titulo?.startsWith('#') ? (
-                      <Hash size={20} color="#fff" />
+          notificacionesUnicas.map((notif) => {
+            const esCanal = notif.canalTipo === 'canal' || (notif.canalTipo !== 'directo' && notif.titulo?.startsWith('#'));
+
+            return (
+              <div
+                key={notif.id}
+                className={`fb-notif-item ${!notif.leida ? 'unread' : ''}`}
+                onClick={() => {
+                  onMarcarLeida(notif.id);
+                  if (onSelectNotificacion) {
+                    onSelectNotificacion(notif);
+                  }
+                }}
+              >
+                {/* Avatar con badge flotante de tipo de evento */}
+                <div className="fb-notif-avatar-wrap">
+                  {notif.emisor_foto ? (
+                    <img
+                      src={resolveAvatar(notif.emisor_foto)}
+                      alt={notif.titulo}
+                      className="fb-notif-avatar"
+                    />
+                  ) : (
+                    <div className={`fb-notif-avatar-placeholder ${esCanal ? 'channel-bg' : 'user-bg'}`}>
+                      {esCanal ? (
+                        <Hash size={20} color="#fff" />
+                      ) : (
+                        (notif.titulo?.charAt(0) || 'U').toUpperCase()
+                      )}
+                    </div>
+                  )}
+
+                  <div className={`fb-notif-badge-icon ${notif.tipo || 'mensaje'}`}>
+                    {notif.tipo === 'miembro_removido' || notif.tipo === 'canal_cerrado' ? (
+                      <ShieldAlert size={10} color="#fff" />
+                    ) : esCanal ? (
+                      <Hash size={10} color="#fff" />
                     ) : (
-                      (notif.titulo?.charAt(0) || 'U').toUpperCase()
+                      <MessageSquare size={10} color="#fff" />
                     )}
                   </div>
-                )}
-
-                <div className={`fb-notif-badge-icon ${notif.tipo || 'mensaje'}`}>
-                  {notif.tipo === 'miembro_removido' || notif.tipo === 'canal_cerrado' ? (
-                    <ShieldAlert size={10} color="#fff" />
-                  ) : notif.canalTipo === 'canal' || notif.titulo?.startsWith('#') ? (
-                    <Hash size={10} color="#fff" />
-                  ) : (
-                    <MessageSquare size={10} color="#fff" />
-                  )}
                 </div>
-              </div>
 
               {/* Contenido */}
               <div className="fb-notif-content">
@@ -145,7 +160,8 @@ const NotificationDropdown = ({
                 </button>
               </div>
             </div>
-          ))
+          );
+        })
         )}
       </div>
     </div>

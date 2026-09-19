@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { User, Zap, Trash2, Send, MessageCircle, Activity, Info, X, ArrowLeft, Smile, Check, CheckCheck, ArrowRightLeft, CheckCircle2, BookOpen, Briefcase, DollarSign, Wrench, Clock } from 'lucide-react';
+import { User, Zap, Trash2, Send, MessageCircle, Activity, Info, X, ArrowLeft, Smile, Check, CheckCheck, ArrowRightLeft, CheckCircle2, BookOpen, Briefcase, DollarSign, Wrench, Clock, Search, Lock, Copy, ChevronDown } from 'lucide-react';
 import Picker from '@emoji-mart/react';
-import data from '@emoji-mart/data';
+import data from '@emoji-mart/data/sets/15/apple.json';
 import { apiService, resolveMedia } from '../../services/api';
 import { formatMsgTime, formatDaySeparator, isSameDay } from '../../utils/formatDate';
 import MediaUpload from './MediaUpload';
@@ -12,36 +12,161 @@ import QuickRepliesModal from './QuickRepliesModal';
 import StickerPicker from './StickerPicker';
 import TransferLogPanel from '../Transferencias/TransferLogPanel';
 import EtiquetasPicker from './EtiquetasPicker';
+import PasteTableModal from './PasteTableModal';
+import { isTableClipboardData, processClipboardTable, isTableText, extractTSVForExcel } from '../../utils/excelTableHelper';
+import {
+  renderContentWithAppleEmojis,
+  countOnlyEmojis,
+  textToAppleEmojiHtml,
+  insertEmojiAtCursor,
+  extractTextFromContentEditable,
+} from '../../utils/appleEmojiHelper';
 import '../../styles/media-upload.css';
 import '../../styles/quick-replies.css';
 
 /** Convierte URLs en el texto en elementos <a> clicables */
 const URL_REGEX = /(https?:\/\/[^\s<>"']+)/gi;
 
-function formatWhatsAppStyle(texto) {
+function formatInlineStyles(texto) {
   if (typeof texto !== 'string') return texto;
-  const regex = /(\*[^*]+\*|_[^_]+_)/g;
+  const regex = /(`[^`\n]+`|\*[^*\n]+\*|_[^_\n]+_|~[^~\n]+~)/g;
   const partes = texto.split(regex);
   return partes.map((parte, i) => {
+    if (parte.startsWith('`') && parte.endsWith('`')) {
+      return (
+        <code
+          key={i}
+          style={{
+            fontFamily: 'Consolas, Monaco, "Courier New", monospace',
+            fontSize: '90%',
+            padding: '1px 4px',
+            borderRadius: '4px',
+            backgroundColor: 'rgba(0,0,0,0.08)'
+          }}
+        >
+          {parte.slice(1, -1)}
+        </code>
+      );
+    }
     if (parte.startsWith('*') && parte.endsWith('*')) {
-      return <strong key={i}>{parte.slice(1, -1)}</strong>;
+      return <strong key={i}>{renderContentWithAppleEmojis(parte.slice(1, -1))}</strong>;
     }
     if (parte.startsWith('_') && parte.endsWith('_')) {
-      return <em key={i}>{parte.slice(1, -1)}</em>;
+      return <em key={i}>{renderContentWithAppleEmojis(parte.slice(1, -1))}</em>;
     }
-    return parte;
+    if (parte.startsWith('~') && parte.endsWith('~')) {
+      return <del key={i}>{renderContentWithAppleEmojis(parte.slice(1, -1))}</del>;
+    }
+    return <React.Fragment key={i}>{renderContentWithAppleEmojis(parte)}</React.Fragment>;
   });
 }
 
-function renderTexto(texto) {
+function formatWhatsAppStyle(texto, isDarkMode = false) {
+  if (typeof texto !== 'string') return texto;
+
+  // Si contiene bloques de código multilínea tipo ``` ... ``` (como la cuadrícula visual de Excel)
+  if (texto.includes('```')) {
+    const codeBlocks = texto.split(/(```[\s\S]*?```)/g);
+    return codeBlocks.map((block, idx) => {
+      if (block.startsWith('```') && block.endsWith('```')) {
+        const rawCode = block.slice(3, -3);
+        const cleanCode = rawCode.replace(/^\n/, '').replace(/\n$/, '');
+        return (
+          <pre
+            key={`code-block-${idx}`}
+            className="wa-code-block"
+            style={{
+              margin: '4px 0',
+              padding: '6px 8px',
+              borderRadius: '6px',
+              fontFamily: 'Consolas, Monaco, "Courier New", monospace',
+              fontSize: '12px',
+              lineHeight: '1.4',
+              overflowX: 'auto',
+              backgroundColor: isDarkMode ? 'rgba(0, 0, 0, 0.35)' : 'rgba(0, 0, 0, 0.05)',
+              border: isDarkMode ? '1px solid rgba(255, 255, 255, 0.1)' : '1px solid rgba(0, 0, 0, 0.08)',
+              whiteSpace: 'pre',
+              tabSize: 8,
+              MozTabSize: 8
+            }}
+          >
+            <code>{cleanCode}</code>
+          </pre>
+        );
+      }
+      return formatInlineStyles(block);
+    });
+  }
+
+  return formatInlineStyles(texto);
+}
+
+function renderTexto(texto, isDarkMode = false) {
   if (!texto) return null;
+
+  // Emojis grandes si solo contiene 1, 2 o 3 emojis (congruencia con WhatsApp y Chat Interno)
+  const onlyCount = countOnlyEmojis(texto);
+  if (onlyCount > 0) {
+    const size = onlyCount === 1 ? '3.2rem' : '2.2rem';
+    return (
+      <div className={`wa-emojis-only count-${onlyCount}`}>
+        {renderContentWithAppleEmojis(texto, size)}
+      </div>
+    );
+  }
+
   const partes = texto.split(URL_REGEX);
   return partes.map((parte, i) =>
     URL_REGEX.test(parte)
       ? <a key={i} href={parte} target="_blank" rel="noopener noreferrer" className="msg-link">{parte}</a>
-      : formatWhatsAppStyle(parte)
+      : formatWhatsAppStyle(parte, isDarkMode)
   );
 }
+
+/** Botón para copiar tablas o TSV directamente listo para Excel */
+const TableCopyButton = ({ text, isDark = false }) => {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = (e) => {
+    e.stopPropagation();
+    const tsv = extractTSVForExcel(text);
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(tsv).then(() => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2200);
+      });
+    }
+  };
+
+  return (
+    <div style={{ marginTop: '6px', paddingTop: '4px', borderTop: isDark ? '1px dashed rgba(255,255,255,0.15)' : '1px dashed rgba(0,0,0,0.1)' }}>
+      <button
+        type="button"
+        className={`msg-copy-excel-btn ${copied ? 'copied' : ''}`}
+        onClick={handleCopy}
+        title="Copiar celdas tabuladas para pegar directamente en Excel con Ctrl+V"
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: '6px',
+          fontSize: '11px',
+          fontWeight: 600,
+          padding: '4px 10px',
+          borderRadius: '12px',
+          border: isDark ? '1px solid #00a884' : '1px solid #107c41',
+          backgroundColor: copied ? (isDark ? '#00a884' : '#107c41') : (isDark ? 'rgba(0,168,132,0.18)' : 'rgba(16,124,65,0.08)'),
+          color: copied ? '#ffffff' : (isDark ? '#25d366' : '#107c41'),
+          cursor: 'pointer',
+          transition: 'all 0.2s ease',
+          userSelect: 'none'
+        }}
+      >
+        {copied ? <Check size={12} /> : <Copy size={12} />}
+        <span>{copied ? '¡Celdas copiadas! Pega con Ctrl+V en Excel' : '📋 Copiar para Excel'}</span>
+      </button>
+    </div>
+  );
+};
 
 /** Muestra el tick de estado de un mensaje enviado por el agente */
 const MessageTick = ({ estado }) => {
@@ -282,7 +407,7 @@ function InfoPanel({ conv, displayName, telefonoFmt, onClose }) {
             />
           </div>
           <div className="info-panel-client-info">
-            <div className="info-panel-name">{displayName}</div>
+            <div className="info-panel-name">{renderContentWithAppleEmojis(displayName)}</div>
             {telefonoFmt && <div className="info-panel-phone">{telefonoFmt}</div>}
             {conv.canal && (
               <div style={{ marginTop: '5px' }}>
@@ -320,6 +445,8 @@ const ChatWindow = ({
   const [showQRModal,       setShowQRModal]       = useState(false);
   const [showInfoPanel,     setShowInfoPanel]     = useState(false);
   const [etiquetas,         setEtiquetas]         = useState([]);
+  const [nuevosMensajesCount, setNuevosMensajesCount] = useState(0);
+  const prevMensajesLengthRef = useRef(mensajes?.length || 0);
   const pickerRef      = useRef(null);
   const inputRef       = useRef(null);
   const lastTypingRef  = useRef(0);
@@ -348,6 +475,8 @@ const ChatWindow = ({
     setSavingSticker(null);
     setStickerError('');
     setPickerMode(null);
+    setNuevosMensajesCount(0);
+    prevMensajesLengthRef.current = mensajes?.length || 0;
     // Cargar etiquetas de la conversación
     setEtiquetas([]);
     apiService.getEtiquetasConversacion(conversacionActiva.id)
@@ -355,19 +484,46 @@ const ChatWindow = ({
       .catch(() => {});
   }, [conversacionActiva?.id]);
 
-  // Scroll al actualizarse los mensajes
+  // Scroll y detección de mensajes entrantes mientras la conversación está activa
   useEffect(() => {
     const el = containerRef.current;
     if (!el || !mensajes.length) return;
 
+    const prevCount = prevMensajesLengthRef.current;
+    const currentCount = mensajes.length;
+    prevMensajesLengthRef.current = currentCount;
+
     if (cargaInicialRef.current) {
       el.scrollTop = el.scrollHeight;
       cargaInicialRef.current = false;
-    } else {
+      setNuevosMensajesCount(0);
+    } else if (currentCount > prevCount) {
+      const ultimo = mensajes[currentCount - 1];
       const distanciaFondo = el.scrollHeight - el.scrollTop - el.clientHeight;
-      if (distanciaFondo < 200) el.scrollTop = el.scrollHeight;
+
+      if (ultimo?.remitente === 'user' && distanciaFondo >= 140) {
+        // El cliente envió un mensaje pero el agente está scrolleado arriba: mostrar banner
+        setNuevosMensajesCount(prev => prev + (currentCount - prevCount));
+      } else {
+        el.scrollTop = el.scrollHeight;
+        setNuevosMensajesCount(0);
+      }
     }
   }, [mensajes.length]);
+
+  const handleScrollMessages = (e) => {
+    const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
+    if (scrollHeight - scrollTop - clientHeight < 100) {
+      setNuevosMensajesCount(0);
+    }
+  };
+
+  const scrollToBottom = () => {
+    if (containerRef.current) {
+      containerRef.current.scrollTo({ top: containerRef.current.scrollHeight, behavior: 'smooth' });
+    }
+    setNuevosMensajesCount(0);
+  };
 
   // Actualizar etiquetas en tiempo real (otro agente etiquetó esta conversación)
   useEffect(() => {
@@ -404,9 +560,71 @@ const ChatWindow = ({
       }
     } else {
       // Solo texto: insertar en el input para que el agente lo revise/edite
-      setTexto(item.contenido || '');
-      inputRef.current?.focus();
+      const cont = item.contenido || '';
+      setTexto(cont);
+      if (inputRef.current) {
+        inputRef.current.innerHTML = textToAppleEmojiHtml(cont);
+        const range = document.createRange();
+        range.selectNodeContents(inputRef.current);
+        range.collapse(false);
+        const sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(range);
+        inputRef.current.focus();
+      }
     }
+  };
+
+  const handleSelectEmoji = (em) => {
+    const emojiChar = typeof em === 'string' ? em : em?.native || '';
+    if (!emojiChar) return;
+
+    if (inputRef.current) {
+      insertEmojiAtCursor(inputRef.current, emojiChar);
+      const newText = extractTextFromContentEditable(inputRef.current);
+      setTexto(newText);
+    } else {
+      setTexto(prev => prev + emojiChar);
+    }
+  };
+
+  const handleEditableInput = () => {
+    if (!inputRef.current) return;
+    const txt = extractTextFromContentEditable(inputRef.current);
+    setTexto(txt);
+    if (conversacionActiva?.external_id && conversacionActiva?.empresa_id) {
+      const now = Date.now();
+      if (now - lastTypingRef.current > 4000) {
+        lastTypingRef.current = now;
+        apiService.sendTyping(conversacionActiva.external_id, conversacionActiva.empresa_id, conversacionActiva.canal, conversacionActiva.id)
+          .catch(() => {});
+      }
+    }
+  };
+
+  const handleInsertPlainTextWithEmojis = (plain) => {
+    if (inputRef.current) {
+      inputRef.current.focus();
+      const html = textToAppleEmojiHtml(plain);
+      document.execCommand('insertHTML', false, html);
+      const txt = extractTextFromContentEditable(inputRef.current);
+      setTexto(txt);
+    } else {
+      setTexto(prev => prev + plain);
+    }
+  };
+
+  const handleEnviarMensajeWrapper = async (textoDirecto) => {
+    const txt = typeof textoDirecto === 'string'
+      ? textoDirecto
+      : (inputRef.current ? extractTextFromContentEditable(inputRef.current) : texto);
+    if (!txt || !txt.trim()) return;
+    setNuevosMensajesCount(0);
+    if (inputRef.current) {
+      inputRef.current.innerHTML = '';
+    }
+    setTexto('');
+    await enviarMensaje(txt.trim());
   };
 
   const handleEnviarFoto = async (blob, caption) => {
@@ -426,6 +644,98 @@ const ChatWindow = ({
   const [stickerError,    setStickerError]    = useState('');
   const [savedWaStickers, setSavedWaStickers] = useState(new Set());
   const [savingSticker,   setSavingSticker]   = useState(null);
+  const [tableModalData,  setTableModalData]  = useState(null);
+  const [generandoTabla,  setGenerandoTabla]  = useState(false);
+
+  const handlePaste = async (e) => {
+    // 1. Si se pega un archivo de imagen directo (captura de pantalla)
+    const items = e.clipboardData?.items;
+    if (items) {
+      for (let i = 0; i < items.length; i++) {
+        if (items[i].type.startsWith('image/')) {
+          const file = items[i].getAsFile();
+          if (file) {
+            e.preventDefault();
+            const url = URL.createObjectURL(file);
+            setTableModalData({
+              blob: file,
+              url,
+              plainText: '',
+              rowCount: 0,
+              colCount: 0
+            });
+            return;
+          }
+        }
+      }
+    }
+
+    // 2. Si se pega una tabla de Excel o Google Sheets
+    if (isTableClipboardData(e.clipboardData)) {
+      e.preventDefault();
+      try {
+        setGenerandoTabla(true);
+        const res = await processClipboardTable(e.clipboardData, darkMode);
+        setTableModalData(res);
+      } catch (err) {
+        console.warn('Error al procesar tabla como imagen, insertando como texto:', err);
+        const plain = e.clipboardData?.getData('text/plain') || '';
+        if (plain) {
+          handleInsertPlainTextWithEmojis(plain);
+        }
+      } finally {
+        setGenerandoTabla(false);
+      }
+      return;
+    }
+
+    // 3. Texto plano común: insertar con emojis de Apple si los contiene
+    const plain = e.clipboardData?.getData('text/plain') || '';
+    if (plain) {
+      e.preventDefault();
+      handleInsertPlainTextWithEmojis(plain);
+    }
+  };
+
+  const handleSendPastedImage = async (blob, caption) => {
+    await handleEnviarFoto(blob, caption);
+  };
+
+  const handleSendPastedText = async (text) => {
+    if (!text || !text.trim()) return;
+    await handleEnviarMensajeWrapper(text.trim());
+  };
+
+  const handleSendBoth = async (blob, caption, text) => {
+    if (blob) {
+      await handleEnviarFoto(blob, caption);
+    }
+    if (text && text.trim()) {
+      setTimeout(async () => {
+        await handleEnviarMensajeWrapper(text.trim());
+      }, 400);
+    }
+  };
+
+  const handlePastePastedText = (pastedText) => {
+    const cur = inputRef.current ? extractTextFromContentEditable(inputRef.current) : texto;
+    const sep = cur && !cur.endsWith('\n') ? '\n' : '';
+    const full = cur + sep + pastedText;
+    setTexto(full);
+    if (inputRef.current) {
+      inputRef.current.innerHTML = textToAppleEmojiHtml(full);
+      setTimeout(() => {
+        if (inputRef.current) inputRef.current.focus();
+      }, 50);
+    }
+  };
+
+  const handleCloseTableModal = () => {
+    if (tableModalData?.url) {
+      URL.revokeObjectURL(tableModalData.url);
+    }
+    setTableModalData(null);
+  };
 
   const handleEnviarSticker = async (pack, file) => {
     if (!conversacionActiva || enviandoMedia) return;
@@ -486,40 +796,55 @@ const ChatWindow = ({
     }
   };
 
-  const handleInputChange = (e) => {
-    setTexto(e.target.value);
-    const el = e.target;
-    el.style.height = 'auto';
-    const next = el.scrollHeight;
-    el.style.height = `${next}px`;
-    el.classList.toggle('has-overflow', next >= 180);
-    if (conversacionActiva?.external_id && conversacionActiva?.empresa_id) {
-      const now = Date.now();
-      if (now - lastTypingRef.current > 4000) {
-        lastTypingRef.current = now;
-        apiService.sendTyping(conversacionActiva.external_id, conversacionActiva.empresa_id, conversacionActiva.canal, conversacionActiva.id)
-          .catch(() => {});
-      }
-    }
-  };
-
-  // Resetear altura cuando se limpia el texto (al enviar o cambiar conversación)
+  // Sincronizar / limpiar input editable cuando se limpia texto o cambia de conversación
   useEffect(() => {
-    if (!texto && inputRef.current) {
-      inputRef.current.style.height = 'auto';
-      inputRef.current.classList.remove('has-overflow');
+    if (!texto && inputRef.current && inputRef.current.innerHTML !== '') {
+      inputRef.current.innerHTML = '';
     }
   }, [texto]);
+
+  useEffect(() => {
+    if (inputRef.current) {
+      inputRef.current.innerHTML = '';
+    }
+    setTexto('');
+  }, [conversacionActiva?.id]);
 
   if (!conversacionActiva) {
     return (
       <div className="chat-window-panel">
-        <div className="chat-main">
-          <div className="empty-chat">
-            <div className="empty-content">
-              <MessageCircle size={80} color="#bdc3c7" />
-              <h2>Selecciona un chat</h2>
-              <p>Elige una conversación para empezar.</p>
+        <div className="chat-main wa-window-empty">
+          <div className="wa-empty-state-card">
+            <div className="wa-empty-icon-circle" style={{ width: 88, height: 88, background: '#ffffff', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '50%', boxShadow: '0 4px 16px rgba(0,0,0,0.08)' }}>
+              <img src="/fibri.png" alt="Fibri" style={{ width: 68, height: 68, objectFit: 'contain' }} />
+            </div>
+            <h2 className="wa-empty-title">Chat Clientes Multicanal</h2>
+            <p className="wa-empty-subtitle">
+              Atiende y gestiona las conversaciones de WhatsApp, Telegram, Facebook e Instagram en tiempo real.
+            </p>
+
+            <div className="wa-empty-actions-row">
+              <button
+                type="button"
+                className="wa-empty-action-btn"
+                onClick={() => {
+                  const searchInput = document.querySelector('.wa-search-input');
+                  if (searchInput) {
+                    searchInput.focus();
+                  }
+                }}
+                title="Buscar un chat o cliente"
+              >
+                <div className="wa-empty-action-circle">
+                  <Search size={20} />
+                </div>
+                <span className="wa-empty-action-label">Buscar cliente</span>
+              </button>
+            </div>
+
+            <div className="wa-empty-lock-footer">
+              <Lock size={13} />
+              <span>Tus conversaciones con clientes están centralizadas y protegidas de extremo a extremo</span>
             </div>
           </div>
         </div>
@@ -563,7 +888,7 @@ const ChatWindow = ({
           </div>
           <div className="header-contact">
             <div className="header-contact-top">
-              <h3 className="header-name">{displayName}</h3>
+              <h3 className="header-name">{renderContentWithAppleEmojis(displayName)}</h3>
               {conversacionActiva.canal && (
                 <ChannelBadge canal={conversacionActiva.canal} iconOnly={true} />
               )}
@@ -625,7 +950,7 @@ const ChatWindow = ({
       </div>
 
       {/* ── Mensajes ───────────────────────────────────────────── */}
-      <div className="messages-container" ref={containerRef}>
+      <div className="messages-container" ref={containerRef} onScroll={handleScrollMessages}>
 
         {/* Banner de nota de transferencia (visible mientras no ha sido tomado) */}
         {conversacionActiva.nota_transferencia && (
@@ -673,7 +998,7 @@ const ChatWindow = ({
                 {mostrarSep && <div className="day-separator"><span>{formatDaySeparator(fechaMsg)}</span></div>}
                 <div className={`message-system ${typeClass}`}>
                   {renderSystemIcon(m)}
-                  <span>{textoVisible}</span>
+                  <span>{renderContentWithAppleEmojis(textoVisible)}</span>
                 </div>
               </React.Fragment>
             );
@@ -710,7 +1035,7 @@ const ChatWindow = ({
                         onClick={() => window.open(resolveMedia(m.url_media), '_blank')}
                       />
                       {m.texto && m.texto !== '🖼 Imagen' && (
-                        <p className="msg-photo-caption">{m.texto}</p>
+                        <p className="msg-photo-caption">{renderTexto(m.texto, darkMode)}</p>
                       )}
                       <div className="message-time msg-time-overlay">
                         {isLast && formatMsgTime(fechaMsg)}
@@ -730,7 +1055,7 @@ const ChatWindow = ({
                     showTime={isLast}
                   />
                 ) : (
-                  <div className="message-bubble">
+                  <div className={`message-bubble${countOnlyEmojis(m.texto) > 0 ? ' msg-bubble-emojis-only' : ''}`}>
                     {['sticker', 'sticker_video', 'sticker_animado'].includes(m.tipo) ? (
                       <StickerBubble 
                         m={m} 
@@ -744,7 +1069,7 @@ const ChatWindow = ({
                         <span className="msg-location-pin">📍</span>
                         <span className="msg-location-body">
                           {m.texto && m.texto !== 'Ubicación' && (
-                            <span className="msg-location-name">{m.texto}</span>
+                            <span className="msg-location-name">{renderContentWithAppleEmojis(m.texto)}</span>
                           )}
                           <span className="msg-location-link">Ver en Google Maps</span>
                         </span>
@@ -757,10 +1082,16 @@ const ChatWindow = ({
                         className="msg-document"
                       >
                         <span className="msg-doc-icon">📎</span>
-                        <span className="msg-doc-name">{m.texto || 'Documento'}</span>
+                        <span className="msg-doc-name">{renderContentWithAppleEmojis(m.texto || 'Documento')}</span>
                       </a>
                     ) : (
-                      <span className="msg-text">{renderTexto(m.texto)}</span>
+                      <span
+                        className={`msg-text${isTableText(m.texto) ? ' msg-table-text' : ''}`}
+                        style={isTableText(m.texto) ? { tabSize: 8, MozTabSize: 8, whiteSpace: 'pre-wrap', display: 'block' } : undefined}
+                      >
+                        {renderTexto(m.texto, darkMode)}
+                        {isTableText(m.texto) && <TableCopyButton text={m.texto} isDark={darkMode} />}
+                      </span>
                     )}
                     {isLast && (
                       <div className="message-time">
@@ -784,6 +1115,21 @@ const ChatWindow = ({
         )}
       </div>
 
+      {/* Banner flotante temporal "X nuevo(s) mensaje(s)" estilo WhatsApp */}
+      {nuevosMensajesCount > 0 && (
+        <button
+          type="button"
+          className="wa-unread-floating-banner"
+          onClick={scrollToBottom}
+          title="Bajar a los nuevos mensajes"
+        >
+          <ChevronDown size={15} color="#00a884" />
+          <span>
+            {nuevosMensajesCount === 1 ? '1 nuevo mensaje' : `${nuevosMensajesCount} nuevos mensajes`}
+          </span>
+        </button>
+      )}
+
       <div className="chat-input-area" style={{ position: 'relative' }}>
         {/* Panel combinado Emoji / Stickers */}
         {pickerMode && (
@@ -805,10 +1151,8 @@ const ChatWindow = ({
             {pickerMode === 'emoji' ? (
               <Picker
                 data={data}
-                onEmojiSelect={(e) => {
-                  setTexto(prev => prev + e.native);
-                  inputRef.current?.focus();
-                }}
+                set="apple"
+                onEmojiSelect={(em) => handleSelectEmoji(em)}
                 locale="es"
                 theme={darkMode ? 'dark' : 'light'}
                 previewPosition="none"
@@ -857,21 +1201,26 @@ const ChatWindow = ({
           </button>
         </div>
         <div className="chat-input-divider" />
-        <textarea
-          ref={inputRef}
-          rows={1}
-          placeholder='Escribe un mensaje o "/" para respuestas rápidas...'
-          value={texto}
-          onChange={handleInputChange}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && !e.shiftKey && !showQRPicker) {
-              e.preventDefault();
-              enviarMensaje();
-            }
-          }}
-        />
+        <div className="chat-input-wrapper" onClick={() => inputRef.current?.focus()}>
+          <div
+            ref={inputRef}
+            className="wa-textarea wa-textarea-editable"
+            contentEditable
+            role="textbox"
+            aria-multiline="true"
+            data-placeholder='Escribe un mensaje o "/" para respuestas rápidas...'
+            onInput={handleEditableInput}
+            onPaste={handlePaste}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey && !showQRPicker) {
+                e.preventDefault();
+                handleEnviarMensajeWrapper();
+              }
+            }}
+          />
+        </div>
         <VoiceRecorder onSend={handleEnviarVoz} disabled={enviandoMedia} />
-        <button className="send-button-circle" onClick={enviarMensaje}>
+        <button className="send-button-circle" onClick={() => handleEnviarMensajeWrapper()} title="Enviar mensaje">
           <Send size={20} color="#fff" />
         </button>
       </div>
@@ -882,6 +1231,49 @@ const ChatWindow = ({
           onClose={() => setShowQRModal(false)}
           onChange={setRespuestasRapidas}
         />
+      )}
+
+      {/* Modal para previsualizar tabla de Excel como captura o texto */}
+      {tableModalData && (
+        <PasteTableModal
+          isOpen={Boolean(tableModalData)}
+          tableBlob={tableModalData.blob}
+          imageUrl={tableModalData.url}
+          tableText={tableModalData.plainText}
+          tsvText={tableModalData.tsvText}
+          gridText={tableModalData.gridText}
+          listText={tableModalData.listText}
+          rowCount={tableModalData.rowCount}
+          colCount={tableModalData.colCount}
+          onSendImage={handleSendPastedImage}
+          onSendText={handleSendPastedText}
+          onSendBoth={handleSendBoth}
+          onPasteText={handlePastePastedText}
+          onClose={handleCloseTableModal}
+          isDarkMode={darkMode}
+        />
+      )}
+
+      {generandoTabla && (
+        <div style={{
+          position: 'fixed',
+          bottom: '80px',
+          right: '30px',
+          backgroundColor: darkMode ? '#202c33' : '#ffffff',
+          color: darkMode ? '#e9edef' : '#111b21',
+          padding: '10px 18px',
+          borderRadius: '24px',
+          boxShadow: '0 4px 16px rgba(0,0,0,0.2)',
+          zIndex: 9999,
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+          fontSize: '13px',
+          border: darkMode ? '1px solid #2a3942' : '1px solid #e2e8f0'
+        }}>
+          <span className="media-spinner" style={{ width: '14px', height: '14px' }} />
+          <span>Generando captura de tabla Excel...</span>
+        </div>
       )}
       </div>{/* /chat-main */}
 

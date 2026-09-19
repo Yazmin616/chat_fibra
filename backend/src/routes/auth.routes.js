@@ -22,9 +22,11 @@ const loginLimiter = rateLimit({
   message:    { error: 'Demasiados intentos de inicio de sesión. Espera 15 minutos e intenta de nuevo.' },
 });
 
-router.post('/login',          loginLimiter, authController.login);
-router.post('/logout',         verifyToken,  authController.logout);
-router.post('/heartbeat',      verifyToken,  authController.heartbeat);
-router.get ('/canales-status',               authController.canalesStatus);
+router.post('/login',                          loginLimiter, authController.login);
+router.post('/logout',                         verifyToken,  authController.logout);
+router.post('/heartbeat',                      verifyToken,  authController.heartbeat);
+router.post('/cambiar-password-obligatorio',   verifyToken,  authController.cambiarPasswordObligatorio);
+router.post('/consultar-coordinador',          loginLimiter, authController.consultarCoordinador);
+router.get ('/canales-status',                               authController.canalesStatus);
 
 module.exports = router;

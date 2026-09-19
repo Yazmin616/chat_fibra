@@ -252,3 +252,228 @@
   color: #667781;
   text-transform: uppercase;
 }
+
+/* =============================================================
+   MODO OSCURO — TopBar
+   ============================================================= */
+body.chat-dark .top-bar,
+.chat-dark .top-bar {
+  background-color: #202c33;
+  border-bottom: 1px solid #222e35;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+}
+
+body.chat-dark .tenant-selector,
+.chat-dark .tenant-selector {
+  background: #111b21;
+  border-color: #2a3942;
+}
+
+body.chat-dark .company-select,
+.chat-dark .company-select {
+  color: #e9edef;
+}
+
+body.chat-dark .company-select option,
+.chat-dark .company-select option {
+  background: #111b21;
+  color: #e9edef;
+}
+
+body.chat-dark .top-bar .icon-btn,
+.chat-dark .top-bar .icon-btn {
+  color: #aebac1;
+}
+
+body.chat-dark .top-bar .icon-btn:hover,
+.chat-dark .top-bar .icon-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #e9edef;
+}
+
+body.chat-dark .top-bar .dark-toggle-btn:hover,
+.chat-dark .top-bar .dark-toggle-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #ffd279;
+}
+
+/* Selector de Presencia en TopBar */
+.topbar-presence-section-title {
+  padding: 6px 12px 4px;
+  font-size: 11px;
+  fontWeight: 600;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.topbar-presence-btn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 10px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 13px;
+  color: #475569;
+  text-align: left;
+  transition: background 0.15s, color 0.15s;
+}
+
+.topbar-presence-btn:hover {
+  background: #f1f5f9;
+  color: #0f172a;
+}
+
+.topbar-presence-btn.selected {
+  background: #f1f5f9;
+  color: #0f172a;
+  font-weight: 600;
+}
+
+.topbar-presence-label {
+  font-size: 13px;
+  line-height: 1.2;
+}
+
+.topbar-presence-desc {
+  font-size: 10px;
+  color: #94a3b8;
+  line-height: 1.1;
+  margin-top: 1px;
+}
+
+/* =============================================================
+   MODO OSCURO — TopBar
+   ============================================================= */
+body.chat-dark .top-bar,
+.chat-dark .top-bar {
+  background-color: #202c33;
+  border-bottom: 1px solid #222e35;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+}
+
+body.chat-dark .tenant-selector,
+.chat-dark .tenant-selector {
+  background: #111b21;
+  border-color: #2a3942;
+}
+
+body.chat-dark .company-select,
+.chat-dark .company-select {
+  color: #e9edef;
+}
+
+body.chat-dark .company-select option,
+.chat-dark .company-select option {
+  background: #111b21;
+  color: #e9edef;
+}
+
+body.chat-dark .top-bar .icon-btn,
+.chat-dark .top-bar .icon-btn {
+  color: #aebac1;
+}
+
+body.chat-dark .top-bar .icon-btn:hover,
+.chat-dark .top-bar .icon-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #e9edef;
+}
+
+body.chat-dark .top-bar .dark-toggle-btn:hover,
+.chat-dark .top-bar .dark-toggle-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #ffd279;
+}
+
+body.chat-dark .user-name,
+.chat-dark .user-name {
+  color: #e9edef;
+}
+
+body.chat-dark .user-role-label,
+.chat-dark .user-role-label {
+  color: #8696a0;
+}
+
+body.chat-dark .topbar-dropdown-menu,
+.chat-dark .topbar-dropdown-menu {
+  background: #233138;
+  border: 1px solid #2a3942;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+
+body.chat-dark .topbar-dropdown-header,
+.chat-dark .topbar-dropdown-header {
+  background: #202c33;
+  border-bottom: 1px solid #2a3942;
+}
+
+body.chat-dark .topbar-dropdown-header strong,
+.chat-dark .topbar-dropdown-header strong {
+  color: #e9edef;
+}
+
+body.chat-dark .topbar-dropdown-header span,
+.chat-dark .topbar-dropdown-header span {
+  color: #8696a0;
+}
+
+body.chat-dark .topbar-presence-section-title,
+.chat-dark .topbar-presence-section-title {
+  color: #8696a0;
+}
+
+body.chat-dark .topbar-presence-btn,
+.chat-dark .topbar-presence-btn {
+  color: #aebac1;
+}
+
+body.chat-dark .topbar-presence-btn:hover,
+.chat-dark .topbar-presence-btn:hover {
+  background: #202c33;
+  color: #e9edef;
+}
+
+body.chat-dark .topbar-presence-btn.selected,
+.chat-dark .topbar-presence-btn.selected {
+  background: #2a3942;
+  color: #e9edef;
+}
+
+body.chat-dark .topbar-presence-desc,
+.chat-dark .topbar-presence-desc {
+  color: #8696a0;
+}
+
+body.chat-dark .topbar-dropdown-item,
+.chat-dark .topbar-dropdown-item {
+  color: #e9edef;
+}
+
+body.chat-dark .topbar-dropdown-item:hover:not(:disabled),
+.chat-dark .topbar-dropdown-item:hover:not(:disabled) {
+  background: #202c33;
+  color: #e9edef;
+}
+
+body.chat-dark .topbar-dropdown-item.logout-btn,
+.chat-dark .topbar-dropdown-item.logout-btn {
+  color: #f87171;
+}
+
+body.chat-dark .topbar-dropdown-item.logout-btn:hover,
+.chat-dark .topbar-dropdown-item.logout-btn:hover {
+  background: rgba(239, 68, 68, 0.15);
+  color: #fca5a5;
+}
+
+body.chat-dark .topbar-dropdown-divider,
+.chat-dark .topbar-dropdown-divider {
+  background: #2a3942;
+}
+
+

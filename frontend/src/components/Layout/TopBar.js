@@ -1,10 +1,11 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { 
   Menu, User, ChevronDown, Building2, Camera, Moon, Sun, LogOut, Bell,
-  CheckCircle2, Users, AlertCircle, Coffee, Clock, Check
+  Check
 } from 'lucide-react';
 import { resolveAvatar, apiService } from '../../services/api';
 import NotificationDropdown from '../Notifications/NotificationDropdown';
+import { LISTA_ESTADOS_PRESENCIA, ESTADOS_PRESENCIA } from '../../utils/presenceHelper';
 
 const TopBar = ({
   sidebarVisible,
@@ -33,15 +34,8 @@ const TopBar = ({
   );
   const fotoRef = useRef(null);
 
-  const ESTADOS = [
-    { id: 'disponible', label: 'Disponible', icon: CheckCircle2, color: '#10b981', desc: 'Atendiendo normalmente' },
-    { id: 'reunion',    label: 'En reunión', icon: Users,        color: '#f59e0b', desc: 'En junta o llamada' },
-    { id: 'ocupado',    label: 'No molestar', icon: AlertCircle,  color: '#ef4444', desc: 'Tareas concentradas' },
-    { id: 'comida',     label: 'En comida',  icon: Coffee,       color: '#d97706', desc: 'Almuerzo / Break' },
-    { id: 'ausente',    label: 'Ausente',    icon: Clock,        color: '#64748b', desc: 'Fuera del lugar' },
-  ];
-
-  const estadoActualObj = ESTADOS.find(e => e.id === estadoPresencia) || ESTADOS[0];
+  const ESTADOS = LISTA_ESTADOS_PRESENCIA;
+  const estadoActualObj = ESTADOS_PRESENCIA[estadoPresencia] || ESTADOS_PRESENCIA.disponible;
 
   const handleCambiarEstado = (nuevoId) => {
     setEstadoPresencia(nuevoId);
@@ -49,7 +43,26 @@ const TopBar = ({
     if (socket && user?.id) {
       socket.emit('agente:cambiar_presencia', { estado: nuevoId, agenteId: user.id });
     }
+    try {
+      window.dispatchEvent(new CustomEvent('sistema:presencia_cambiada', {
+        detail: { id: Number(user?.id), estado_presencia: nuevoId }
+      }));
+    } catch (_) {}
   };
+
+  // Sincronizar presencia si cambia desde otro componente
+  useEffect(() => {
+    const handlePresenciaEvt = (e) => {
+      if (e.detail && (!e.detail.id || Number(e.detail.id) === Number(user?.id))) {
+        if (e.detail.estado_presencia) {
+          setEstadoPresencia(e.detail.estado_presencia);
+          localStorage.setItem('agente_estado_presencia', e.detail.estado_presencia);
+        }
+      }
+    };
+    window.addEventListener('sistema:presencia_cambiada', handlePresenciaEvt);
+    return () => window.removeEventListener('sistema:presencia_cambiada', handlePresenciaEvt);
+  }, [user?.id]);
 
   // Re-emitir presencia al conectar el socket o cambiar de usuario
   useEffect(() => {
@@ -57,6 +70,17 @@ const TopBar = ({
     const st = localStorage.getItem('agente_estado_presencia') || user.estado_presencia || 'disponible';
     socket.emit('agente:cambiar_presencia', { estado: st, agenteId: user.id });
   }, [socket, user]);
+
+  // Sincronizar tema oscuro si cambia desde otra vista o componente
+  useEffect(() => {
+    const handleThemeChange = (e) => {
+      if (e.detail && typeof e.detail.isDark === 'boolean' && setDarkMode) {
+        setDarkMode(e.detail.isDark);
+      }
+    };
+    window.addEventListener('sistema:theme_changed', handleThemeChange);
+    return () => window.removeEventListener('sistema:theme_changed', handleThemeChange);
+  }, [setDarkMode]);
 
   const handleFotoChange = async (e) => {
     const file = e.target.files?.[0];
@@ -100,15 +124,24 @@ const TopBar = ({
       </div>
 
       <div className="top-right" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-        {currentView === 'chat' && (
-          <button
-            className="icon-btn dark-toggle-btn"
-            onClick={() => setDarkMode(d => !d)}
-            title={darkMode ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
-          >
-            {darkMode ? <Sun size={18} /> : <Moon size={18} />}
-          </button>
-        )}
+        <button
+          className="icon-btn dark-toggle-btn"
+          onClick={() => {
+            const next = !darkMode;
+            try {
+              localStorage.setItem('app_theme', next ? 'dark' : 'light');
+            } catch (e) {}
+            if (setDarkMode) {
+              setDarkMode(next);
+            }
+            setTimeout(() => {
+              window.dispatchEvent(new CustomEvent('sistema:theme_changed', { detail: { isDark: next } }));
+            }, 0);
+          }}
+          title={darkMode ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
+        >
+          {darkMode ? <Sun size={18} /> : <Moon size={18} />}
+        </button>
 
         {/* Campana de Notificaciones Estilo Facebook */}
         <div className="fb-topbar-btn-wrap">
@@ -150,32 +183,58 @@ const TopBar = ({
         {/* Menú de Perfil de Usuario con Estado de Presencia */}
         <div className="topbar-user-menu">
           <div className="user-profile" onClick={() => { setDropdownOpen(!dropdownOpen); setNotifOpen(false); }} style={{ cursor: 'pointer', position: 'relative' }}>
-            <div className="user-avatar" style={{ backgroundColor: '#dc2626', position: 'relative' }}>
-              {user?.foto_perfil ? (
-                <img src={resolveAvatar(user.foto_perfil)} alt={user.nombre} />
-              ) : (
-                <User size={18} color="#fff" />
-              )}
+            <div className="topbar-user-avatar-wrap" style={{ position: 'relative', flexShrink: 0 }}>
+              <div className="user-avatar" style={{ backgroundColor: '#dc2626' }}>
+                {user?.foto_perfil ? (
+                  <img src={resolveAvatar(user.foto_perfil)} alt={user.nombre} />
+                ) : (
+                  <User size={18} color="#fff" />
+                )}
+              </div>
               <span 
                 style={{
                   position: 'absolute',
                   bottom: '-2px',
                   right: '-2px',
-                  width: '10px',
-                  height: '10px',
+                  width: '11px',
+                  height: '11px',
                   borderRadius: '50%',
                   backgroundColor: estadoActualObj.color,
                   border: '2px solid #fff',
-                  boxShadow: '0 0 2px rgba(0,0,0,0.3)'
+                  boxShadow: `0 0 0 1px ${estadoActualObj.border}50, 0 1px 3px rgba(0,0,0,0.35)`,
+                  zIndex: 2
                 }}
-                title={`Estado: ${estadoActualObj.label}`}
+                title={`Estado: ${estadoActualObj.label} (${estadoActualObj.desc})`}
               />
             </div>
             <div className="user-info-text">
               <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
                 <span className="user-name">{user?.nombre || 'Agente'}</span>
               </div>
-              <span className="user-role-label">{user?.rol}</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span className="user-role-label">{user?.rol}</span>
+                <span
+                  className="topbar-presence-pill"
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    padding: '1px 7px',
+                    borderRadius: '10px',
+                    background: `${estadoActualObj.color}18`,
+                    border: `1px solid ${estadoActualObj.color}45`,
+                    color: estadoActualObj.color,
+                    fontSize: '0.69rem',
+                    fontWeight: 600,
+                    lineHeight: '14px',
+                    letterSpacing: '0.01em'
+                  }}
+                  title={`Estado de presencia: ${estadoActualObj.label} - ${estadoActualObj.desc}`}
+                >
+                  <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: estadoActualObj.color }} />
+                  {estadoActualObj.label}
+                </span>
+              </div>
             </div>
             <ChevronDown size={14} color="#54656f" style={{ transform: dropdownOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s' }} />
           </div>
@@ -193,7 +252,7 @@ const TopBar = ({
                 </div>
 
                 {/* Selector de Presencia / Disponibilidad */}
-                <div style={{ padding: '6px 12px 4px', fontSize: '11px', fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                <div className="topbar-presence-section-title">
                   Estado de Presencia
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', padding: '0 4px' }}>
@@ -203,28 +262,15 @@ const TopBar = ({
                     return (
                       <button
                         key={est.id}
+                        type="button"
                         onClick={() => handleCambiarEstado(est.id)}
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '10px',
-                          padding: '7px 10px',
-                          borderRadius: '6px',
-                          border: 'none',
-                          background: isSelected ? '#f1f5f9' : 'transparent',
-                          cursor: 'pointer',
-                          fontSize: '13px',
-                          fontWeight: isSelected ? 600 : 400,
-                          color: isSelected ? '#0f172a' : '#475569',
-                          textAlign: 'left',
-                          transition: 'background 0.15s'
-                        }}
+                        className={`topbar-presence-btn ${isSelected ? 'selected' : ''}`}
                       >
                         <div style={{
                           width: '24px',
                           height: '24px',
                           borderRadius: '6px',
-                          background: `${est.color}15`,
+                          background: `${est.color}20`,
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
@@ -234,8 +280,8 @@ const TopBar = ({
                           <IconComp size={14} />
                         </div>
                         <div style={{ flex: 1 }}>
-                          <div>{est.label}</div>
-                          <div style={{ fontSize: '10px', color: '#94a3b8', lineHeight: 1 }}>{est.desc}</div>
+                          <div className="topbar-presence-label">{est.label}</div>
+                          <div className="topbar-presence-desc">{est.desc}</div>
                         </div>
                         {isSelected && <Check size={14} color="#10b981" strokeWidth={2.5} />}
                       </button>

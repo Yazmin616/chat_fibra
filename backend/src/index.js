@@ -51,6 +51,7 @@ const plantillasMetaRoutes   = require('./routes/plantillasMeta.routes');
 const areasSolucionesRoutes  = require('./routes/areasSoluciones.routes');
 const chatInternoRoutes      = require('./routes/chatInterno.routes');
 const comunicadosRoutes      = require('./routes/comunicados.routes');
+const ticketsRoutes          = require('./routes/tickets.routes');
 const { initChatInternoSockets } = require('./sockets/chatInterno.socket');
 
 const app    = express();
@@ -178,6 +179,7 @@ io.on('connection', (socket) => {
   socket.on('agente:join', async ({ rol, area, id }) => {
     if (id) {
       socket.agenteId = Number(id);
+      socket.join(`agente:${id}`);
       const pollingService = require('./services/pollingService');
       const agenteRepo = require('./repositories/agente.repository');
       
@@ -185,13 +187,22 @@ io.on('connection', (socket) => {
       agenteRepo.setOnline(Number(id), true).catch(() => {});
       
       const activeList = pollingService.getActiveAgents ? pollingService.getActiveAgents() : [];
-      io.emit('agente:online', { id: Number(id), esta_online: true });
       io.emit('agentes:active_list', activeList);
       
       try {
         const { rows } = await agenteRepo.findById(id);
-        if (rows.length > 0) {
-          const agente = rows[0];
+        const agente = rows.length > 0 ? rows[0] : null;
+        const estado_presencia = agente?.estado_presencia || 'disponible';
+        const mensaje_presencia = agente?.mensaje_presencia || '';
+
+        io.emit('agente:online', {
+          id: Number(id),
+          esta_online: true,
+          estado_presencia,
+          mensaje_presencia
+        });
+
+        if (agente) {
           if (agente.rol === 'admin') {
             socket.join('admin');
             logger.info(`Socket ${socket.id} (Agent ${id}) joined room: admin`);
@@ -277,6 +288,8 @@ app.use('/plantillas-meta',  apiLimiter, plantillasMetaRoutes);
 app.use('/areas-soluciones', apiLimiter, areasSolucionesRoutes);
 app.use('/chat-interno',      apiLimiter, chatInternoRoutes);
 app.use('/comunicados',       apiLimiter, comunicadosRoutes);
+app.use('/ti/tickets',        apiLimiter, ticketsRoutes);
+app.use('/tickets',           apiLimiter, ticketsRoutes);
 // Los webhooks de Telegram usan el webhookLimiter; Meta se registra en iniciarMeta()
 app.use('/telegram',       webhookLimiter);
 

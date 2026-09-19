@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Settings, LogOut, Download, Trash2, RefreshCw, AlertTriangle, CheckCircle, Server, Layers } from 'lucide-react';
+import { Settings, LogOut, Download, Trash2, RefreshCw, AlertTriangle, CheckCircle, Server, Layers, MessageSquare, Wrench } from 'lucide-react';
 import { API_URL } from '../../services/api';
+import ChatInternoView from '../ChatInterno/ChatInternoView';
+import TicketsView from './Tickets/TicketsView';
 import '../../styles/ti-panel.css';
 
 const authHeaders = () => ({
@@ -25,7 +27,8 @@ function fmt(n) {
 }
 
 // ────────────────────────────────────────────────────────────────────────────
-const TIPanel = ({ user, logout }) => {
+const TIPanel = ({ user, logout, socket }) => {
+  const [tabActivo,     setTabActivo]     = useState('mantenimiento'); // 'mantenimiento' | 'tickets' | 'chat'
   const [status,        setStatus]        = useState(null);
   const [loadingStatus, setLoadingStatus] = useState(true);
   const [logs,          setLogs]          = useState([]);
@@ -201,6 +204,32 @@ const TIPanel = ({ user, logout }) => {
           <span className="ti-title">Panel TI</span>
           <span className="ti-subtitle">ISP Chatbot</span>
         </div>
+
+        {/* Pestañas de Navegación del Panel TI */}
+        <div className="ti-nav-tabs">
+          <button
+            type="button"
+            className={`ti-nav-tab ${tabActivo === 'mantenimiento' ? 'active' : ''}`}
+            onClick={() => setTabActivo('mantenimiento')}
+          >
+            <Server size={14} /> Mantenimiento & Sistema
+          </button>
+          <button
+            type="button"
+            className={`ti-nav-tab ${tabActivo === 'tickets' ? 'active' : ''}`}
+            onClick={() => setTabActivo('tickets')}
+          >
+            <Wrench size={14} /> Tickets & Solicitudes
+          </button>
+          <button
+            type="button"
+            className={`ti-nav-tab ${tabActivo === 'chat' ? 'active' : ''}`}
+            onClick={() => setTabActivo('chat')}
+          >
+            <MessageSquare size={14} /> Chat Interno
+          </button>
+        </div>
+
         <div className="ti-header-right">
           <span className="ti-user-badge">{user?.nombre}</span>
           <button className="ti-logout-btn" onClick={logout}>
@@ -209,9 +238,21 @@ const TIPanel = ({ user, logout }) => {
         </div>
       </header>
 
-      <main className="ti-main">
+      {tabActivo === 'chat' && (
+        <div style={{ flex: 1, height: 'calc(100vh - 56px)', overflow: 'hidden' }}>
+          <ChatInternoView socket={socket} user={user} darkMode={false} />
+        </div>
+      )}
 
-        {/* Banner de bienvenida con Fibri */}
+      {tabActivo === 'tickets' && (
+        <main className="ti-main" style={{ maxWidth: 1240 }}>
+          <TicketsView user={user} socket={socket} />
+        </main>
+      )}
+
+      {tabActivo === 'mantenimiento' && (
+        <main className="ti-main">
+          {/* Banner de bienvenida con Fibri */}
         <div className="ti-welcome">
           <div className="ti-welcome-text">
             <h2>¡Hola, {user?.nombre?.split(' ')[0]}! 👋</h2>
@@ -485,6 +526,7 @@ const TIPanel = ({ user, logout }) => {
         </div>
 
       </main>
+      )}
 
       {/* Modal de confirmación de limpiar BD */}
       {confirmLimpiar && (

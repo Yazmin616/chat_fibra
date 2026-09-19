@@ -22,8 +22,9 @@
  */
 
 import React from 'react';
-import { Search, MessageSquare, Clock, CheckCircle, ClipboardList, User, CheckCheck } from 'lucide-react';
+import { Search, Clock, CheckCircle, ClipboardList, CheckCheck, X } from 'lucide-react';
 import { formatConvTime } from '../../utils/formatDate';
+import { renderContentWithAppleEmojis } from '../../utils/appleEmojiHelper';
 
 const cleanLastMessage = (text) => {
   if (!text) return '';
@@ -40,7 +41,7 @@ const cleanLastMessage = (text) => {
  * @param {Function} props.cargarMensajes         - Carga el historial de mensajes de la conversación seleccionada.
  * @param {string}   props.busqueda               - Texto de búsqueda actual.
  * @param {Function} props.setBusqueda            - Setter del texto de búsqueda.
- * @param {string}   props.filtro                 - Filtro activo: "Todos los chats" | "Mis Asignados".
+ * @param {string}   props.filtro                 - Filtro activo: "Todos los chats" | "Mis Asignados" | "Cerrados".
  * @param {Function} props.setFiltro              - Setter del filtro activo.
  * @param {{ rol: string }} props.user            - Agente autenticado.
  */
@@ -76,144 +77,182 @@ const ChatList = ({
   }).length;
 
   return (
-    <div className="chat-list-panel">
-      <div className="search-container">
-        <div className="search-box">
-          <Search size={18} color="#54656f" />
-          <input
-            type="text"
-            placeholder="Busca un chat"
-            value={busqueda}
-            onChange={(e) => setBusqueda(e.target.value)}
-          />
+    <div className="chat-list-panel wa-sidebar">
+      {/* 1. Header estilo WhatsApp */}
+      <div className="wa-header">
+        <div className="wa-title">
+          <span>Chats</span>
         </div>
       </div>
 
-      <div className="filter-tabs">
+      {/* 2. Buscador WhatsApp */}
+      <div className="wa-search-box">
+        <div className={`wa-search-input-wrap ${busqueda ? 'has-text' : ''}`}>
+          <Search size={16} className="wa-search-icon" />
+          <input
+            type="text"
+            className="wa-search-input"
+            placeholder="Buscar un chat o cliente"
+            value={busqueda}
+            onChange={(e) => setBusqueda(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') setBusqueda('');
+            }}
+            spellCheck="false"
+            autoComplete="off"
+          />
+          {busqueda && (
+            <button
+              type="button"
+              className="wa-clear-btn"
+              onClick={() => setBusqueda('')}
+              title="Borrar búsqueda (Esc)"
+            >
+              <X size={15} />
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* 3. Píldoras de Filtro estilo WhatsApp Desktop */}
+      <div className="wa-chips-row">
         <button
-          className={`tab-pill ${filtro === 'Todos los chats' ? 'active' : ''}`}
+          type="button"
+          className={`wa-chip ${filtro === 'Todos los chats' ? 'active' : ''}`}
           onClick={() => setFiltro('Todos los chats')}
-          style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
         >
-          Pendientes
+          <span>Pendientes</span>
           {unreadPendientes > 0 && (
-            <div style={{ backgroundColor: '#25D366', color: 'white', borderRadius: '10px', padding: '0 6px', fontSize: '11px', fontWeight: 'bold' }}>
-              {unreadPendientes}
-            </div>
+            <span className="wa-chip-badge">{unreadPendientes}</span>
           )}
         </button>
+
         <button
-          className={`tab-pill ${filtro === 'Mis Asignados' ? 'active' : ''}`}
+          type="button"
+          className={`wa-chip ${filtro === 'Mis Asignados' ? 'active' : ''}`}
           onClick={() => setFiltro('Mis Asignados')}
-          style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
         >
-          Mis Asignados
+          <span>Mis Asignados</span>
           {unreadAsignados > 0 && (
-            <div style={{ backgroundColor: '#25D366', color: 'white', borderRadius: '10px', padding: '0 6px', fontSize: '11px', fontWeight: 'bold' }}>
-              {unreadAsignados}
-            </div>
+            <span className="wa-chip-badge">{unreadAsignados}</span>
           )}
         </button>
+
         <button
-          className={`tab-pill tab-pill--cerrados ${filtro === 'Cerrados' ? 'active' : ''}`}
+          type="button"
+          className={`wa-chip tab-pill--cerrados ${filtro === 'Cerrados' ? 'active' : ''}`}
           onClick={() => setFiltro('Cerrados')}
         >
-          Cerrados
+          <span>Cerrados</span>
         </button>
       </div>
 
-      <div className="conversations-list">
+      {/* 4. Lista de conversaciones */}
+      <div className="conversations-list wa-chat-list">
         {conversaciones.map((conv) => {
           const esCerrado  = conv.estado === 'cerrada' || conv.estado?.startsWith('ENCUESTA');
           const esEncuesta = conv.estado?.startsWith('ENCUESTA');
           const esHumano = conv.estado === 'ESPERANDO_AGENTE' || conv.estado === 'atendiendo';
+          const unreadCount = esHumano && conv.estado === 'ESPERANDO_AGENTE'
+            ? (parseInt(conv.no_leidos) > 0 ? conv.no_leidos : 1)
+            : (esHumano && parseInt(conv.no_leidos) > 0 ? conv.no_leidos : 0);
 
           return (
             <div
               key={conv.id}
-              className={`conversation-item${conversacionActiva?.id === conv.id ? ' active' : ''}${esCerrado ? ' cerrado' : ''}`}
+              className={`conversation-item wa-chat-item${conversacionActiva?.id === conv.id ? ' active' : ''}${esCerrado ? ' cerrado' : ''}`}
               onClick={() => {
                 setConversacionActiva(conv);
                 cargarMensajes(conv.usuario_id, conv.id);
               }}
             >
-              <div className="avatar" style={{ backgroundColor: esCerrado ? '#9ca3af' : 'transparent', flexShrink: 0 }}>
+              <div className="wa-item-avatar-wrap">
                 {esCerrado ? (
-                  <CheckCircle size={24} color="#fff" />
+                  <div className="wa-item-avatar-placeholder" style={{ backgroundColor: '#9ca3af' }}>
+                    <CheckCircle size={24} color="#fff" />
+                  </div>
                 ) : (
-                  <img 
-                    src={`https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(conv.nombre || conv.username || conv.id)}&backgroundColor=0284c7,0ea5e9,3b82f6,6366f1,8b5cf6&textColor=ffffff`} 
-                    alt="avatar" 
-                    style={{ width: '45px', height: '45px', borderRadius: '50%', objectFit: 'cover' }} 
+                  <img
+                    src={`https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(conv.nombre || conv.username || conv.id)}&backgroundColor=0284c7,0ea5e9,3b82f6,6366f1,8b5cf6&textColor=ffffff`}
+                    alt="avatar"
+                    className="wa-item-avatar-img"
                   />
                 )}
               </div>
 
-              <div className="conv-info" style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0, paddingLeft: '4px', justifyContent: 'center' }}>
-                
-                {/* Primera fila: Nombre y Hora */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flex: 1, overflow: 'hidden' }}>
-                    <span className="client-name" style={{ fontWeight: 'bold', fontSize: '15px', color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {conv.nombre || conv.username || 'Cliente'}
+              <div className="wa-item-body">
+                {/* Primera fila: Nombre, Badge Empresa/Canal y Hora */}
+                <div className="wa-item-top-row">
+                  <div className="wa-item-name-wrap" style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0, flex: 1, overflow: 'hidden' }}>
+                    <span className="wa-item-title client-name">
+                      {renderContentWithAppleEmojis(conv.nombre || conv.username || 'Cliente')}
                     </span>
-                    <span className="company-badge" style={{ flexShrink: 0 }}>
-                      {conv.empresa_id}
-                    </span>
+                    {conv.empresa_id && (
+                      <span className="company-badge">
+                        {conv.empresa_id}
+                      </span>
+                    )}
                   </div>
-                  <span className="time" style={{ fontSize: '12px', color: 'var(--text-secondary)', flexShrink: 0, marginLeft: '8px' }}>
+                  <span className="wa-item-time time">
                     {formatConvTime(conv.fecha_ultimo_mensaje)}
                   </span>
                 </div>
 
                 {/* Segunda fila: Mensaje y Badges */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                  <div className="last-message" style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', whiteSpace: 'normal', overflow: 'hidden', color: 'var(--text-secondary)', fontSize: '13px', lineHeight: '1.3', flex: 1, paddingRight: '8px' }}>
+                <div className="wa-item-bottom-row">
+                  <div className="wa-item-snippet wa-item-snippet-wrap last-message">
                     {conv.estado === 'ESPERANDO_AGENTE' ? (
-                      <span style={{ color: 'var(--accent)', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                        <Clock size={12} /> EN ESPERA ({conv.departamento})
+                      <span className="wa-waiting-tag" style={{ color: '#ea580c', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <Clock size={12} /> En espera ({conv.departamento})
                       </span>
                     ) : esEncuesta ? (
-                      <span className="conv-estado-cerrado">
-                        <ClipboardList size={11} /> Encuesta pendiente
+                      <span className="conv-estado-cerrado" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <ClipboardList size={12} /> Encuesta pendiente
                       </span>
                     ) : esCerrado ? (
                       <span className="conv-estado-cerrado">
-                        {cleanLastMessage(conv.ultimo_mensaje) || 'Chat cerrado'}
+                        {renderContentWithAppleEmojis(cleanLastMessage(conv.ultimo_mensaje)) || 'Chat cerrado'}
                       </span>
                     ) : (
-                      <span>
+                      <span className="wa-snippet-text">
                         {conv.ultimo_remitente === 'agente' ? 'Tú: ' : ''}
-                        {cleanLastMessage(conv.ultimo_mensaje) || 'Sin mensajes'}
+                        {renderContentWithAppleEmojis(cleanLastMessage(conv.ultimo_mensaje)) || 'Sin mensajes'}
                       </span>
                     )}
                   </div>
 
-                  <div style={{ flexShrink: 0, display: 'flex', alignItems: 'flex-start', paddingTop: '2px' }}>
-                    {esHumano && conv.estado === 'ESPERANDO_AGENTE' ? (
-                      <div className="unread-badge-right" style={{ backgroundColor: '#25D366', color: 'white', borderRadius: '50%', minWidth: '18px', height: '18px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: 'bold', padding: '0 4px' }}>
-                        {parseInt(conv.no_leidos) > 0 ? conv.no_leidos : 1}
-                      </div>
-                    ) : esHumano && parseInt(conv.no_leidos) > 0 ? (
-                      <div className="unread-badge-right" style={{ backgroundColor: '#25D366', color: 'white', borderRadius: '50%', minWidth: '18px', height: '18px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: 'bold', padding: '0 4px' }}>
-                        {conv.no_leidos}
-                      </div>
-                    ) : esCerrado ? (
-                      <CheckCheck size={16} color="var(--text-hint)" />
+                  <div className="wa-item-badges-wrap">
+                    {unreadCount > 0 ? (
+                      <span className="wa-unread-badge">
+                        {unreadCount}
+                      </span>
                     ) : (
-                      <CheckCheck size={16} color="var(--text-hint)" />
+                      <CheckCheck size={16} className="wa-check-tick" color="#8696a0" />
                     )}
                   </div>
                 </div>
-
               </div>
             </div>
           );
         })}
 
         {conversaciones.length === 0 && (
-          <div style={{ textAlign: 'center', padding: '40px', color: '#667781', fontSize: '13px' }}>
-            No hay chats en esta categoría
+          <div className="wa-empty-list-msg">
+            {busqueda.trim() ? (
+              <div className="wa-empty-search-wrap">
+                <span>No se encontraron resultados para</span>
+                <span className="wa-empty-search-term">"{busqueda}"</span>
+                <button
+                  type="button"
+                  className="wa-empty-clear-search-btn"
+                  onClick={() => setBusqueda('')}
+                >
+                  Limpiar búsqueda
+                </button>
+              </div>
+            ) : (
+              'No hay chats en esta categoría'
+            )}
           </div>
         )}
       </div>

@@ -42,6 +42,12 @@ export const resolveMedia = (url) => {
   if (url.startsWith('rr://')) {
     return `${API_URL}/uploads/rr-media/${url.slice(5)}`;
   }
+  if (url.startsWith('/')) {
+    return `${API_URL}${url}`;
+  }
+  if (url.startsWith('uploads/')) {
+    return `${API_URL}/${url}`;
+  }
   return url;
 };
 
@@ -102,11 +108,37 @@ export const apiService = {
     return _parseJson(res);
   },
 
-  async login(email, password) {
+  async login(usuario, password) {
     const res = await fetch(`${API_URL}/auth/login`, {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ email, password }),
+      body:    JSON.stringify({ usuario, password }),
+    });
+    return _parseJson(res);
+  },
+
+  async cambiarPasswordObligatorio(nueva_password) {
+    const res = await fetch(`${API_URL}/auth/cambiar-password-obligatorio`, {
+      method:  'POST',
+      headers: _authHeaders(),
+      body:    JSON.stringify({ nueva_password }),
+    });
+    return _parseJson(res);
+  },
+
+  async consultarCoordinador(identifier) {
+    const res = await fetch(`${API_URL}/auth/consultar-coordinador`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ identifier }),
+    });
+    return _parseJson(res);
+  },
+
+  async resetPasswordTemporal(agenteId) {
+    const res = await fetch(`${API_URL}/agente/${agenteId}/reset-password-temporal`, {
+      method:  'POST',
+      headers: _authHeaders(),
     });
     return _parseJson(res);
   },
@@ -719,6 +751,18 @@ export const apiService = {
     return _parseJson(res);
   },
 
+  async crearSticker(agente_id, blob) {
+    const form = new FormData();
+    form.append('agente_id', agente_id);
+    form.append('archivo',   blob, 'sticker.webp');
+    const res = await fetch(`${API_URL}/agente/stickers/create`, {
+      method:  'POST',
+      headers: _authHeadersMultipart(),
+      body:    form,
+    });
+    return _parseJson(res);
+  },
+
   // ─────────────────────────────────────────────
   // HORARIOS — turnos por área y festivos
   // ─────────────────────────────────────────────
@@ -1072,5 +1116,68 @@ export const apiService = {
       headers: _authHeaders()
     });
     return _parseJson(res);
-  }
+  },
+
+  // ─────────────────────────────────────────────
+  // TICKETS Y SOLICITUDES DE TI
+  // ─────────────────────────────────────────────
+  async getTickets(params = {}) {
+    const query = new URLSearchParams();
+    Object.entries(params).forEach(([k, v]) => {
+      if (v !== undefined && v !== null && v !== '') query.append(k, v);
+    });
+    const qs = query.toString() ? `?${query.toString()}` : '';
+    const res = await fetch(`${API_URL}/ti/tickets${qs}`, { headers: _authHeaders() });
+    return _parseJson(res);
+  },
+
+  async getTicketStats(params = {}) {
+    const query = new URLSearchParams();
+    Object.entries(params).forEach(([k, v]) => {
+      if (v !== undefined && v !== null && v !== '') query.append(k, v);
+    });
+    const qs = query.toString() ? `?${query.toString()}` : '';
+    const res = await fetch(`${API_URL}/ti/tickets/stats${qs}`, { headers: _authHeaders() });
+    return _parseJson(res);
+  },
+
+  async getTicket(id) {
+    const res = await fetch(`${API_URL}/ti/tickets/${id}`, { headers: _authHeaders() });
+    return _parseJson(res);
+  },
+
+  async crearTicket(data) {
+    const res = await fetch(`${API_URL}/ti/tickets`, {
+      method: 'POST',
+      headers: _authHeaders(),
+      body: JSON.stringify(data),
+    });
+    return _parseJson(res);
+  },
+
+  async actualizarTicket(id, data) {
+    const res = await fetch(`${API_URL}/ti/tickets/${id}`, {
+      method: 'PUT',
+      headers: _authHeaders(),
+      body: JSON.stringify(data),
+    });
+    return _parseJson(res);
+  },
+
+  async eliminarTicket(id) {
+    const res = await fetch(`${API_URL}/ti/tickets/${id}`, {
+      method: 'DELETE',
+      headers: _authHeaders(),
+    });
+    return _parseJson(res);
+  },
+
+  async agregarComentarioTicket(id, comentario) {
+    const res = await fetch(`${API_URL}/ti/tickets/${id}/comentarios`, {
+      method: 'POST',
+      headers: _authHeaders(),
+      body: JSON.stringify({ comentario }),
+    });
+    return _parseJson(res);
+  },
 };

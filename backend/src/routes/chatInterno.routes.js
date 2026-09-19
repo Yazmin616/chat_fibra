@@ -20,7 +20,8 @@ router.use(verifyToken);
 router.get('/canales',                           chatInternoController.getCanales);
 router.get('/contactos',                         chatInternoController.getContactos);
 router.post('/directo',                          chatInternoController.abrirDirecto);
-router.post('/canales',                          chatInternoController.crearCanal);
+router.post('/canales',                          upload.single('foto'), chatInternoController.crearCanal);
+router.put('/canales/:canalId',                  upload.single('foto'), chatInternoController.actualizarCanal);
 router.delete('/canales/:canalId',                  chatInternoController.eliminarCanal);
 router.post('/canales/:canalId/ocultar',           chatInternoController.ocultarConversacion);
 router.post('/canales/:canalId/fijar',             chatInternoController.toggleFijarCanal);
@@ -30,8 +31,13 @@ router.get('/canales/:canalId/mensajes',         chatInternoController.getMensaj
 router.post('/canales/:canalId/mensajes',        upload.single('adjunto'), chatInternoController.enviarMensaje);
 router.post('/canales/:canalId/leer',            chatInternoController.marcarLeido);
 
-// Reacciones Emoji
+// Reacciones Emoji y Acciones de Mensajes
 router.post('/mensajes/:mensajeId/reacciones',   chatInternoController.toggleReaccion);
+router.put('/mensajes/:mensajeId',               chatInternoController.editarMensaje);
+router.post('/mensajes/:mensajeId/fijar',         chatInternoController.toggleFijarMensaje);
+router.post('/mensajes/:id/destacar',            chatInternoController.toggleDestacar);
+router.delete('/mensajes/:mensajeId',            chatInternoController.eliminarMensaje);
+router.get('/canales/:canalId/destacados',       chatInternoController.getMensajesDestacados);
 
 // Panel de detalles y miembros del canal
 router.get('/canales/:canalId/detalles',         chatInternoController.getDetalles);

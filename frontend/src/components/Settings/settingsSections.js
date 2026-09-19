@@ -36,6 +36,7 @@ import AsignacionStaffSection   from './sections/AsignacionStaffSection';
 import PlantillasMetaSection    from './sections/PlantillasMetaSection';
 import AreasSolucionesSection   from './sections/AreasSolucionesSection';
 import UbicacionesCobroSection  from './sections/UbicacionesCobroSection';
+import EquiposSection           from './sections/EquiposSection';
 
 export const SECTIONS = [
   {
@@ -152,6 +153,15 @@ export const SECTIONS = [
     description: 'Direcciones para pago físico',
     component:   UbicacionesCobroSection,
     adminOnly:   true,
+    coordinatorAllowed: true,
+  },
+  {
+    id:          'mi-equipo',
+    label:       'Mi Equipo y Accesos',
+    icon:        Users,
+    description: 'Miembros de tu equipo y generación de claves temporales',
+    component:   EquiposSection,
+    adminOnly:   false,
     coordinatorAllowed: true,
   },
 ];

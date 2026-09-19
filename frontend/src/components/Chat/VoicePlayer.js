@@ -20,6 +20,8 @@ function generateBars(seed, count = 30) {
   return bars;
 }
 
+const durationCache = new Map();
+
 /**
  * Reproductor de nota de voz estilo WhatsApp.
  * Props: src, msgId, fecha, estado, remitente, formatMsgTime, MessageTick
@@ -27,19 +29,93 @@ function generateBars(seed, count = 30) {
 const VoicePlayer = ({ src, msgId, fecha, estado, remitente, formatMsgTime, MessageTick }) => {
   const [playing,  setPlaying]  = useState(false);
   const [current,  setCurrent]  = useState(0);
-  const [duration, setDuration] = useState(0);
+  const [duration, setDuration] = useState(() => durationCache.get(src) || 0);
   const audioRef = useRef(null);
 
   const bars    = useMemo(() => generateBars(msgId), [msgId]);
-  const total   = duration || 1;
-  const progress = current / total;
+  const total   = isFinite(duration) && duration > 0 ? duration : 0;
+  const progress = total > 0 ? Math.min(1, Math.max(0, current / total)) : 0;
+
+  // Resolver duración finita para WebM en Chromium (que inicialmente reporta Infinity)
+  useEffect(() => {
+    if (!src) return;
+    if (durationCache.has(src)) {
+      setDuration(durationCache.get(src));
+      return;
+    }
+
+    let cancel = false;
+    try {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (AudioCtx) {
+        const ctx = new AudioCtx();
+        fetch(src)
+          .then(r => r.arrayBuffer())
+          .then(ab => ctx.decodeAudioData(ab))
+          .then(buf => {
+            if (!cancel && buf && isFinite(buf.duration) && buf.duration > 0) {
+              setDuration(buf.duration);
+              durationCache.set(src, buf.duration);
+            }
+            ctx.close().catch(() => {});
+          })
+          .catch(() => {});
+      }
+    } catch (e) {}
+
+    return () => { cancel = true; };
+  }, [src]);
 
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
-    const onTime  = () => setCurrent(audio.currentTime);
-    const onMeta  = () => setDuration(audio.duration);
-    const onEnded = () => { setPlaying(false); setCurrent(0); };
+    const onTime  = () => {
+      const c = audio.currentTime;
+      setCurrent(c);
+      if (!isFinite(duration) || duration <= 0) {
+        if (isFinite(audio.duration) && audio.duration > 0) {
+          setDuration(audio.duration);
+          durationCache.set(src, audio.duration);
+        } else if (audio.seekable && audio.seekable.length > 0) {
+          const end = audio.seekable.end(audio.seekable.length - 1);
+          if (isFinite(end) && end > 0 && end !== Infinity) {
+            setDuration(end);
+            durationCache.set(src, end);
+          }
+        }
+      }
+    };
+    const onMeta  = () => {
+      if (audio.duration && isFinite(audio.duration) && audio.duration > 0) {
+        setDuration(audio.duration);
+        durationCache.set(src, audio.duration);
+      } else if (audio.duration === Infinity) {
+        const handleSeeked = () => {
+          audio.removeEventListener('seeked', handleSeeked);
+          if (isFinite(audio.duration) && audio.duration > 0) {
+            setDuration(audio.duration);
+            durationCache.set(src, audio.duration);
+          } else if (isFinite(audio.currentTime) && audio.currentTime > 0) {
+            setDuration(audio.currentTime);
+            durationCache.set(src, audio.currentTime);
+          }
+          audio.currentTime = 0;
+        };
+        audio.addEventListener('seeked', handleSeeked);
+        audio.currentTime = 1e101;
+      }
+    };
+    const onEnded = () => {
+      setPlaying(false);
+      setCurrent(0);
+      const finalDur = isFinite(audio.duration) && audio.duration > 0
+        ? audio.duration
+        : (isFinite(audio.currentTime) && audio.currentTime > 0 ? audio.currentTime : duration);
+      if (finalDur && isFinite(finalDur) && finalDur > 0) {
+        setDuration(finalDur);
+        durationCache.set(src, finalDur);
+      }
+    };
     audio.addEventListener('timeupdate',    onTime);
     audio.addEventListener('loadedmetadata', onMeta);
     audio.addEventListener('ended',         onEnded);
@@ -48,7 +124,7 @@ const VoicePlayer = ({ src, msgId, fecha, estado, remitente, formatMsgTime, Mess
       audio.removeEventListener('loadedmetadata', onMeta);
       audio.removeEventListener('ended',         onEnded);
     };
-  }, []);
+  }, [src, duration]);
 
   const toggle = () => {
     const audio = audioRef.current;
@@ -59,10 +135,11 @@ const VoicePlayer = ({ src, msgId, fecha, estado, remitente, formatMsgTime, Mess
 
   const seek = (e) => {
     const audio = audioRef.current;
-    if (!audio || !duration) return;
+    if (!audio || !total) return;
     const rect = e.currentTarget.getBoundingClientRect();
-    const ratio = (e.clientX - rect.left) / rect.width;
-    audio.currentTime = ratio * duration;
+    const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+    audio.currentTime = ratio * total;
+    setCurrent(audio.currentTime);
   };
 
   const isSent = remitente !== 'user';
@@ -91,7 +168,7 @@ const VoicePlayer = ({ src, msgId, fecha, estado, remitente, formatMsgTime, Mess
           })}
         </div>
         <div className="voice-meta">
-          <span className="voice-dur">{formatDur(playing ? current : duration)}</span>
+          <span className="voice-dur">{formatDur(playing || current > 0 ? current : total)}</span>
           <span className="voice-time-tick">
             {formatMsgTime(fecha)}
             {isSent && <MessageTick estado={estado} />}

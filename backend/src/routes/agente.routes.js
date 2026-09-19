@@ -328,6 +328,40 @@ router.post('/stickers/save-from-wa', verifyToken, async (req, res) => {
   }
 });
 
+// POST /agente/stickers/create — crea y registra un sticker personalizado subido por el usuario
+router.post('/stickers/create', verifyToken, upload.single('archivo'), async (req, res) => {
+  const agente_id = req.agente?.id || req.body.agente_id;
+  if (!agente_id) return res.status(400).json({ error: 'Falta agente_id' });
+  if (!req.file) return res.status(400).json({ error: 'Falta el archivo de sticker' });
+
+  try {
+    const pack = `agente_${parseInt(agente_id)}`;
+    const destDir = path.join(STICKERS_DIR, pack);
+    await fs.promises.mkdir(destDir, { recursive: true });
+
+    const fileName = `stk_${Date.now()}_${Math.random().toString(36).substring(2, 7)}.webp`;
+    const destPath = path.join(destDir, fileName);
+
+    await fs.promises.writeFile(destPath, req.file.buffer);
+
+    const db = require('../config/db');
+    await db.query(
+      'INSERT INTO sticker_favoritos(agente_id, pack, file) VALUES($1,$2,$3) ON CONFLICT DO NOTHING',
+      [parseInt(agente_id), pack, fileName]
+    );
+
+    res.json({
+      ok: true,
+      pack,
+      file: fileName,
+      url: `/uploads/stickers/${pack}/${fileName}`
+    });
+  } catch (err) {
+    logger.error('[STICKER CREATE] Error al crear sticker:', { error: err.message });
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // GET /agente/stickers — lista packs y archivos disponibles en uploads/stickers/
 router.get('/stickers', verifyToken, async (req, res) => {
   try {
@@ -433,11 +467,12 @@ router.post('/enviar-media',       verifyToken,              upload.single('arch
 router.post('/liberar',            verifyToken,              agenteController.liberar);
 router.post('/escribiendo',        verifyToken,              agenteController.escribiendo);
 router.delete('/conversacion/:id', verifyToken, requireAdmin, agenteController.eliminarConversacion);
-router.get('/directorio',          verifyToken,              agenteController.directorio);
-router.get('/',                    verifyToken, requireAdmin, agenteController.listar);
-router.post('/',                   verifyToken, requireAdmin, agenteController.crear);
+router.get('/directorio',          verifyToken,                            agenteController.directorio);
+router.get('/',                    verifyToken, requireAdminOrCoordinator, agenteController.listar);
+router.post('/',                   verifyToken, requireAdmin,              agenteController.crear);
 router.patch('/:id/foto',          verifyToken, avatarUpload.single('foto'), agenteController.subirFoto);
-router.put('/:id',                 verifyToken, requireAdmin, agenteController.actualizar);
-router.delete('/:id',              verifyToken, requireAdmin, agenteController.eliminar);
+router.put('/:id',                 verifyToken, requireAdmin,              agenteController.actualizar);
+router.delete('/:id',              verifyToken, requireAdmin,              agenteController.eliminar);
+router.post('/:id/reset-password-temporal', verifyToken, requireAdminOrCoordinator, agenteController.resetPasswordTemporal);
 
 module.exports = router;

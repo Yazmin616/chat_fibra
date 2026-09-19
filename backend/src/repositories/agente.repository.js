@@ -16,15 +16,42 @@ const db = require('../config/db');
  * @returns {Promise<import('pg').QueryResult>}
  */
 const findById = (id) =>
-  db.query('SELECT * FROM agentes WHERE id=$1', [id]);
+  db.query(
+    `SELECT a.*, c.nombre AS coordinador_nombre, c.email AS coordinador_email
+     FROM agentes a
+     LEFT JOIN agentes c ON c.id = a.coordinador_id
+     WHERE a.id=$1`,
+    [id]
+  );
 
 /**
- * Busca un agente por su email (usado en login).
+ * Busca un agente por su usuario o email (usado en login y recuperación).
+ * @param {string} identifier - Usuario o email.
+ * @returns {Promise<import('pg').QueryResult>}
+ */
+const findByUsuarioOrEmail = (identifier) => {
+  const clean = (identifier || '').trim().toLowerCase();
+  const prefix = clean.includes('@') ? clean.split('@')[0] : clean;
+  return db.query(
+    `SELECT a.*, c.nombre AS coordinador_nombre, c.email AS coordinador_email
+     FROM agentes a
+     LEFT JOIN agentes c ON c.id = a.coordinador_id
+     WHERE LOWER(a.usuario) = $1 
+        OR (a.email IS NOT NULL AND LOWER(a.email) = $1)
+        OR (a.email IS NOT NULL AND LOWER(REPLACE(a.email, '.mx', '.com')) = $1)
+        OR (a.email IS NOT NULL AND LOWER(REPLACE(a.email, '.com', '.mx')) = $1)
+        OR LOWER(a.usuario) = $2`,
+    [clean, prefix]
+  );
+};
+
+/**
+ * Busca un agente por su email (compatibilidad).
  * @param {string} email - Email del agente.
  * @returns {Promise<import('pg').QueryResult>}
  */
 const findByEmail = (email) =>
-  db.query('SELECT * FROM agentes WHERE email=$1', [email]);
+  db.query('SELECT * FROM agentes WHERE LOWER(email)=$1', [email.toLowerCase()]);
 
 /**
  * Lista todos los agentes sin exponer el campo `password`.
@@ -34,11 +61,14 @@ const findByEmail = (email) =>
 const findAll = () =>
   db.query(
     `SELECT 
-      id, nombre, email, rol, area, esta_online, estado_presencia, mensaje_presencia, last_seen, created_at, foto_perfil,
-      EXISTS(SELECT 1 FROM public.areas_soluciones WHERE coordinador_id = agentes.id) AS es_coordinador
-     FROM agentes 
-     WHERE rol != 'ti' 
-     ORDER BY created_at DESC`
+      a.id, a.usuario, a.nombre, a.email, a.rol, a.area, a.esta_online, a.estado_presencia, 
+      a.mensaje_presencia, a.last_seen, a.created_at, a.foto_perfil,
+      a.debe_cambiar_password, a.coordinador_id, a.puede_recuperar_auto,
+      c.nombre AS coordinador_nombre,
+      EXISTS(SELECT 1 FROM public.areas_soluciones WHERE coordinador_id = a.id) AS es_coordinador
+     FROM agentes a
+     LEFT JOIN agentes c ON c.id = a.coordinador_id
+     ORDER BY a.created_at DESC`
   );
 
 /**
@@ -47,22 +77,18 @@ const findAll = () =>
  */
 const findAllDirectorio = () =>
   db.query(
-    "SELECT id, nombre, area, esta_online FROM agentes WHERE rol != 'ti' ORDER BY area ASC, nombre ASC"
+    "SELECT id, usuario, nombre, area, esta_online FROM agentes ORDER BY area ASC, nombre ASC"
   );
 
 /**
  * Inserta un nuevo agente en el sistema.
- * @param {string} nombre         - Nombre completo.
- * @param {string} email          - Email (debe ser único).
- * @param {string} hashedPassword - Contraseña ya encriptada con bcrypt.
- * @param {string} rol            - "admin" o "asesor".
- * @param {string} area           - Área de trabajo: "Ventas", "Cobranza", "Soporte Técnico" o "General".
- * @returns {Promise<import('pg').QueryResult>} Fila con id, nombre y email del agente creado.
  */
-const create = (nombre, email, hashedPassword, rol, area) =>
+const create = ({ usuario, nombre, email, hashedPassword, rol, area, coordinador_id = null, debe_cambiar_password = true, puede_recuperar_auto = false }) =>
   db.query(
-    'INSERT INTO agentes (nombre, email, password, rol, area) VALUES ($1,$2,$3,$4,$5) RETURNING id, nombre, email',
-    [nombre, email, hashedPassword, rol, area]
+    `INSERT INTO agentes (usuario, nombre, email, password, rol, area, coordinador_id, debe_cambiar_password, puede_recuperar_auto) 
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) 
+     RETURNING id, usuario, nombre, email, rol, area, coordinador_id, debe_cambiar_password, puede_recuperar_auto`,
+    [usuario, nombre, email || null, hashedPassword, rol, area, coordinador_id, debe_cambiar_password, puede_recuperar_auto]
   );
 
 /**
@@ -76,33 +102,35 @@ const remove = (id) =>
 
 /**
  * Actualiza los datos de un agente (sin cambiar contraseña).
- * @param {number} id
- * @param {string} nombre
- * @param {string} email
- * @param {string} rol
- * @param {string} area
- * @returns {Promise<import('pg').QueryResult>}
  */
-const update = (id, nombre, email, rol, area) =>
+const update = ({ id, usuario, nombre, email, rol, area, coordinador_id = null, puede_recuperar_auto = false }) =>
   db.query(
-    'UPDATE agentes SET nombre=$1, email=$2, rol=$3, area=$4 WHERE id=$5 RETURNING id, nombre, email, rol, area',
-    [nombre, email, rol, area, id]
+    `UPDATE agentes 
+     SET usuario=COALESCE($1, usuario), nombre=$2, email=$3, rol=$4, area=$5, coordinador_id=$6, puede_recuperar_auto=$7 
+     WHERE id=$8 
+     RETURNING id, usuario, nombre, email, rol, area, coordinador_id, puede_recuperar_auto`,
+    [usuario || null, nombre, email || null, rol, area, coordinador_id, puede_recuperar_auto, id]
   );
 
 /**
  * Actualiza los datos de un agente incluyendo nueva contraseña.
- * @param {number} id
- * @param {string} nombre
- * @param {string} email
- * @param {string} hashedPassword
- * @param {string} rol
- * @param {string} area
- * @returns {Promise<import('pg').QueryResult>}
  */
-const updateWithPassword = (id, nombre, email, hashedPassword, rol, area) =>
+const updateWithPassword = ({ id, usuario, nombre, email, hashedPassword, rol, area, coordinador_id = null, puede_recuperar_auto = false, debe_cambiar_password = false }) =>
   db.query(
-    'UPDATE agentes SET nombre=$1, email=$2, password=$3, rol=$4, area=$5 WHERE id=$6 RETURNING id, nombre, email, rol, area',
-    [nombre, email, hashedPassword, rol, area, id]
+    `UPDATE agentes 
+     SET usuario=COALESCE($1, usuario), nombre=$2, email=$3, password=$4, rol=$5, area=$6, coordinador_id=$7, puede_recuperar_auto=$8, debe_cambiar_password=$9 
+     WHERE id=$10 
+     RETURNING id, usuario, nombre, email, rol, area, coordinador_id, puede_recuperar_auto, debe_cambiar_password`,
+    [usuario || null, nombre, email || null, hashedPassword, rol, area, coordinador_id, puede_recuperar_auto, debe_cambiar_password, id]
+  );
+
+/**
+ * Actualiza la contraseña y la bandera debe_cambiar_password.
+ */
+const updatePasswordAndDebeCambiar = (id, hashedPassword, debe_cambiar_password) =>
+  db.query(
+    `UPDATE agentes SET password=$1, debe_cambiar_password=$2 WHERE id=$3 RETURNING id, usuario, nombre, email, debe_cambiar_password`,
+    [hashedPassword, debe_cambiar_password, id]
   );
 
 /**
@@ -174,7 +202,7 @@ const setEstadoPresencia = (id, estado, mensaje = null) =>
   );
 
 module.exports = { 
-  findById, findByEmail, findAll, findAllDirectorio, create, remove, update, updateWithPassword, 
-  setOnline, touchLastSeen, marcarInactivos, getNextAgentForRoundRobin, updateUltimoChatAsignado,
+  findById, findByEmail, findByUsuarioOrEmail, findAll, findAllDirectorio, create, remove, update, updateWithPassword, 
+  updatePasswordAndDebeCambiar, setOnline, touchLastSeen, marcarInactivos, getNextAgentForRoundRobin, updateUltimoChatAsignado,
   setEstadoPresencia
 };
