@@ -6,7 +6,7 @@ services:
     container_name: isp-backend
     restart: always
     ports:
-      - "127.0.0.1:3001:3001"   # Solo accesible localmente por Nginx
+      - "127.0.0.1:3009:3009"   # Solo accesible localmente por Nginx (o cambiar a "3009:3009")
     env_file:
       - ./backend/.env
     extra_hosts:
