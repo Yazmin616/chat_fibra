@@ -151,6 +151,13 @@ WHERE usuario IS NULL;
 CREATE INDEX IF NOT EXISTS idx_agentes_usuario ON agentes (LOWER(usuario));
 CREATE INDEX IF NOT EXISTS idx_agentes_coordinador ON agentes (coordinador_id);
 
+DO $$
+BEGIN
+  IF to_regclass('areas_soluciones') IS NOT NULL THEN
+    ALTER TABLE areas_soluciones ADD COLUMN IF NOT EXISTS coordinador_id INTEGER REFERENCES agentes(id) ON DELETE SET NULL;
+  END IF;
+END $$;
+
 -- 8. Tickets de Soporte TI
 CREATE SEQUENCE IF NOT EXISTS tickets_ti_folio_seq START 1;
 
