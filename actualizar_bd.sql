@@ -121,10 +121,35 @@ WHERE NOT EXISTS (
   WHERE p.canal_id = m.canal_id AND p.agente_id = m.agente_id
 );
 
--- 7. Estado de Presencia de Agentes
+-- 7. Estado de Presencia y Campos de Usuario en Agentes
 ALTER TABLE agentes
+  ADD COLUMN IF NOT EXISTS usuario VARCHAR(60) UNIQUE,
+  ADD COLUMN IF NOT EXISTS debe_cambiar_password BOOLEAN NOT NULL DEFAULT FALSE,
+  ADD COLUMN IF NOT EXISTS coordinador_id INTEGER REFERENCES agentes(id) ON DELETE SET NULL,
+  ADD COLUMN IF NOT EXISTS puede_recuperar_auto BOOLEAN NOT NULL DEFAULT FALSE,
   ADD COLUMN IF NOT EXISTS estado_presencia VARCHAR(50) DEFAULT 'disponible',
   ADD COLUMN IF NOT EXISTS mensaje_presencia VARCHAR(255) DEFAULT NULL;
+
+ALTER TABLE agentes ALTER COLUMN email DROP NOT NULL;
+
+UPDATE agentes
+SET usuario = CASE
+  WHEN email = 'admin@fibratec.mx' THEN 'admin'
+  WHEN email = 'tu_email@ejemplo.com' THEN 'tiadmin'
+  WHEN email = 'soporte@fibratec.mx' THEN 'soporte'
+  WHEN email = 'ventas@fibratec.mx' THEN 'ventas'
+  WHEN email = 'cobranza@fibratec.mx' THEN 'cobranza'
+  WHEN email = 'soporte2@fibratec.mx' THEN 'soporte2'
+  WHEN email = 'ventas2@fibratec.mx' THEN 'ventas2'
+  WHEN email = 'cobranza2@fibratec.mx' THEN 'cobranza2'
+  WHEN email = 'desarrollo@fibratec.mx' THEN 'desarrollo'
+  WHEN email LIKE 'rh%@%' THEN 'rh'
+  ELSE LOWER(REGEXP_REPLACE(SPLIT_PART(COALESCE(email, nombre), '@', 1), '[^a-zA-Z0-9_.]', '', 'g'))
+END
+WHERE usuario IS NULL;
+
+CREATE INDEX IF NOT EXISTS idx_agentes_usuario ON agentes (LOWER(usuario));
+CREATE INDEX IF NOT EXISTS idx_agentes_coordinador ON agentes (coordinador_id);
 
 -- 8. Tickets de Soporte TI
 CREATE SEQUENCE IF NOT EXISTS tickets_ti_folio_seq START 1;
@@ -221,5 +246,6 @@ INSERT INTO migrations (filename) VALUES
   ('037_agentes_presencia_estado.sql'),
   ('038_chat_interno_pin_chats.sql'),
   ('039_chat_interno_periodos_membresia.sql'),
-  ('040_tickets_ti.sql')
+  ('040_tickets_ti.sql'),
+  ('041_auth_coordinadores_usuario.sql')
 ON CONFLICT (filename) DO NOTHING;
