@@ -72,6 +72,9 @@ const ChatInternoDetailsPanel = ({
     onConfirm: null,
   });
 
+  // Modal de foto a tamaño completo (solo visualizacion, como WhatsApp)
+  const [fotoVisorUrl, setFotoVisorUrl] = useState(null);
+
   const fileInputRef = useRef(null);
   const canalId = canal?.id;
 
@@ -183,6 +186,8 @@ const ChatInternoDetailsPanel = ({
   const miMiembro = miembros.find(m => Number(m.id) === Number(userActual?.id));
   const soyAdminCanal = miMiembro?.canal_rol === 'admin';
   const puedeGestionar = esAdmin || esCreador || soyAdminCanal;
+  // Cualquier miembro activo puede cambiar la foto del grupo
+  const soyMiembroActivo = !!miMiembro;
 
   // Manejo de cambio de Foto de grupo
   const handleFotoChange = async (e) => {
@@ -341,9 +346,20 @@ const ChatInternoDetailsPanel = ({
               />
               <div
                 className="wa-info-avatar-circle"
-                onClick={() => puedeGestionar && fileInputRef.current?.click()}
-                style={{ cursor: puedeGestionar ? 'pointer' : 'default' }}
-                title={puedeGestionar ? 'Cambiar foto del grupo' : ''}
+                onClick={() => {
+                  if (esDirecto) {
+                    // Chat directo: solo ver la foto en modal, no cambiar
+                    const url = otro?.foto_perfil ? resolveAvatar(otro.foto_perfil) : null;
+                    if (url) setFotoVisorUrl(url);
+                  } else {
+                    // Grupo/Canal: cualquier miembro puede cambiar la foto
+                    if (soyMiembroActivo || esAdmin) {
+                      fileInputRef.current?.click();
+                    }
+                  }
+                }}
+                style={{ cursor: esDirecto ? (otro?.foto_perfil ? 'zoom-in' : 'default') : (soyMiembroActivo || esAdmin ? 'pointer' : 'default') }}
+                title={esDirecto ? (otro?.foto_perfil ? 'Ver foto de perfil' : '') : (soyMiembroActivo || esAdmin ? 'Cambiar foto del grupo' : '')}
               >
                 {canal.foto ? (
                   <img
@@ -368,13 +384,14 @@ const ChatInternoDetailsPanel = ({
                     )}
                   </div>
                 )}
-                {puedeGestionar && !esDirecto && (
+                {!esDirecto && (soyMiembroActivo || esAdmin) && (
                   <div className="wa-info-avatar-hover-overlay">
                     <Camera size={26} color="#ffffff" />
                   </div>
                 )}
               </div>
             </div>
+
 
             {/* Nombre del grupo / contacto */}
             <div className="wa-info-title-container">
@@ -771,6 +788,9 @@ const ChatInternoDetailsPanel = ({
                             src={resolveAvatar(m.foto_perfil)}
                             alt={m.nombre}
                             className="wa-info-member-avatar-img"
+                            style={{ cursor: 'zoom-in' }}
+                            onClick={() => setFotoVisorUrl(resolveAvatar(m.foto_perfil))}
+                            title="Ver foto de perfil"
                           />
                         ) : (
                           <div className="wa-info-member-avatar-placeholder">
@@ -1026,6 +1046,26 @@ const ChatInternoDetailsPanel = ({
         onConfirm={confirmDialog.onConfirm}
         onCancel={() => setConfirmDialog(d => ({ ...d, isOpen: false }))}
       />
+
+      {/* Modal de visualizacion de foto de perfil (solo lectura, como WhatsApp) */}
+      {fotoVisorUrl && (
+        <div
+          className="wa-foto-visor-overlay"
+          onClick={() => setFotoVisorUrl(null)}
+        >
+          <div className="wa-foto-visor-content" onClick={e => e.stopPropagation()}>
+            <button
+              type="button"
+              className="wa-foto-visor-close"
+              onClick={() => setFotoVisorUrl(null)}
+              title="Cerrar"
+            >
+              <X size={22} />
+            </button>
+            <img src={fotoVisorUrl} alt="Foto de perfil" className="wa-foto-visor-img" />
+          </div>
+        </div>
+      )}
     </>
   );
 };
