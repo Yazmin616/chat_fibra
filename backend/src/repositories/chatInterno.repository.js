@@ -43,7 +43,11 @@ async function getCanalesByAgente(agenteId) {
             'esta_online', a.esta_online,
             'estado_presencia', COALESCE(a.estado_presencia, 'disponible'),
             'mensaje_presencia', a.mensaje_presencia,
-            'last_seen', a.last_seen
+            'last_seen', a.last_seen,
+            'empresas', COALESCE(
+              (SELECT array_agg(ue.empresa_id) FROM usuario_empresas ue WHERE ue.usuario_id = a.id),
+              ARRAY['__todas__']::varchar[]
+            )
           )
           FROM chat_interno_miembros m2
           JOIN agentes a ON a.id = m2.agente_id
@@ -782,10 +786,16 @@ async function marcarLeido(canalId, agenteId, ultimoMensajeId) {
 async function getContactos(agenteIdActual) {
   const query = `
     SELECT 
-      id, nombre, email, rol, area, esta_online, COALESCE(estado_presencia, 'disponible') AS estado_presencia, mensaje_presencia, last_seen, foto_perfil
-    FROM agentes
-    WHERE id != $1
-    ORDER BY esta_online DESC, nombre ASC
+      a.id, a.nombre, a.email, a.rol, a.area, a.esta_online, 
+      COALESCE(a.estado_presencia, 'disponible') AS estado_presencia, 
+      a.mensaje_presencia, a.last_seen, a.foto_perfil,
+      COALESCE(
+        (SELECT array_agg(ue.empresa_id) FROM usuario_empresas ue WHERE ue.usuario_id = a.id),
+        ARRAY['__todas__']::varchar[]
+      ) AS empresas
+    FROM agentes a
+    WHERE a.id != $1
+    ORDER BY a.esta_online DESC, a.nombre ASC
   `;
   const { rows } = await db.query(query, [agenteIdActual]);
   return rows;

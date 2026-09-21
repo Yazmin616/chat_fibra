@@ -192,6 +192,7 @@ const ChatInternoSidebar = ({
   onAbrirModalCrearCanal,
   onToggleFijar,
   userActual,
+  empresaId = 'todas',
   crearGrupoOpen = false,
   onCloseCrearGrupo,
   onCrearGrupo,
@@ -201,6 +202,15 @@ const ChatInternoSidebar = ({
   const [busqueda, setBusqueda] = useState('');
   const [filtroChip, setFiltroChip] = useState('todos'); // 'todos' | 'no_leidos' | 'favoritos' | 'grupos'
   const [showMenu, setShowMenu] = useState(false);
+
+  // Filtrar contactos por la empresa seleccionada en el selector global
+  const contactosFiltrados = useMemo(() => {
+    if (!empresaId || empresaId === 'todas') return contactos;
+    return contactos.filter(c => {
+      const empList = c.empresas || ['__todas__'];
+      return empList.includes('__todas__') || empList.includes(empresaId);
+    });
+  }, [contactos, empresaId]);
 
   // Separar canales grupales y chats directos (deduplicando por ID)
   const canalesGrupales = useMemo(() => {
@@ -221,9 +231,14 @@ const ChatInternoSidebar = ({
       const cid = Number(c.id);
       if (seen.has(cid)) return false;
       seen.add(cid);
+
+      if (empresaId && empresaId !== 'todas') {
+        const empList = c.otro_participante?.empresas || ['__todas__'];
+        return empList.includes('__todas__') || empList.includes(empresaId);
+      }
       return true;
     });
-  }, [canales]);
+  }, [canales, empresaId]);
 
   // Totales para las píldoras de filtro
   const unreadTotal = useMemo(() => {
@@ -281,7 +296,7 @@ const ChatInternoSidebar = ({
 
     // 2. Contactos y chats directos
     const contactosIds = new Set();
-    const itemsDirectos = contactos.map(contacto => {
+    const itemsDirectos = contactosFiltrados.map(contacto => {
       contactosIds.add(Number(contacto.id));
       const directCanal = chatsDirectos.find(
         c => Number(c.otro_participante?.id) === Number(contacto.id)
@@ -410,14 +425,14 @@ const ChatInternoSidebar = ({
       // Desempate alfabético
       return (a.nombre || '').localeCompare(b.nombre || '');
     });
-  }, [canalesGrupales, chatsDirectos, contactos, canalActivo, mensajesActivos, term, filtroChip]);
+  }, [canalesGrupales, chatsDirectos, contactosFiltrados, canalActivo, mensajesActivos, term, filtroChip]);
 
   return (
     <aside className="ci-sidebar wa-sidebar" style={{ position: 'relative' }}>
       {/* Drawer para Crear Grupo estilo WhatsApp Desktop */}
       {crearGrupoOpen && (
         <CrearGrupoWhatsAppDrawer
-          contactos={contactos}
+          contactos={contactosFiltrados}
           userActual={userActual}
           onCrear={onCrearGrupo}
           onClose={onCloseCrearGrupo}

@@ -769,7 +769,7 @@ function App() {
           )}
 
           {currentView === 'chat-interno' && (
-            <ChatInternoView socket={socket} user={user} darkMode={darkMode} canalInicialId={canalInternoActivoId} />
+            <ChatInternoView socket={socket} user={user} darkMode={darkMode} canalInicialId={canalInternoActivoId} empresaId={empresaId} />
           )}
 
           {currentView === 'tickets' && (

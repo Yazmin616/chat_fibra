@@ -5,7 +5,7 @@ import ChatInternoSidebar from './ChatInternoSidebar';
 import ChatInternoWindow from './ChatInternoWindow';
 import ChatInternoDetailsPanel from './ChatInternoDetailsPanel';
 
-const ChatInternoView = ({ socket, user, darkMode, canalInicialId }) => {
+const ChatInternoView = ({ socket, user, darkMode, canalInicialId, empresaId }) => {
   const [modalCrearOpen, setModalCrearOpen] = useState(false);
   const [detallesOpen, setDetallesOpen] = useState(() => typeof window !== "undefined" && window.innerWidth >= 1350);
 
@@ -81,6 +81,7 @@ const ChatInternoView = ({ socket, user, darkMode, canalInicialId }) => {
         onAbrirModalCrearCanal={() => setModalCrearOpen(true)}
         onToggleFijar={toggleFijarCanal}
         userActual={user}
+        empresaId={empresaId}
         crearGrupoOpen={modalCrearOpen}
         onCloseCrearGrupo={() => setModalCrearOpen(false)}
         onCrearGrupo={crearCanal}

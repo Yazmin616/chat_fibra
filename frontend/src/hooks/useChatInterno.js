@@ -39,14 +39,22 @@ export function useChatInterno({ socket, user, canalInicialId }) {
   const cargarDatos = useCallback(async () => {
     try {
       setCargando(true);
-      const [listCanales, listContactos] = await Promise.all([
+      const [resCanales, resContactos] = await Promise.allSettled([
         chatInternoService.getCanales(),
         chatInternoService.getContactos(),
       ]);
-      setCanales(listCanales);
-      setContactos(listContactos);
 
+      if (resCanales.status === 'fulfilled' && Array.isArray(resCanales.value)) {
+        setCanales(resCanales.value);
+      } else if (resCanales.status === 'rejected') {
+        console.error('Error al cargar canales del chat interno:', resCanales.reason);
+      }
 
+      if (resContactos.status === 'fulfilled' && Array.isArray(resContactos.value)) {
+        setContactos(resContactos.value);
+      } else if (resContactos.status === 'rejected') {
+        console.error('Error al cargar contactos del chat interno:', resContactos.reason);
+      }
     } catch (err) {
       console.error('Error al cargar datos del chat interno:', err);
     } finally {
