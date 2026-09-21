@@ -112,7 +112,7 @@ const AgentCard = ({ agente, currentUser, onEditar, onEliminar, onResetPassword 
               backgroundColor: '#fef3c7', border: '1px solid #fde68a',
               padding: '2px 7px', borderRadius: '5px' 
             }}>
-              🔑 Cambio pendiente
+              Cambio pendiente
             </span>
           )}
         </div>
@@ -156,7 +156,7 @@ const AgentCard = ({ agente, currentUser, onEditar, onEliminar, onResetPassword 
 
       {/* 3. Actions Column */}
       <div className="agent-row-actions" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-        {(currentUser?.rol === 'admin' || currentUser?.es_coordinador) && onResetPassword && (
+        {(currentUser?.rol === 'admin' || currentUser?.rol === 'ti' || currentUser?.es_coordinador) && onResetPassword && (
           <button 
             type="button"
             className="reset-agent-row-btn" 

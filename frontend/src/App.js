@@ -609,7 +609,7 @@ function App() {
       />
     );
   }
-  if (user.rol === 'ti') return <TIPanel user={user} logout={logout} socket={socket} />;
+  if (user.rol === 'ti') return <TIPanel user={user} logout={logout} socket={socket} actualizarUsuario={actualizarUsuario} />;
 
   // Pantalla de mantenimiento para admin/asesor mientras TI trabaja
   if (mantenimiento) {

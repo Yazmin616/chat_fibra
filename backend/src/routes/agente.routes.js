@@ -22,7 +22,7 @@ const router                = express.Router();
 const agenteController      = require('../controllers/agente.controller');
 const dashboardController   = require('../controllers/dashboard.controller');
 const infraccionController  = require('../controllers/infraccion.controller');
-const { verifyToken, requireAdmin, requireAdminOrCoordinator } = require('../middleware/auth.middleware');
+const { verifyToken, requireAdmin, requireAdminOrCoordinator, requireAdminOrTI } = require('../middleware/auth.middleware');
 
 // Multer en memoria: archivos nunca tocan el disco, se procesan directamente en RAM
 // y se envían al canal externo (Telegram). Límite 16 MB.
@@ -469,10 +469,10 @@ router.post('/escribiendo',        verifyToken,              agenteController.es
 router.delete('/conversacion/:id', verifyToken, requireAdmin, agenteController.eliminarConversacion);
 router.get('/directorio',          verifyToken,                            agenteController.directorio);
 router.get('/',                    verifyToken, requireAdminOrCoordinator, agenteController.listar);
-router.post('/',                   verifyToken, requireAdmin,              agenteController.crear);
+router.post('/',                   verifyToken, requireAdminOrTI,          agenteController.crear);
 router.patch('/:id/foto',          verifyToken, avatarUpload.single('foto'), agenteController.subirFoto);
-router.put('/:id',                 verifyToken, requireAdmin,              agenteController.actualizar);
-router.delete('/:id',              verifyToken, requireAdmin,              agenteController.eliminar);
+router.put('/:id',                 verifyToken, requireAdminOrTI,          agenteController.actualizar);
+router.delete('/:id',              verifyToken, requireAdminOrTI,          agenteController.eliminar);
 router.post('/:id/reset-password-temporal', verifyToken, requireAdminOrCoordinator, agenteController.resetPasswordTemporal);
 
 module.exports = router;

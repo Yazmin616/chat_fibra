@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Settings, LogOut, Download, Trash2, RefreshCw, AlertTriangle, CheckCircle, Server, Layers, MessageSquare, Wrench } from 'lucide-react';
+import { Settings, LogOut, Download, Trash2, RefreshCw, AlertTriangle, CheckCircle, Server, Layers, MessageSquare, Wrench, Users } from 'lucide-react';
 import { API_URL } from '../../services/api';
 import ChatInternoView from '../ChatInterno/ChatInternoView';
 import TicketsView from './Tickets/TicketsView';
+import AgentManagementView from '../Settings/AgentManagementView';
 import '../../styles/ti-panel.css';
 
 const authHeaders = () => ({
@@ -27,8 +28,8 @@ function fmt(n) {
 }
 
 // ────────────────────────────────────────────────────────────────────────────
-const TIPanel = ({ user, logout, socket }) => {
-  const [tabActivo,     setTabActivo]     = useState('mantenimiento'); // 'mantenimiento' | 'tickets' | 'chat'
+const TIPanel = ({ user, logout, socket, actualizarUsuario }) => {
+  const [tabActivo,     setTabActivo]     = useState('mantenimiento'); // 'mantenimiento' | 'tickets' | 'chat' | 'usuarios'
   const [status,        setStatus]        = useState(null);
   const [loadingStatus, setLoadingStatus] = useState(true);
   const [logs,          setLogs]          = useState([]);
@@ -228,6 +229,13 @@ const TIPanel = ({ user, logout, socket }) => {
           >
             <MessageSquare size={14} /> Chat Interno
           </button>
+          <button
+            type="button"
+            className={`ti-nav-tab ${tabActivo === 'usuarios' ? 'active' : ''}`}
+            onClick={() => setTabActivo('usuarios')}
+          >
+            <Users size={14} /> Gestión de Usuarios
+          </button>
         </div>
 
         <div className="ti-header-right">
@@ -250,12 +258,18 @@ const TIPanel = ({ user, logout, socket }) => {
         </main>
       )}
 
+      {tabActivo === 'usuarios' && (
+        <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
+          <AgentManagementView user={user} actualizarUsuario={actualizarUsuario} />
+        </div>
+      )}
+
       {tabActivo === 'mantenimiento' && (
         <main className="ti-main">
           {/* Banner de bienvenida con Fibri */}
         <div className="ti-welcome">
           <div className="ti-welcome-text">
-            <h2>¡Hola, {user?.nombre?.split(' ')[0]}! 👋</h2>
+            <h2>¡Hola, {user?.nombre?.split(' ')[0]}!</h2>
             <p>Bienvenido al panel de administración técnica del sistema.</p>
           </div>
           <img src="/fibri.png" alt="Fibri" className="ti-fibri" />

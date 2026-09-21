@@ -1,10 +1,10 @@
 const express       = require('express');
 const router        = express.Router();
-const { verifyToken, requireAdmin } = require('../middleware/auth.middleware');
+const { verifyToken, requireAdminOrTI } = require('../middleware/auth.middleware');
 const ctrl          = require('../controllers/permisos.controller');
 
 router.get('/mi',   verifyToken, ctrl.getMios);
-router.get('/:id',  verifyToken, requireAdmin, ctrl.getDeUsuario);
-router.put('/:id',  verifyToken, requireAdmin, ctrl.setDeUsuario);
+router.get('/:id',  verifyToken, requireAdminOrTI, ctrl.getDeUsuario);
+router.put('/:id',  verifyToken, requireAdminOrTI, ctrl.setDeUsuario);
 
 module.exports = router;

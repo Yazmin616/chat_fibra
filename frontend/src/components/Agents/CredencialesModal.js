@@ -19,7 +19,7 @@ const CredencialesModal = ({ agente, onClose }) => {
   };
 
   const handleCopiarTodo = () => {
-    const texto = `👋 ¡Hola, ${nombre}!\n\nTe comparto tus accesos al sistema CRM de Fibratec:\n\n👤 Usuario: ${usuario}\n🔑 Contraseña temporal: ${password}\n\nℹ️ Nota: Al iniciar sesión por primera vez, el sistema te solicitará cambiar esta contraseña por una propia y definitiva.`;
+    const texto = `¡Hola, ${nombre}!\n\nTe comparto tus accesos al sistema CRM de Fibratec:\n\nUsuario: ${usuario}\nContraseña temporal: ${password}\n\nNota: Al iniciar sesión por primera vez, el sistema te solicitará cambiar esta contraseña por una propia y definitiva.`;
     navigator.clipboard.writeText(texto);
     setCopiadoTodo(true);
     setTimeout(() => setCopiadoTodo(false), 2500);

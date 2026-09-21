@@ -224,8 +224,8 @@ async function generarPasswordTemporal(solicitante, targetAgenteId) {
   }
   const targetAgente = rows[0];
 
-  // Verificar autorización
-  const esAdmin = solicitante.rol === 'admin';
+  // Verificar autorización (Admin y TI autorizados globalmente)
+  const esAdmin = solicitante.rol === 'admin' || solicitante.rol === 'ti';
   let autorizado = esAdmin;
 
   if (!autorizado) {

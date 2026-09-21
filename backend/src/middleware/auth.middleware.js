@@ -96,11 +96,21 @@ const requireTI = (req, res, next) => {
 };
 
 /**
- * Verifica que el agente autenticado sea Administrador o Coordinador de algún área.
+ * Verifica que el agente autenticado tenga rol "admin" o "ti".
+ */
+const requireAdminOrTI = (req, res, next) => {
+  if (!req.agente || (req.agente.rol !== 'admin' && req.agente.rol !== 'ti')) {
+    return res.status(403).json({ error: 'Admin or TI access required' });
+  }
+  next();
+};
+
+/**
+ * Verifica que el agente autenticado sea Administrador, TI o Coordinador de algún área.
  */
 const requireAdminOrCoordinator = async (req, res, next) => {
   if (!req.agente) return res.status(401).json({ error: 'Unauthorized' });
-  if (req.agente.rol === 'admin') {
+  if (req.agente.rol === 'admin' || req.agente.rol === 'ti') {
     req.agente.coordinadorAreas = [];
     return next();
   }
@@ -119,7 +129,7 @@ const requireAdminOrCoordinator = async (req, res, next) => {
     return next(err);
   }
 
-  return res.status(403).json({ error: 'Access forbidden: Admin or Coordinator required' });
+  return res.status(403).json({ error: 'Access forbidden: Admin, TI or Coordinator required' });
 };
 
-module.exports = { verifyToken, requireAdmin, requireAsesor, requireTI, requireAdminOrCoordinator };
+module.exports = { verifyToken, requireAdmin, requireAsesor, requireTI, requireAdminOrTI, requireAdminOrCoordinator };
