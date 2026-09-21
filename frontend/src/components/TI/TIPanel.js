@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { Settings, LogOut, Download, Trash2, RefreshCw, AlertTriangle, CheckCircle, Server, Layers, MessageSquare, Wrench, Users } from 'lucide-react';
-import { API_URL } from '../../services/api';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { Settings, LogOut, Download, Trash2, RefreshCw, AlertTriangle, CheckCircle, Server, Layers, MessageSquare, Wrench, Users, Camera, User } from 'lucide-react';
+import { API_URL, resolveAvatar, apiService } from '../../services/api';
 import ChatInternoView from '../ChatInterno/ChatInternoView';
 import TicketsView from './Tickets/TicketsView';
 import AgentManagementView from '../Settings/AgentManagementView';
@@ -62,6 +62,49 @@ const TIPanel = ({ user, logout, socket, actualizarUsuario }) => {
 
   // Error general
   const [error, setError] = useState('');
+
+  // Foto de perfil del usuario TI
+  const [userFoto, setUserFoto]         = useState(user?.foto_perfil || null);
+  const [subiendoFoto, setSubiendoFoto] = useState(false);
+  const fileInputRef                    = useRef(null);
+
+  useEffect(() => {
+    if (user?.foto_perfil) {
+      setUserFoto(user.foto_perfil);
+    }
+  }, [user?.foto_perfil]);
+
+  useEffect(() => {
+    const handleFotoActualizada = (e) => {
+      if (e.detail && (!e.detail.id || Number(e.detail.id) === Number(user?.id))) {
+        setUserFoto(e.detail.foto_perfil);
+      }
+    };
+    window.addEventListener('agente:foto-actualizada', handleFotoActualizada);
+    return () => window.removeEventListener('agente:foto-actualizada', handleFotoActualizada);
+  }, [user?.id]);
+
+  const handleFotoChange = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file || !user?.id) return;
+    setSubiendoFoto(true);
+    try {
+      const result = await apiService.subirFotoPerfil(user.id, file);
+      const nuevaUrl = result.foto_perfil + '?v=' + Date.now();
+      setUserFoto(nuevaUrl);
+      if (actualizarUsuario) {
+        actualizarUsuario({ foto_perfil: result.foto_perfil });
+      }
+      window.dispatchEvent(new CustomEvent('agente:foto-actualizada', {
+        detail: { id: user.id, foto_perfil: nuevaUrl },
+      }));
+    } catch (err) {
+      console.error('Error al subir foto de perfil:', err);
+    } finally {
+      setSubiendoFoto(false);
+      e.target.value = '';
+    }
+  };
 
   const cargarStatus = useCallback(async () => {
     setLoadingStatus(true);
@@ -239,6 +282,63 @@ const TIPanel = ({ user, logout, socket, actualizarUsuario }) => {
         </div>
 
         <div className="ti-header-right">
+          <div
+            className="ti-avatar-btn-wrap"
+            onClick={() => !subiendoFoto && fileInputRef.current?.click()}
+            title="Cambiar foto de perfil"
+            style={{
+              position: 'relative',
+              width: '36px',
+              height: '36px',
+              borderRadius: '50%',
+              cursor: subiendoFoto ? 'wait' : 'pointer',
+              overflow: 'hidden',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              backgroundColor: '#DC1E1E',
+              border: '2px solid #e2e8f0',
+              boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+              flexShrink: 0
+            }}
+          >
+            {userFoto ? (
+              <img
+                src={resolveAvatar(userFoto)}
+                alt=""
+                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                onError={(e) => { e.currentTarget.style.display = 'none'; }}
+              />
+            ) : (
+              <User size={18} color="#fff" />
+            )}
+            <div
+              className="ti-avatar-hover-overlay"
+              style={{
+                position: 'absolute',
+                inset: 0,
+                backgroundColor: 'rgba(0,0,0,0.45)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                opacity: subiendoFoto ? 1 : 0,
+                transition: 'opacity 0.2s',
+              }}
+            >
+              {subiendoFoto ? (
+                <RefreshCw size={14} color="#fff" className="ti-spin" />
+              ) : (
+                <Camera size={14} color="#fff" />
+              )}
+            </div>
+          </div>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            style={{ display: 'none' }}
+            onChange={handleFotoChange}
+          />
           <span className="ti-user-badge">{user?.nombre}</span>
           <button className="ti-logout-btn" onClick={logout}>
             <LogOut size={13} /> Salir

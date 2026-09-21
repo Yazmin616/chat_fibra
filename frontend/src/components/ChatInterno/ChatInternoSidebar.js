@@ -637,15 +637,23 @@ const ChatInternoSidebar = ({
                     {canal.foto ? (
                       <img
                         src={resolveAvatar(canal.foto)}
-                        alt={canal.nombre}
+                        alt=""
                         className="wa-item-avatar-img"
                         style={{ width: '49px', height: '49px', borderRadius: '50%', objectFit: 'cover' }}
+                        onError={(e) => {
+                          e.target.style.display = 'none';
+                          if (e.target.nextElementSibling) {
+                            e.target.nextElementSibling.style.display = 'flex';
+                          }
+                        }}
                       />
-                    ) : (
-                      <div className={`wa-item-avatar-channel ${canal.es_privado ? 'privado' : 'publico'}`}>
-                        {canal.es_privado ? <Lock size={20} /> : <Hash size={22} />}
-                      </div>
-                    )}
+                    ) : null}
+                    <div
+                      className={`wa-item-avatar-channel ${canal.es_privado ? 'privado' : 'publico'}`}
+                      style={{ display: canal.foto ? 'none' : 'flex' }}
+                    >
+                      {canal.es_privado ? <Lock size={20} /> : <Hash size={22} />}
+                    </div>
                   </div>
 
                   {/* Información y Mensajes */}
@@ -763,14 +771,22 @@ const ChatInternoSidebar = ({
                   {contacto?.foto_perfil ? (
                     <img
                       src={resolveAvatar(contacto.foto_perfil)}
-                      alt={contacto.nombre}
+                      alt=""
                       className="wa-item-avatar-img"
+                      onError={(e) => {
+                        e.target.style.display = 'none';
+                        if (e.target.nextElementSibling) {
+                          e.target.nextElementSibling.style.display = 'flex';
+                        }
+                      }}
                     />
-                  ) : (
-                    <div className="wa-item-avatar-placeholder">
-                      {contacto?.nombre ? contacto.nombre.charAt(0).toUpperCase() : 'U'}
-                    </div>
-                  )}
+                  ) : null}
+                  <div
+                    className="wa-item-avatar-placeholder"
+                    style={{ display: contacto?.foto_perfil ? 'none' : 'flex' }}
+                  >
+                    {contacto?.nombre ? contacto.nombre.charAt(0).toUpperCase() : 'U'}
+                  </div>
                   {(() => {
                     const pres = getPresenciaInfo(contacto);
                     return (

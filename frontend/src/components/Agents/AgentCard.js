@@ -49,10 +49,23 @@ const AgentCard = ({ agente, currentUser, onEditar, onEliminar, onResetPassword 
       <div className="agent-row-avatar-wrapper">
         <div className="agent-row-avatar">
           {agente.foto_perfil ? (
-            <img src={resolveAvatar(agente.foto_perfil)} alt={agente.nombre} />
-          ) : (
-            <span className="agent-row-inicial">{inicial}</span>
-          )}
+            <img
+              src={resolveAvatar(agente.foto_perfil)}
+              alt=""
+              onError={(e) => {
+                e.target.style.display = 'none';
+                if (e.target.nextElementSibling) {
+                  e.target.nextElementSibling.style.display = 'inline';
+                }
+              }}
+            />
+          ) : null}
+          <span
+            className="agent-row-inicial"
+            style={{ display: agente.foto_perfil ? 'none' : 'inline' }}
+          >
+            {inicial}
+          </span>
         </div>
         <div 
           className={`agent-row-status-dot ${presencia.estaOnline ? 'online' : 'offline'} ${presencia.id || ''}`}

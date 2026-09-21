@@ -317,13 +317,16 @@ const MIME_TO_EXT = { 'image/jpeg': '.jpg', 'image/png': '.png', 'image/webp': '
 const subirFoto = async (req, res, next) => {
   try {
     const id = parseInt(req.params.id, 10);
-    if (req.agente.rol !== 'admin' && req.agente.id !== id) {
+    if (req.agente.rol !== 'admin' && req.agente.rol !== 'ti' && Number(req.agente.id) !== id) {
       return res.status(403).json({ error: 'No autorizado' });
     }
     if (!req.file) return res.status(400).json({ error: 'Archivo requerido' });
 
     const ext        = MIME_TO_EXT[req.file.mimetype] || '.jpg';
     const avatarsDir = path.join(__dirname, '..', '..', 'uploads', 'avatars');
+    if (!fs.existsSync(avatarsDir)) {
+      fs.mkdirSync(avatarsDir, { recursive: true });
+    }
 
     // Obtener la foto anterior para borrarla
     const { rows } = await db.query('SELECT foto_perfil FROM agentes WHERE id = $1', [id]);

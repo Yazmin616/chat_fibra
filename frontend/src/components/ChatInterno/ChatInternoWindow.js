@@ -970,12 +970,27 @@ const ChatInternoWindow = ({
           {esDirecto ? (
             <div className="wa-header-avatar-wrap">
               {otro?.foto_perfil ? (
-                <img src={resolveAvatar(otro.foto_perfil)} alt={otro.nombre} className="wa-header-avatar-img" />
-              ) : (
-                <div className="wa-header-avatar-placeholder" style={{ background: getSenderColor(otro?.id, otro?.nombre) }}>
-                  {otro?.nombre ? otro.nombre.charAt(0).toUpperCase() : <User size={18} />}
-                </div>
-              )}
+                <img
+                  src={resolveAvatar(otro.foto_perfil)}
+                  alt=""
+                  className="wa-header-avatar-img"
+                  onError={(e) => {
+                    e.target.style.display = 'none';
+                    if (e.target.nextElementSibling) {
+                      e.target.nextElementSibling.style.display = 'flex';
+                    }
+                  }}
+                />
+              ) : null}
+              <div
+                className="wa-header-avatar-placeholder"
+                style={{
+                  background: getSenderColor(otro?.id, otro?.nombre),
+                  display: otro?.foto_perfil ? 'none' : 'flex'
+                }}
+              >
+                {otro?.nombre ? otro.nombre.charAt(0).toUpperCase() : <User size={18} />}
+              </div>
               {(() => {
                 const pres = getPresenciaInfo(otro);
                 return (
@@ -993,7 +1008,20 @@ const ChatInternoWindow = ({
           ) : (
             canalActivo.foto ? (
               <div className="wa-header-avatar-wrap">
-                <img src={resolveAvatar(canalActivo.foto)} alt={canalActivo.nombre} className="wa-header-avatar-img" />
+                <img
+                  src={resolveAvatar(canalActivo.foto)}
+                  alt=""
+                  className="wa-header-avatar-img"
+                  onError={(e) => {
+                    e.target.style.display = 'none';
+                    if (e.target.nextElementSibling) {
+                      e.target.nextElementSibling.style.display = 'flex';
+                    }
+                  }}
+                />
+                <div className="wa-header-channel-icon publico" style={{ display: 'none' }}>
+                  {canalActivo.es_privado ? <Lock size={20} /> : <Hash size={20} />}
+                </div>
               </div>
             ) : (
               <div className="wa-header-channel-icon publico">
