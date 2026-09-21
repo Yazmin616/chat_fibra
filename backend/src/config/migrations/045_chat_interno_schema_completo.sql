@@ -65,30 +65,3 @@ CREATE TABLE IF NOT EXISTS chat_interno_periodos_membresia (
   unido_en TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   salido_en TIMESTAMPTZ
 );
-
--- 5. Canales base por defecto (general, anuncios, soporte-interno)
-DO $$
-BEGIN
-  IF NOT EXISTS (SELECT 1 FROM chat_interno_canales WHERE nombre = 'general' AND tipo = 'canal') THEN
-    INSERT INTO chat_interno_canales(nombre, descripcion, tipo, es_privado)
-    VALUES ('general', 'Canal corporativo para todos los colaboradores', 'canal', FALSE);
-  END IF;
-
-  IF NOT EXISTS (SELECT 1 FROM chat_interno_canales WHERE nombre = 'anuncios' AND tipo = 'canal') THEN
-    INSERT INTO chat_interno_canales(nombre, descripcion, tipo, es_privado, solo_lectura)
-    VALUES ('anuncios', 'Avisos y comunicados oficiales de la empresa', 'canal', FALSE, TRUE);
-  END IF;
-
-  IF NOT EXISTS (SELECT 1 FROM chat_interno_canales WHERE nombre = 'soporte-interno' AND tipo = 'canal') THEN
-    INSERT INTO chat_interno_canales(nombre, descripcion, tipo, es_privado)
-    VALUES ('soporte-interno', 'Canal para dudas y soporte interno', 'canal', FALSE);
-  END IF;
-END $$;
-
--- 6. Asegurar que todos los agentes existentes sean miembros de los canales publicos
-INSERT INTO chat_interno_miembros(canal_id, agente_id, rol, activo)
-SELECT c.id, a.id, 'miembro', TRUE
-FROM chat_interno_canales c
-CROSS JOIN agentes a
-WHERE c.tipo = 'canal' AND c.es_privado = FALSE
-ON CONFLICT (canal_id, agente_id) DO UPDATE SET activo = TRUE;
