@@ -19,13 +19,27 @@ try {
 function getTransporter() {
   if (!nodemailer) return null;
 
-  const host = process.env.SMTP_HOST;
-  const user = process.env.SMTP_USER;
-  const pass = process.env.SMTP_PASS;
+  const user = process.env.EMAIL_USER || process.env.SMTP_USER;
+  const pass = process.env.EMAIL_PASS || process.env.SMTP_PASS;
+
+  if (!user || !pass) {
+    return null;
+  }
+
+  const host = process.env.SMTP_HOST || (user.includes('@gmail.com') ? 'smtp.gmail.com' : null);
+
+  // Modo nativo Gmail
+  if (user.includes('@gmail.com') || host === 'smtp.gmail.com') {
+    return nodemailer.createTransport({
+      service: 'gmail',
+      auth: { user, pass }
+    });
+  }
+
   const port = Number(process.env.SMTP_PORT) || 587;
   const secure = process.env.SMTP_SECURE === 'true' || port === 465;
 
-  if (!host || !user || !pass) {
+  if (!host) {
     return null;
   }
 
@@ -48,7 +62,7 @@ function getTransporter() {
  */
 async function enviarPasswordTemporal(destinatario, nombre, passwordTemporal) {
   const transporter = getTransporter();
-  const from = process.env.SMTP_FROM || process.env.SMTP_USER || 'soporte@fibratec.mx';
+  const from = process.env.SMTP_FROM || process.env.EMAIL_USER || process.env.SMTP_USER || 'soporte@fibratec.mx';
 
   if (!transporter) {
     logger.info(`[EMAIL SIMULADO] Clave temporal para ${nombre} (${destinatario}): ${passwordTemporal}`);
@@ -85,15 +99,21 @@ async function enviarPasswordTemporal(destinatario, nombre, passwordTemporal) {
     </div>
   `;
 
-  await transporter.sendMail({
-    from: `"Soporte y Seguridad Fibratec" <${from}>`,
-    to: destinatario,
-    subject: 'Recuperación de Contraseña - Fibratec CRM',
-    html
-  });
+  try {
+    await transporter.sendMail({
+      from: `"Soporte y Seguridad Fibratec" <${from}>`,
+      to: destinatario,
+      subject: 'Recuperación de Contraseña - Fibratec CRM',
+      html
+    });
 
-  logger.info(`[EMAIL] Correo de recuperación enviado exitosamente a ${destinatario}`);
-  return { enviado: true, simulado: false };
+    logger.info(`[EMAIL] Correo de recuperación enviado exitosamente a ${destinatario}`);
+    return { enviado: true, simulado: false };
+  } catch (err) {
+    logger.error(`[EMAIL] Error al enviar correo a ${destinatario}:`, { error: err.message });
+    logger.info(`[EMAIL FALLBACK] Clave temporal para ${nombre} (${destinatario}): ${passwordTemporal}`);
+    throw new Error(`Error al enviar el correo a ${destinatario}: ${err.message}`);
+  }
 }
 
 module.exports = {
