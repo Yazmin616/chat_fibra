@@ -46,7 +46,8 @@ function initChatInternoSockets(io) {
     // Evento: un compañero está escribiendo
     socket.on('chat_interno:typing', ({ canalId, agenteNombre, agenteId }) => {
       if (!canalId) return;
-      socket.broadcast.emit('chat_interno:typing', {
+      const room = `chat_interno:canal:${canalId}`;
+      socket.to(room).emit('chat_interno:typing', {
         canalId: Number(canalId),
         agenteNombre,
         agenteId: Number(agenteId || socket.agenteId)
@@ -56,7 +57,8 @@ function initChatInternoSockets(io) {
     // Evento: dejó de escribir
     socket.on('chat_interno:stop_typing', ({ canalId, agenteId }) => {
       if (!canalId) return;
-      socket.broadcast.emit('chat_interno:stop_typing', {
+      const room = `chat_interno:canal:${canalId}`;
+      socket.to(room).emit('chat_interno:stop_typing', {
         canalId: Number(canalId),
         agenteId: Number(agenteId || socket.agenteId)
       });
