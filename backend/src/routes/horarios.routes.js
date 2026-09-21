@@ -20,15 +20,19 @@ const { verifyToken, requireAdmin, requireAdminOrCoordinator } = require('../mid
 
 // ── Áreas ────────────────────────────────────────────────────────────────────
 
-router.get('/areas', verifyToken, requireAdminOrCoordinator, async (req, res, next) => {
+router.get('/areas', verifyToken, async (req, res, next) => {
   try {
-    const isTodas = req.query.empresa_id === 'todas';
+    const isTodas = !req.query.empresa_id || req.query.empresa_id === 'todas';
     const eid = _eid(req.query.empresa_id);
     
     let queryStr;
     let params;
     if (isTodas) {
       queryStr = `
+        SELECT DISTINCT nombre_area AS area
+        FROM public.areas_soluciones
+        WHERE activo = true
+        UNION
         SELECT DISTINCT departamento AS area
         FROM conversaciones
         WHERE departamento IS NOT NULL
@@ -40,6 +44,10 @@ router.get('/areas', verifyToken, requireAdminOrCoordinator, async (req, res, ne
       params = [];
     } else {
       queryStr = `
+        SELECT DISTINCT nombre_area AS area
+        FROM public.areas_soluciones
+        WHERE (empresa_id ? $1 OR empresa_id ? 'todas') AND activo = true
+        UNION
         SELECT DISTINCT departamento AS area
         FROM conversaciones
         WHERE empresa_id=$1 AND departamento IS NOT NULL
@@ -53,9 +61,6 @@ router.get('/areas', verifyToken, requireAdminOrCoordinator, async (req, res, ne
 
     const { rows } = await db.query(queryStr, params);
     const areas = rows.map(r => r.area);
-    if (req.agente.rol !== 'admin') {
-      return res.json(areas.filter(a => req.agente.coordinadorAreas.includes(a)));
-    }
     res.json(areas);
   } catch (err) { next(err); }
 });

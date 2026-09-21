@@ -1071,9 +1071,12 @@ export const apiService = {
   // ─────────────────────────────────────────────
   // AREAS Y SOLUCIONES DEL BOT
   // ─────────────────────────────────────────────
-  async getAreasSoluciones(empresa_id) {
-    const query = empresa_id ? `?empresa_id=${empresa_id}` : '';
-    const res = await fetch(`${API_URL}/areas-soluciones${query}`, { headers: _authHeaders() });
+  async getAreasSoluciones(empresa_id, options = {}) {
+    const params = new URLSearchParams();
+    if (empresa_id) params.append('empresa_id', empresa_id);
+    if (options.catalogo) params.append('catalogo', 'true');
+    const qs = params.toString() ? `?${params.toString()}` : '';
+    const res = await fetch(`${API_URL}/areas-soluciones${qs}`, { headers: _authHeaders() });
     return _parseJson(res);
   },
   async createAreaSolucion(data) {

@@ -1,7 +1,7 @@
 
 
-import React, { useState } from 'react';
-import { UserPlus, X, Edit2, Shield, Search } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { UserPlus, X, Edit2, Shield, Search, Building2, Users } from 'lucide-react';
 import { useAgentes }    from '../../hooks/useAgentes';
 import AgentForm         from '../Agents/AgentForm';
 import AgentCard         from '../Agents/AgentCard';
@@ -9,14 +9,36 @@ import PermisosEditor    from '../Agents/PermisosEditor';
 import ResetTemporalModal from '../Agents/ResetTemporalModal';
 import CredencialesModal from '../Agents/CredencialesModal';
 import { AREAS_DEF } from '../../hooks/usePermisos';
+import AreasSolucionesSection from './sections/AreasSolucionesSection';
+import { apiService } from '../../services/api';
 
 const AgentManagementView = ({ user, actualizarUsuario }) => {
   const { agentes, loading, crearAgente, editarAgente, eliminarAgente } = useAgentes();
+  const [vistaPrincipal,      setVistaPrincipal]      = useState('agentes'); // 'agentes' | 'areas'
+  const [areasList,           setAreasList]           = useState(AREAS_DEF);
   const [creando,             setCreando]             = useState(false);
   const [agenteRecienCreado,  setAgenteRecienCreado]  = useState(null);
   const [editandoAgente,      setEditandoAgente]      = useState(null);
   const [tabActivo,           setTabActivo]           = useState('datos'); // 'datos' | 'permisos'
   const [agenteParaReset,     setAgenteParaReset]     = useState(null);
+
+  // Cargar áreas dinámicas del backend
+  const cargarAreas = () => {
+    apiService.getAreasSoluciones(null, { catalogo: true })
+      .then(data => {
+        if (Array.isArray(data) && data.length > 0) {
+          setAreasList(data.map(a => a.nombre_area));
+        }
+      })
+      .catch(() => {});
+  };
+
+  useEffect(() => {
+    cargarAreas();
+    const handleAreasUpdated = () => cargarAreas();
+    window.addEventListener('areas:actualizadas', handleAreasUpdated);
+    return () => window.removeEventListener('areas:actualizadas', handleAreasUpdated);
+  }, []);
 
   // Filtros y Buscador
   const [search, setSearch] = useState('');
@@ -87,88 +109,138 @@ const AgentManagementView = ({ user, actualizarUsuario }) => {
 
   return (
     <div className="agent-mgmt-container">
-      <div className="settings-header">
-        <div>
-          <h2>Gestión de Agentes</h2>
-          <p>Crea y administra las cuentas de tu equipo de trabajo.</p>
-        </div>
-        <button className="btn-save" onClick={() => setCreando(true)}>
-          <UserPlus size={18} style={{ marginRight: '8px' }} />
-          Nuevo Agente
+      {/* Selector de Pestaña Principal: Agentes vs Áreas */}
+      <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', borderBottom: '1px solid #e2e8f0', paddingBottom: '12px' }}>
+        <button
+          type="button"
+          onClick={() => setVistaPrincipal('agentes')}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '8px',
+            padding: '8px 18px',
+            borderRadius: '6px',
+            border: 'none',
+            background: vistaPrincipal === 'agentes' ? '#eff6ff' : 'transparent',
+            color: vistaPrincipal === 'agentes' ? '#1d4ed8' : '#64748b',
+            fontWeight: vistaPrincipal === 'agentes' ? 700 : 500,
+            fontSize: '14px',
+            cursor: 'pointer',
+            transition: 'all 0.15s ease'
+          }}
+        >
+          <Users size={16} /> Agentes y Usuarios
+        </button>
+        <button
+          type="button"
+          onClick={() => setVistaPrincipal('areas')}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '8px',
+            padding: '8px 18px',
+            borderRadius: '6px',
+            border: 'none',
+            background: vistaPrincipal === 'areas' ? '#eff6ff' : 'transparent',
+            color: vistaPrincipal === 'areas' ? '#1d4ed8' : '#64748b',
+            fontWeight: vistaPrincipal === 'areas' ? 700 : 500,
+            fontSize: '14px',
+            cursor: 'pointer',
+            transition: 'all 0.15s ease'
+          }}
+        >
+          <Building2 size={16} /> Áreas y Departamentos
         </button>
       </div>
 
-      {/* Toolbar con buscador y filtros */}
-      <div className="agent-toolbar">
-        <div className="agent-search-wrapper">
-          <Search size={16} color="#94a3b8" />
-          <input 
-            type="text" 
-            placeholder="Buscar por nombre o correo..." 
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-          {search && (
-            <button 
-              onClick={() => setSearch('')} 
-              style={{ border: 'none', background: 'transparent', color: '#94a3b8', cursor: 'pointer', display: 'flex', alignItems: 'center', padding: 0 }}
-            >
-              <X size={14} />
-            </button>
-          )}
-        </div>
-
-        <div className="agent-filter-select">
-          <label>Rol</label>
-          <select value={rolFiltro} onChange={(e) => setRolFiltro(e.target.value)}>
-              <option value="todos">Todos los roles</option>
-              <option value="colaborador">Colaboradores</option>
-              <option value="asesor">Asesores</option>
-              <option value="ti">Soporte TI</option>
-              <option value="admin">Administradores</option>
-            </select>
-        </div>
-
-        <div className="agent-filter-select">
-          <label>Área</label>
-          <select value={areaFiltro} onChange={(e) => setAreaFiltro(e.target.value)}>
-            <option value="todas">Todas las áreas</option>
-            {AREAS_DEF.map(a => (
-              <option key={a} value={a}>{a}</option>
-            ))}
-          </select>
-        </div>
-
-        <div className="agent-filter-select">
-          <label>Estado</label>
-          <select value={estadoFiltro} onChange={(e) => setEstadoFiltro(e.target.value)}>
-            <option value="todos">Todos</option>
-            <option value="online">En línea</option>
-            <option value="offline">Desconectado</option>
-          </select>
-        </div>
-      </div>
-
-      {loading ? (
-        <div style={{ padding: '40px', textAlign: 'center', color: '#667781' }}>Cargando agentes...</div>
+      {vistaPrincipal === 'areas' ? (
+        <AreasSolucionesSection empresaId="todas" user={user} />
       ) : (
-        <div className="agent-compact-list">
-          {filteredAgentes.map(agente => (
-            <AgentCard
-              key={agente.id}
-              agente={agente}
-              currentUser={user}
-              onEditar={handleEditar}
-              onEliminar={eliminarAgente}
-              onResetPassword={setAgenteParaReset}
-            />
-          ))}
-          {filteredAgentes.length === 0 && (
-            <div style={{ padding: '32px', textAlign: 'center', color: '#64748b', background: '#fff', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
-              No se encontraron agentes que coincidan con los filtros.
+        <>
+          <div className="settings-header">
+            <div>
+              <h2>Gestión de Agentes</h2>
+              <p>Crea y administra las cuentas de tu equipo de trabajo.</p>
+            </div>
+            <button className="btn-save" onClick={() => setCreando(true)}>
+              <UserPlus size={18} style={{ marginRight: '8px' }} />
+              Nuevo Agente
+            </button>
+          </div>
+
+          {/* Toolbar con buscador y filtros */}
+          <div className="agent-toolbar">
+            <div className="agent-search-wrapper">
+              <Search size={16} color="#94a3b8" />
+              <input 
+                type="text" 
+                placeholder="Buscar por nombre o correo..." 
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+              {search && (
+                <button 
+                  onClick={() => setSearch('')} 
+                  style={{ border: 'none', background: 'transparent', color: '#94a3b8', cursor: 'pointer', display: 'flex', alignItems: 'center', padding: 0 }}
+                >
+                  <X size={14} />
+                </button>
+              )}
+            </div>
+
+            <div className="agent-filter-select">
+              <label>Rol</label>
+              <select value={rolFiltro} onChange={(e) => setRolFiltro(e.target.value)}>
+                  <option value="todos">Todos los roles</option>
+                  <option value="colaborador">Colaboradores</option>
+                  <option value="asesor">Asesores</option>
+                  <option value="ti">Soporte TI</option>
+                  <option value="admin">Administradores</option>
+                </select>
+            </div>
+
+            <div className="agent-filter-select">
+              <label>Área</label>
+              <select value={areaFiltro} onChange={(e) => setAreaFiltro(e.target.value)}>
+                <option value="todas">Todas las áreas</option>
+                {areasList.map(a => (
+                  <option key={a} value={a}>{a}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="agent-filter-select">
+              <label>Estado</label>
+              <select value={estadoFiltro} onChange={(e) => setEstadoFiltro(e.target.value)}>
+                <option value="todos">Todos</option>
+                <option value="online">En línea</option>
+                <option value="offline">Desconectado</option>
+              </select>
+            </div>
+          </div>
+
+          {loading ? (
+            <div style={{ padding: '40px', textAlign: 'center', color: '#667781' }}>Cargando agentes...</div>
+          ) : (
+            <div className="agent-compact-list">
+              {filteredAgentes.map(agente => (
+                <AgentCard
+                  key={agente.id}
+                  agente={agente}
+                  currentUser={user}
+                  onEditar={handleEditar}
+                  onEliminar={eliminarAgente}
+                  onResetPassword={setAgenteParaReset}
+                />
+              ))}
+              {filteredAgentes.length === 0 && (
+                <div style={{ padding: '32px', textAlign: 'center', color: '#64748b', background: '#fff', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
+                  No se encontraron agentes que coincidan con los filtros.
+                </div>
+              )}
             </div>
           )}
-        </div>
+        </>
       )}
 
       {/* Modal de creación de agente (con permisos pre-cargados según rol) */}

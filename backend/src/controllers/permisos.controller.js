@@ -4,15 +4,23 @@ const permisosRepo = require('../repositories/permisos.repository');
 async function getMios(req, res, next) {
   try {
     const { id, rol } = req.agente;
-    if (rol === 'admin') {
-      // Admin no tiene restricciones — devuelve sentinelas de acceso total
+    const data = await permisosRepo.getPermisos(id);
+
+    // Si el usuario es admin y no tiene módulos configurados específicamente en BD,
+    // devolver acceso total por defecto. Si ya tiene módulos guardados, respetarlos estrictamente.
+    if (rol === 'admin' && (!data.modulos || data.modulos.length === 0)) {
       return res.json({
         empresas: ['__todas__'],
         areas:    [{ empresa_id: '__todas__', areas: ['__todas__'] }],
-        modulos:  ['chat','contactos','infracciones','dashboard','usuarios','configuracion','etiquetas','notas_cierre'],
+        modulos:  [
+          'comunicados', 'chat_interno', 'chat', 'contactos', 'infracciones',
+          'dashboard', 'nps', 'soluciones', 'usuarios', 'configuracion',
+          'etiquetas', 'notas_cierre', 'equipos', 'tickets', 'flujo_bot'
+        ],
+        es_coordinador: data.es_coordinador,
       });
     }
-    const data = await permisosRepo.getPermisos(id);
+
     res.json(data);
   } catch (e) { next(e); }
 }

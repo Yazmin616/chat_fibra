@@ -271,5 +271,6 @@ INSERT INTO migrations (filename) VALUES
   ('039_chat_interno_periodos_membresia.sql'),
   ('040_tickets_ti.sql'),
   ('041_auth_coordinadores_usuario.sql'),
-  ('042_catalogo_modulos_completo.sql')
+  ('042_catalogo_modulos_completo.sql'),
+  ('043_catalogo_areas_departamentos.sql')
 ON CONFLICT (filename) DO NOTHING;

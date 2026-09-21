@@ -83,7 +83,7 @@ const ESTADOS_PURO_BOT = ['abierta', 'MENU_PRINCIPAL', 'SELECCION_EMPRESA', 'SEL
 function App() {
   const { user, login, logout, actualizarUsuario } = useAuth(socket);
   const { notify }                = useNotifications();
-  const { hasModulo, esCoordinador } = usePermisos(user, socket);
+  const { hasModulo, esCoordinador, loading: loadingPermisos } = usePermisos(user, socket);
 
   const [mantenimiento, setMantenimiento] = useState(false);
 
@@ -167,6 +167,36 @@ function App() {
   // Empresa activa: usada solo como filtro visual y para configuración.
   // 'todas' por defecto para que el agente vea todo desde el primer momento.
   const [empresaId, setEmpresaId] = useState(() => localStorage.getItem('app_empresa_id') || 'todas');
+
+  // Redireccionar automáticamente si la vista actual no está permitida para este usuario
+  useEffect(() => {
+    if (!user || loadingPermisos) return;
+    const viewToModuloMap = {
+      'dashboard': 'dashboard',
+      'comunicados': 'comunicados',
+      'nps': 'nps',
+      'soluciones': 'soluciones',
+      'chat-interno': 'chat_interno',
+      'chat': 'chat',
+      'contactos': 'contactos',
+      'infracciones': 'infracciones',
+      'etiquetas': 'etiquetas',
+      'categorias-cierre': 'notas_cierre',
+      'flow-editor': 'flujo_bot',
+      'agents': 'usuarios',
+      'equipos': 'equipos',
+      'tickets': 'tickets',
+      'config': 'configuracion',
+    };
+    const modRequerido = viewToModuloMap[currentView];
+    if (modRequerido && !hasModulo(modRequerido)) {
+      const primeraPermitida = Object.keys(viewToModuloMap).find(v => hasModulo(viewToModuloMap[v]));
+      if (primeraPermitida) {
+        setCurrentView(primeraPermitida);
+        localStorage.setItem('app_current_view', primeraPermitida);
+      }
+    }
+  }, [currentView, hasModulo, loadingPermisos, user]);
 
   // Estado de filtros del chat
   const [filtro,             setFiltro]             = useState('Todos los chats');

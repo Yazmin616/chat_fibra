@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Building2, MapPin, Layout, Check } from 'lucide-react';
 import { MODULOS, EMPRESAS_DEF, AREAS_DEF } from '../../hooks/usePermisos';
+import { apiService } from '../../services/api';
 
 function SectionHeader({ icon: Icon, title, subtitle }) {
   return (
@@ -37,7 +38,23 @@ function CheckRow({ label, desc, checked, onChange, disabled }) {
  * Panel puro de UI para editar permisos (3 dimensiones).
  * Recibe el objeto retornado por usePermisosForm() como prop `form`.
  */
-const PermisosFormPanel = ({ form }) => {
+const PermisosFormPanel = ({ form, areasCustom }) => {
+  const [areasList, setAreasList] = useState(areasCustom || AREAS_DEF);
+
+  useEffect(() => {
+    if (areasCustom && areasCustom.length > 0) {
+      setAreasList(areasCustom);
+      return;
+    }
+    apiService.getAreasSoluciones(null, { catalogo: true })
+      .then(data => {
+        if (Array.isArray(data) && data.length > 0) {
+          setAreasList(data.map(a => a.nombre_area));
+        }
+      })
+      .catch(() => {});
+  }, [areasCustom]);
+
   const {
     empresas, todasEmpresas, empresasEfectivas,
     toggleTodasEmpresas, toggleEmpresa,
@@ -93,7 +110,7 @@ const PermisosFormPanel = ({ form }) => {
                 checked={todasAreasDeEmpresa(empId)}
                 onChange={() => toggleTodasAreas(empId)}
               />
-              {AREAS_DEF.map(area => (
+              {areasList.map(area => (
                 <CheckRow
                   key={area}
                   label={area}

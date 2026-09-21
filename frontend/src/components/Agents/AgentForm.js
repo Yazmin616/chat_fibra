@@ -1,16 +1,22 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Camera, User, Shield, Eye, EyeOff, Lock, Mail, AtSign, Briefcase, Users, KeyRound, ChevronDown, ChevronUp, RefreshCw } from 'lucide-react';
+import { Camera, User, Shield, Eye, EyeOff, Lock, Mail, AtSign, Briefcase, Users, KeyRound, ChevronDown, ChevronUp, RefreshCw, Plus, X, Building2, Check, AlertCircle } from 'lucide-react';
 import { apiService, resolveAvatar } from '../../services/api';
 import { usePermisosForm } from '../../hooks/usePermisosForm';
 import PermisosFormPanel from './PermisosFormPanel';
-import { AREAS_DEF } from '../../hooks/usePermisos';
-
-const AREAS = AREAS_DEF;
+import { AREAS_DEF, EMPRESAS_DEF } from '../../hooks/usePermisos';
 
 const generarClaveTemporal = () => `Fibri_${Math.floor(1000 + Math.random() * 9000)}`;
 
 const AgentForm = ({ agente, onSubmit, onClose }) => {
   const esEdicion = Boolean(agente);
+
+  const [areasList, setAreasList] = useState(AREAS_DEF);
+  const [showModalNuevaArea, setShowModalNuevaArea] = useState(false);
+  const [nuevaAreaNombre, setNuevaAreaNombre] = useState('');
+  const [nuevaAreaEmpresa, setNuevaAreaEmpresa] = useState(['todas']);
+  const [nuevaAreaDesc, setNuevaAreaDesc] = useState('');
+  const [creandoArea, setCreandoArea] = useState(false);
+  const [errorNuevaArea, setErrorNuevaArea] = useState('');
 
   const [formData, setFormData] = useState({
     usuario:              agente?.usuario              ?? '',
@@ -31,6 +37,49 @@ const AgentForm = ({ agente, onSubmit, onClose }) => {
   const [posiblesCoordinadores, setPosiblesCoordinadores] = useState([]);
   const [permisosAbiertos,      setPermisosAbiertos]      = useState(true);
   const fotoInputRef = useRef(null);
+
+  // Cargar áreas dinámicas del backend
+  const cargarAreas = async () => {
+    try {
+      const data = await apiService.getAreasSoluciones(null, { catalogo: true });
+      if (Array.isArray(data) && data.length > 0) {
+        setAreasList(data.map(a => a.nombre_area));
+      }
+    } catch (_) {}
+  };
+
+  useEffect(() => {
+    cargarAreas();
+  }, []);
+
+  const handleCrearNuevaAreaRapida = async (e) => {
+    if (e) e.preventDefault();
+    const nombre = nuevaAreaNombre.trim();
+    if (!nombre) {
+      setErrorNuevaArea('El nombre del área o departamento es requerido.');
+      return;
+    }
+    setCreandoArea(true);
+    setErrorNuevaArea('');
+    try {
+      await apiService.createAreaSolucion({
+        nombre_area: nombre,
+        empresa_id: nuevaAreaEmpresa,
+        descripcion: nuevaAreaDesc.trim(),
+        soluciones: []
+      });
+      await cargarAreas();
+      set('area', nombre);
+      window.dispatchEvent(new CustomEvent('areas:actualizadas'));
+      setShowModalNuevaArea(false);
+      setNuevaAreaNombre('');
+      setNuevaAreaDesc('');
+    } catch (err) {
+      setErrorNuevaArea(err.message || 'Error al crear el área.');
+    } finally {
+      setCreandoArea(false);
+    }
+  };
 
   // Cargar lista de coordinadores posibles
   useEffect(() => {
@@ -201,7 +250,7 @@ const AgentForm = ({ agente, onSubmit, onClose }) => {
             <span>{esEdicion ? 'Nueva Contraseña' : 'Contraseña Temporal Inicial'}</span>
             {!esEdicion ? (
               <span style={{ fontSize: '11px', fontWeight: 600, color: '#16a34a', display: 'flex', alignItems: 'center', gap: '3px' }}>
-                ✨ Autogenerada por el sistema
+                Autogenerada por el sistema
               </span>
             ) : (
               <span style={{ fontSize: '11px', fontWeight: 400, color: '#64748b' }}>• Vacío = no cambiar</span>
@@ -265,9 +314,34 @@ const AgentForm = ({ agente, onSubmit, onClose }) => {
         </div>
 
         <div className="form-group">
-          <label>Área / Departamento</label>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+            <label style={{ margin: 0 }}>Área / Departamento</label>
+            <button
+              type="button"
+              onClick={() => {
+                setNuevaAreaNombre('');
+                setNuevaAreaDesc('');
+                setErrorNuevaArea('');
+                setShowModalNuevaArea(true);
+              }}
+              style={{
+                border: 'none',
+                background: 'transparent',
+                color: '#2563eb',
+                fontSize: '12px',
+                fontWeight: 600,
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '3px',
+                padding: '2px 4px'
+              }}
+            >
+              <Plus size={13} /> Nueva Área
+            </button>
+          </div>
           <select value={formData.area} onChange={e => set('area', e.target.value)}>
-            {AREAS.map(a => <option key={a} value={a}>{a}</option>)}
+            {areasList.map(a => <option key={a} value={a}>{a}</option>)}
           </select>
         </div>
 
@@ -276,7 +350,7 @@ const AgentForm = ({ agente, onSubmit, onClose }) => {
             <span>Coordinador Responsable</span>
             {formData.puede_recuperar_auto ? (
               <span style={{ fontSize: '11px', fontWeight: 600, color: '#16a34a' }}>
-                ✨ No requerido (Usuario independiente con recuperación autónoma)
+                No requerido (Usuario independiente con recuperación autónoma)
               </span>
             ) : (
               <span style={{ fontSize: '11px', fontWeight: 400, color: '#64748b' }}>
@@ -297,7 +371,7 @@ const AgentForm = ({ agente, onSubmit, onClose }) => {
                 <option value="">Por defecto (Líder / Coordinador del Área correspondiente)</option>
                 {posiblesCoordinadores.map(c => (
                   <option key={c.id} value={c.id}>
-                    {c.nombre} — {c.area} {c.es_coordinador ? '★ (Líder asignado)' : ''}
+                    {c.nombre} — {c.area} {c.es_coordinador ? '(Líder asignado)' : ''}
                   </option>
                 ))}
               </>
@@ -370,6 +444,166 @@ const AgentForm = ({ agente, onSubmit, onClose }) => {
           }
         </button>
       </div>
+
+      {/* Mini-modal para creación rápida de nueva área */}
+      {showModalNuevaArea && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(15, 23, 42, 0.65)',
+          backdropFilter: 'blur(3px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 10001,
+          padding: '16px'
+        }}>
+          <div style={{
+            background: '#ffffff',
+            borderRadius: '12px',
+            width: '100%',
+            maxWidth: '460px',
+            padding: '20px',
+            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)',
+            boxSizing: 'border-box'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', borderBottom: '1px solid #e2e8f0', paddingBottom: '10px' }}>
+              <h4 style={{ margin: 0, fontSize: '15px', fontWeight: 700, color: '#1e293b', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <Building2 size={18} style={{ color: '#2563eb' }} />
+                Nueva Área / Departamento
+              </h4>
+              <button
+                type="button"
+                onClick={() => setShowModalNuevaArea(false)}
+                style={{ border: 'none', background: 'transparent', color: '#94a3b8', cursor: 'pointer' }}
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {errorNuevaArea && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: '#fef2f2', border: '1px solid #fecaca', color: '#dc2626', padding: '8px 12px', borderRadius: '6px', fontSize: '12px', marginBottom: '12px' }}>
+                <AlertCircle size={14} />
+                <span>{errorNuevaArea}</span>
+              </div>
+            )}
+
+            <div style={{ marginBottom: '14px' }}>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#334155', marginBottom: '4px' }}>
+                Nombre del Área o Departamento <span style={{ color: '#dc2626' }}>*</span>
+              </label>
+              <input
+                type="text"
+                className="cfg-input"
+                placeholder="Ej. Auditoría, Planta Interna, etc."
+                value={nuevaAreaNombre}
+                onChange={e => setNuevaAreaNombre(e.target.value)}
+                autoFocus
+              />
+            </div>
+
+            <div style={{ marginBottom: '14px' }}>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#334155', marginBottom: '4px' }}>
+                Empresa
+              </label>
+              <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                <label style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  padding: '4px 10px',
+                  fontSize: '11px',
+                  fontWeight: 600,
+                  borderRadius: '16px',
+                  cursor: 'pointer',
+                  border: `1px solid ${nuevaAreaEmpresa.includes('todas') ? '#10b981' : '#cbd5e1'}`,
+                  backgroundColor: nuevaAreaEmpresa.includes('todas') ? '#ecfdf5' : '#f8fafc',
+                  color: nuevaAreaEmpresa.includes('todas') ? '#047857' : '#64748b'
+                }}>
+                  <input
+                    type="checkbox"
+                    style={{ display: 'none' }}
+                    checked={nuevaAreaEmpresa.includes('todas')}
+                    onChange={() => setNuevaAreaEmpresa(['todas'])}
+                  />
+                  {nuevaAreaEmpresa.includes('todas') && <Check size={11} />}
+                  Global (Todas)
+                </label>
+                {EMPRESAS_DEF.map(emp => {
+                  const isSel = nuevaAreaEmpresa.includes(emp.id);
+                  const isGlob = nuevaAreaEmpresa.includes('todas');
+                  return (
+                    <label key={emp.id} style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      padding: '4px 10px',
+                      fontSize: '11px',
+                      fontWeight: 600,
+                      borderRadius: '16px',
+                      cursor: isGlob ? 'not-allowed' : 'pointer',
+                      opacity: isGlob ? 0.5 : 1,
+                      border: `1px solid ${isSel ? '#2563eb' : '#cbd5e1'}`,
+                      backgroundColor: isSel ? '#eff6ff' : '#f8fafc',
+                      color: isSel ? '#1d4ed8' : '#64748b'
+                    }}>
+                      <input
+                        type="checkbox"
+                        style={{ display: 'none' }}
+                        disabled={isGlob}
+                        checked={isSel}
+                        onChange={() => {
+                          let c = nuevaAreaEmpresa.filter(id => id !== 'todas');
+                          if (isSel) c = c.filter(id => id !== emp.id);
+                          else c.push(emp.id);
+                          if (c.length === 0) c = ['todas'];
+                          setNuevaAreaEmpresa(c);
+                        }}
+                      />
+                      {isSel && !isGlob && <Check size={11} />}
+                      {emp.label}
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div style={{ marginBottom: '16px' }}>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#334155', marginBottom: '4px' }}>
+                Descripción (opcional)
+              </label>
+              <input
+                type="text"
+                className="cfg-input"
+                placeholder="Breve descripción..."
+                value={nuevaAreaDesc}
+                onChange={e => setNuevaAreaDesc(e.target.value)}
+              />
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', borderTop: '1px solid #e2e8f0', paddingTop: '12px' }}>
+              <button
+                type="button"
+                onClick={() => setShowModalNuevaArea(false)}
+                style={{ border: '1px solid #cbd5e1', background: '#fff', padding: '6px 14px', borderRadius: '6px', fontSize: '12px', fontWeight: 600, color: '#64748b', cursor: 'pointer' }}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={creandoArea}
+                onClick={handleCrearNuevaAreaRapida}
+                style={{ border: 'none', background: '#2563eb', color: '#fff', padding: '6px 14px', borderRadius: '6px', fontSize: '12px', fontWeight: 600, cursor: creandoArea ? 'not-allowed' : 'pointer' }}
+              >
+                {creandoArea ? 'Guardando...' : 'Crear y Asignar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </form>
   );
 };

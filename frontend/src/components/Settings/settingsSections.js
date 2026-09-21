@@ -139,9 +139,9 @@ export const SECTIONS = [
   },
   {
     id:          'areas-soluciones',
-    label:       'Áreas y Soluciones',
+    label:       'Áreas y Departamentos',
     icon:        Briefcase,
-    description: 'Nombres de áreas y catálogo de soluciones',
+    description: 'Catálogo de áreas, departamentos y soluciones',
     component:   AreasSolucionesSection,
     adminOnly:   true,
     coordinatorAllowed: true,
