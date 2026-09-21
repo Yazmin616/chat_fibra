@@ -19,7 +19,7 @@ const TIPO_ICONS = {
   tarea: ClipboardCheck,
 };
 
-const TicketKanban = ({ tickets, onVerDetalle, onCambiarEstado }) => {
+const TicketKanban = ({ tickets, onVerDetalle, onCambiarEstado, esModoGestionTI = false }) => {
   const getSiguienteEstado = (actual) => {
     if (actual === 'abierto') return 'en_progreso';
     if (actual === 'en_progreso') return 'revision';
@@ -103,29 +103,31 @@ const TicketKanban = ({ tickets, onVerDetalle, onCambiarEstado }) => {
                             </span>
                           )}
 
-                          {/* Flechas de avance rápido */}
-                          <div style={{ display: 'flex', gap: 2 }} onClick={e => e.stopPropagation()}>
-                            {ant && (
-                              <button
-                                type="button"
-                                title="Retroceder estado"
-                                onClick={() => onCambiarEstado(ticket.id, ant)}
-                                style={{ background: '#f1f5f9', border: 'none', borderRadius: 4, padding: 2, cursor: 'pointer', color: '#64748b' }}
-                              >
-                                <ChevronLeft size={13} />
-                              </button>
-                            )}
-                            {sig && (
-                              <button
-                                type="button"
-                                title="Avanzar estado"
-                                onClick={() => onCambiarEstado(ticket.id, sig)}
-                                style={{ background: '#f1f5f9', border: 'none', borderRadius: 4, padding: 2, cursor: 'pointer', color: '#0284c7' }}
-                              >
-                                <ChevronRight size={13} />
-                              </button>
-                            )}
-                          </div>
+                          {/* Flechas de avance rápido solo para TI */}
+                          {esModoGestionTI && (
+                            <div style={{ display: 'flex', gap: 2 }} onClick={e => e.stopPropagation()}>
+                              {ant && (
+                                <button
+                                  type="button"
+                                  title="Retroceder estado"
+                                  onClick={() => onCambiarEstado(ticket.id, ant)}
+                                  style={{ background: '#f1f5f9', border: 'none', borderRadius: 4, padding: 2, cursor: 'pointer', color: '#64748b' }}
+                                >
+                                  <ChevronLeft size={13} />
+                                </button>
+                              )}
+                              {sig && (
+                                <button
+                                  type="button"
+                                  title="Avanzar estado"
+                                  onClick={() => onCambiarEstado(ticket.id, sig)}
+                                  style={{ background: '#f1f5f9', border: 'none', borderRadius: 4, padding: 2, cursor: 'pointer', color: '#0284c7' }}
+                                >
+                                  <ChevronRight size={13} />
+                                </button>
+                              )}
+                            </div>
+                          )}
                         </div>
                       </div>
                     </div>

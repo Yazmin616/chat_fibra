@@ -246,7 +246,7 @@ const TIPanel = ({ user, logout, socket }) => {
 
       {tabActivo === 'tickets' && (
         <main className="ti-main" style={{ maxWidth: 1240 }}>
-          <TicketsView user={user} socket={socket} />
+          <TicketsView user={user} socket={socket} esModoGestionTI={true} />
         </main>
       )}
 

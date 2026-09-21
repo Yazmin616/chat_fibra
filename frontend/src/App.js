@@ -775,7 +775,7 @@ function App() {
           {currentView === 'tickets' && (
             <div style={{ flex: 1, overflowY: 'auto', padding: '24px 28px', background: '#f8fafc', height: '100%', boxSizing: 'border-box' }}>
               <div style={{ maxWidth: 1200, margin: '0 auto' }}>
-                <TicketsView user={user} socket={socket} />
+                <TicketsView user={user} socket={socket} esModoGestionTI={false} />
               </div>
             </div>
           )}

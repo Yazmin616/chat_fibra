@@ -9,11 +9,13 @@ import TicketModal from './TicketModal';
 import TicketDetalleModal from './TicketDetalleModal';
 import '../../../styles/ti-tickets.css';
 
-const TicketsView = ({ user, socket }) => {
+const TicketsView = ({ user, socket, esModoGestionTI = false }) => {
   const esStaffTI = Boolean(
-    user?.rol === 'admin' ||
-    user?.rol === 'ti' ||
-    (user?.area && (user.area.toLowerCase().includes('ti') || user.area.toLowerCase().includes('sistemas')))
+    esModoGestionTI && (
+      user?.rol === 'admin' ||
+      user?.rol === 'ti' ||
+      (user?.area && (user.area.toLowerCase().includes('ti') || user.area.toLowerCase().includes('sistemas')))
+    )
   );
 
   const [tickets, setTickets] = useState([]);
@@ -308,6 +310,7 @@ const TicketsView = ({ user, socket }) => {
           tickets={ticketsMostrados}
           onVerDetalle={id => setTicketDetalleId(id)}
           onCambiarEstado={handleCambiarEstadoRapido}
+          esModoGestionTI={esStaffTI}
         />
       ) : (
         /* Vista Tabla */
@@ -338,7 +341,7 @@ const TicketsView = ({ user, socket }) => {
                 ticketsMostrados.map(t => (
                   <tr key={t.id} style={{ cursor: 'pointer' }} onClick={() => setTicketDetalleId(t.id)}>
                     <td style={{ fontFamily: 'monospace', fontWeight: 700, color: '#475569' }}>
-                      {t.folio}
+                       {t.folio}
                     </td>
                     <td>
                       <div style={{ fontWeight: 600, color: '#0f172a', marginBottom: 2 }}>{t.titulo}</div>
@@ -423,6 +426,7 @@ const TicketsView = ({ user, socket }) => {
           user={user}
           onClose={() => setModalCrearOpen(false)}
           onGuardado={cargarDatos}
+          esModoGestionTI={esStaffTI}
         />
       )}
 
@@ -433,6 +437,7 @@ const TicketsView = ({ user, socket }) => {
           ticket={ticketParaEditar}
           onClose={() => setTicketParaEditar(null)}
           onGuardado={cargarDatos}
+          esModoGestionTI={esStaffTI}
         />
       )}
 
@@ -445,6 +450,7 @@ const TicketsView = ({ user, socket }) => {
           onActualizado={cargarDatos}
           onEditar={t => setTicketParaEditar(t)}
           onEliminar={handleEliminar}
+          esModoGestionTI={esStaffTI}
         />
       )}
     </div>

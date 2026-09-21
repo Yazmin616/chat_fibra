@@ -25,12 +25,14 @@ const ESTADOS = [
   { id: 'cancelado',   label: 'Cancelado' },
 ];
 
-const TicketModal = ({ ticket, onClose, onGuardado, user }) => {
+const TicketModal = ({ ticket, onClose, onGuardado, user, esModoGestionTI = false }) => {
   const esEdicion = Boolean(ticket);
   const esStaffTI = Boolean(
-    user?.rol === 'admin' ||
-    user?.rol === 'ti' ||
-    (user?.area && (user.area.toLowerCase().includes('ti') || user.area.toLowerCase().includes('sistemas')))
+    esModoGestionTI && (
+      user?.rol === 'admin' ||
+      user?.rol === 'ti' ||
+      (user?.area && (user.area.toLowerCase().includes('ti') || user.area.toLowerCase().includes('sistemas')))
+    )
   );
 
   const [titulo, setTitulo] = useState(ticket?.titulo || '');
