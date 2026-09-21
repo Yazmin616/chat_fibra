@@ -17,12 +17,19 @@ try {
  * Crea o retorna el transportador SMTP basado en variables de entorno.
  */
 function getTransporter() {
-  if (!nodemailer) return null;
+  if (!nodemailer) {
+    logger.warn('[EMAIL] nodemailer no está disponible o no se pudo cargar.');
+    return null;
+  }
 
-  const user = process.env.EMAIL_USER || process.env.SMTP_USER;
-  const pass = process.env.EMAIL_PASS || process.env.SMTP_PASS;
+  const rawUser = process.env.EMAIL_USER || process.env.SMTP_USER || process.env.GMAIL_USER || '';
+  const rawPass = process.env.EMAIL_PASS || process.env.SMTP_PASS || process.env.GMAIL_PASS || '';
+
+  const user = rawUser.replace(/^["']|["']$/g, '').trim();
+  const pass = rawPass.replace(/^["']|["']$/g, '').replace(/\s+/g, '').trim();
 
   if (!user || !pass) {
+    logger.warn(`[EMAIL] Credenciales ausentes en el contenedor. EMAIL_USER=${!!user}, EMAIL_PASS=${!!pass}`);
     return null;
   }
 
@@ -40,6 +47,7 @@ function getTransporter() {
   const secure = process.env.SMTP_SECURE === 'true' || port === 465;
 
   if (!host) {
+    logger.warn('[EMAIL] Host SMTP no definido.');
     return null;
   }
 
