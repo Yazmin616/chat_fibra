@@ -7,13 +7,14 @@ const MINE_PREFIX = 'agente_';
 const StickerPicker = ({ onSelect, onClose, agenteId, embedded = false }) => {
   const [packs,      setPacks]      = useState([]);
   const [favorites,  setFavorites]  = useState(new Set());
+  const [favList,    setFavList]    = useState([]);
   const [activePack, setActivePack] = useState(null);
   const [loading,    setLoading]    = useState(true);
   const panelRef = useRef(null);
 
   const myPack      = agenteId ? `${MINE_PREFIX}${agenteId}` : null;
-  const isMyPack    = (pack) => pack === myPack;
-  const isOtherPack = (pack) => pack.startsWith(MINE_PREFIX) && !isMyPack(pack);
+  const isMyPack    = useCallback((pack) => pack === myPack, [myPack]);
+  const isOtherPack = useCallback((pack) => pack.startsWith(MINE_PREFIX) && pack !== myPack, [myPack]);
   const packLabel   = (pack) => isMyPack(pack) ? '👤 Mis stickers' : pack;
 
   // ── Carga ───────────────────────────────────────────────────────────────────
@@ -26,19 +27,26 @@ const StickerPicker = ({ onSelect, onClose, agenteId, embedded = false }) => {
     ]).then(([packsData, favsData]) => {
       const visible = (packsData || []).filter(p => !isOtherPack(p.pack));
       setPacks(visible);
-      const favSet = new Set((favsData || []).map(f => `${f.pack}/${f.file}`));
+      const validFavs = (favsData || []).filter(f => f && f.pack && f.file);
+      setFavList(validFavs);
+      const favSet = new Set(validFavs.map(f => `${f.pack}/${f.file}`));
       setFavorites(favSet);
     }).finally(() => setLoading(false));
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [agenteId]);
+  }, [agenteId, isOtherPack]);
 
   useEffect(() => { cargar(); }, [cargar]);
 
   useEffect(() => {
-    if (packs.length > 0 && !activePack) {
+    const handleActualizados = () => cargar();
+    window.addEventListener('sticker:favoritos_actualizados', handleActualizados);
+    return () => window.removeEventListener('sticker:favoritos_actualizados', handleActualizados);
+  }, [cargar]);
+
+  useEffect(() => {
+    if (!loading && !activePack) {
       setActivePack(FAVS_KEY);
     }
-  }, [packs, activePack]);
+  }, [loading, activePack]);
 
   // ── Cerrar al clic fuera (solo cuando no está embebido en otro panel) ───────
   useEffect(() => {
@@ -61,6 +69,14 @@ const StickerPicker = ({ onSelect, onClose, agenteId, embedded = false }) => {
       if (isFav) next.delete(key); else next.add(key);
       return next;
     });
+    setFavList(prev => {
+      if (isFav) {
+        return prev.filter(item => !(item.pack === pack && item.file === file));
+      } else {
+        return [{ pack, file }, ...prev];
+      }
+    });
+
     const call = isFav
       ? apiService.removeStickerFavorito(agenteId, pack, file)
       : apiService.addStickerFavorito(agenteId, pack, file);
@@ -69,6 +85,13 @@ const StickerPicker = ({ onSelect, onClose, agenteId, embedded = false }) => {
         const next = new Set(prev);
         if (isFav) next.add(key); else next.delete(key);
         return next;
+      });
+      setFavList(prev => {
+        if (isFav) {
+          return [{ pack, file }, ...prev];
+        } else {
+          return prev.filter(item => !(item.pack === pack && item.file === file));
+        }
       });
     });
   }, [agenteId, favorites]);
@@ -87,15 +110,12 @@ const StickerPicker = ({ onSelect, onClose, agenteId, embedded = false }) => {
         next.delete(`${myPack}/${file}`);
         return next;
       });
+      setFavList(prev => prev.filter(item => !(item.pack === myPack && item.file === file)));
     } catch { /* silencioso */ }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [agenteId]);
+  }, [agenteId, myPack, isMyPack]);
 
   // ── Computed ────────────────────────────────────────────────────────────────
-  const favItems = packs.flatMap(p =>
-    p.files.filter(f => favorites.has(`${p.pack}/${f}`)).map(f => ({ pack: p.pack, file: f }))
-  );
-  const showFavsTab = favItems.length > 0;
+  const favItems = favList;
 
   const activeItems = activePack === FAVS_KEY
     ? favItems
@@ -119,6 +139,14 @@ const StickerPicker = ({ onSelect, onClose, agenteId, embedded = false }) => {
         >
           ★ Favoritos
         </button>
+        {myPack && (
+          <button
+            className={`sticker-tab${activePack === myPack ? ' active' : ''}`}
+            onClick={() => setActivePack(myPack)}
+          >
+            👤 Mis stickers
+          </button>
+        )}
         {packs.filter(p => !isMyPack(p.pack)).map(p => (
           <button
             key={p.pack}

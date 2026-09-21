@@ -206,32 +206,151 @@ router.get('/stickers/favoritos', verifyToken, async (req, res) => {
   }
 });
 
-// POST /agente/stickers/favorito — agregar favorito { agente_id, pack, file }
+// POST /agente/stickers/favorito — agregar favorito { agente_id, pack, file, url_media, url_adjunto }
 router.post('/stickers/favorito', verifyToken, async (req, res) => {
-  const { agente_id, pack, file } = req.body;
-  if (!agente_id || !pack || !file) return res.status(400).json({ error: 'Faltan datos' });
+  const agente_id = req.agente?.id || req.body.agente_id;
+  let { pack, file, url_media, url_adjunto } = req.body;
+  const rawUrl = url_media || url_adjunto || '';
+
+  if (!agente_id) return res.status(400).json({ error: 'Falta agente_id' });
+
   try {
     const db = require('../config/db');
+
+    if (rawUrl) {
+      if (rawUrl.startsWith('wa://') || rawUrl.startsWith('tg://')) {
+        const packTarget = `agente_${parseInt(agente_id)}`;
+        const destDir = path.join(STICKERS_DIR, packTarget);
+        await fs.promises.mkdir(destDir, { recursive: true });
+
+        let fileName;
+        if (rawUrl.startsWith('wa://')) {
+          const rest       = rawUrl.slice(5);
+          const slashIdx   = rest.indexOf('/');
+          const empresa_id = rest.slice(0, slashIdx);
+          const media_id   = rest.slice(slashIdx + 1);
+
+          const waDir = path.join(WA_MEDIA_DIR, empresa_id);
+          let srcPath = null;
+          try {
+            const files = await fs.promises.readdir(waDir);
+            const match = files.find(f => f.startsWith(media_id + '.'));
+            if (match) { srcPath = path.join(waDir, match); fileName = match; }
+          } catch { /* directorio no encontrado */ }
+
+          if (srcPath) {
+            const destPath = path.join(destDir, fileName);
+            try { await fs.promises.access(destPath); }
+            catch { await fs.promises.copyFile(srcPath, destPath); }
+          }
+        } else {
+          // Telegram
+          const rest       = rawUrl.slice(5);
+          const slashIdx   = rest.indexOf('/');
+          const empresa_id = rest.slice(0, slashIdx);
+          const file_id    = rest.slice(slashIdx + 1);
+
+          try {
+            const { resolveFileLink } = require('../adapters/telegram');
+            const downloadUrl = await resolveFileLink(file_id, empresa_id);
+            const urlExt = path.extname(new URL(downloadUrl).pathname) || '.webp';
+            const safeName = file_id.replace(/[^a-zA-Z0-9_-]/g, '_');
+            fileName = `${safeName}${urlExt}`;
+            const destPath = path.join(destDir, fileName);
+
+            let alreadyExists = false;
+            try { await fs.promises.access(destPath); alreadyExists = true; } catch { /**/ }
+            if (!alreadyExists) {
+              const resp = await fetch(downloadUrl);
+              if (resp.ok) {
+                const buffer = Buffer.from(await resp.arrayBuffer());
+                await fs.promises.writeFile(destPath, buffer);
+              }
+            }
+          } catch (e) {
+            logger.warn('[STICKER FAV] Error descargando de TG:', { error: e.message });
+          }
+        }
+
+        if (fileName) {
+          pack = packTarget;
+          file = fileName;
+        }
+      } else if (rawUrl.startsWith('st://')) {
+        const parts = rawUrl.slice(5).split('/');
+        pack = parts[0];
+        file = parts.slice(1).join('/');
+      } else if (rawUrl.includes('/uploads/stickers/')) {
+        const idx = rawUrl.indexOf('/uploads/stickers/');
+        const rest = rawUrl.slice(idx + '/uploads/stickers/'.length);
+        const parts = rest.split('/');
+        pack = parts[0];
+        file = parts.slice(1).join('/');
+      } else if (rawUrl.includes('/uploads/chat-interno/')) {
+        const idx = rawUrl.indexOf('/uploads/chat-interno/');
+        const filename = path.basename(rawUrl.slice(idx + '/uploads/chat-interno/'.length).split('?')[0]);
+        const srcPath = path.join(__dirname, '..', '..', 'uploads', 'chat-interno', filename);
+        const packTarget = `agente_${parseInt(agente_id)}`;
+        const destDir = path.join(STICKERS_DIR, packTarget);
+        await fs.promises.mkdir(destDir, { recursive: true });
+        const destPath = path.join(destDir, filename);
+
+        try {
+          if (fs.existsSync(srcPath)) {
+            await fs.promises.copyFile(srcPath, destPath);
+          }
+        } catch (_) {}
+
+        pack = packTarget;
+        file = filename;
+      }
+    }
+
+    if (!pack || !file) return res.status(400).json({ error: 'Faltan datos de pack o archivo' });
+
+    const safePack = path.basename(pack);
+    const safeFile = path.basename(file.split('?')[0]);
+
     await db.query(
       'INSERT INTO sticker_favoritos(agente_id, pack, file) VALUES($1,$2,$3) ON CONFLICT DO NOTHING',
-      [parseInt(agente_id), path.basename(pack), path.basename(file)]
+      [parseInt(agente_id), safePack, safeFile]
     );
-    res.json({ ok: true });
+    res.json({ ok: true, pack: safePack, file: safeFile });
   } catch (err) {
     logger.error('[STICKER FAV] Error al agregar:', { error: err.message });
     res.status(500).json({ error: err.message });
   }
 });
 
-// DELETE /agente/stickers/favorito — quitar favorito { agente_id, pack, file }
+// DELETE /agente/stickers/favorito — quitar favorito { agente_id, pack, file, url_media }
 router.delete('/stickers/favorito', verifyToken, async (req, res) => {
-  const { agente_id, pack, file } = req.body;
-  if (!agente_id || !pack || !file) return res.status(400).json({ error: 'Faltan datos' });
+  const agente_id = req.agente?.id || req.body.agente_id;
+  let { pack, file, url_media, url_adjunto } = req.body;
+  const rawUrl = url_media || url_adjunto || '';
+
+  if (!agente_id) return res.status(400).json({ error: 'Falta agente_id' });
+
+  if (!pack || !file) {
+    if (rawUrl.startsWith('st://')) {
+      const parts = rawUrl.slice(5).split('/');
+      pack = parts[0];
+      file = parts.slice(1).join('/');
+    } else if (rawUrl.includes('/uploads/stickers/')) {
+      const idx = rawUrl.indexOf('/uploads/stickers/');
+      const rest = rawUrl.slice(idx + '/uploads/stickers/'.length);
+      const parts = rest.split('/');
+      pack = parts[0];
+      file = parts.slice(1).join('/');
+    }
+  }
+
+  if (!pack || !file) return res.status(400).json({ error: 'Faltan datos' });
+
   try {
     const db = require('../config/db');
     await db.query(
       'DELETE FROM sticker_favoritos WHERE agente_id=$1 AND pack=$2 AND file=$3',
-      [parseInt(agente_id), pack, file]
+      [parseInt(agente_id), path.basename(pack), path.basename(file.split('?')[0])]
     );
     res.json({ ok: true });
   } catch (err) {

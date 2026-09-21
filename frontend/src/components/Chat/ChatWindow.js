@@ -253,7 +253,7 @@ const StickerBubble = ({ m, resolveMedia, savedWaStickers, handleSaveClientStick
   const [mediaError, setMediaError] = useState(false);
   const url = resolveMedia(m.url_media);
   
-  const showSaveBtn = m.remitente === 'user' && (m.url_media?.startsWith('wa://') || m.url_media?.startsWith('tg://'));
+  const showSaveBtn = Boolean(m.url_media);
   const isSaved = savedWaStickers.has(m.url_media);
   const isSaving = savingSticker === m.url_media;
 
@@ -285,7 +285,7 @@ const StickerBubble = ({ m, resolveMedia, savedWaStickers, handleSaveClientStick
           className="msg-media msg-sticker"
           style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '120px', height: '120px', background: 'rgba(0,0,0,0.1)', borderRadius: '8px', color: 'inherit', textDecoration: 'none', fontSize: '12px', textAlign: 'center' }}
         >
-          <span>⚠️<br/>Ver sticker</span>
+          <span>Ver sticker</span>
         </a>
       )}
       {showSaveBtn && (
@@ -786,8 +786,9 @@ const ChatWindow = ({
     if (!user?.id || savingSticker) return;
     setSavingSticker(url_media);
     try {
-      await apiService.saveClientSticker(user.id, url_media);
+      await apiService.addStickerFavorito(user.id, null, null, url_media);
       setSavedWaStickers(prev => new Set([...prev, url_media]));
+      window.dispatchEvent(new CustomEvent('sticker:favoritos_actualizados'));
     } catch (err) {
       setStickerError(err.message || 'No se pudo guardar el sticker.');
       setTimeout(() => setStickerError(''), 4000);

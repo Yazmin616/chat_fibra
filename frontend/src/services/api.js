@@ -731,20 +731,20 @@ export const apiService = {
     return _parseJson(res);
   },
 
-  async addStickerFavorito(agente_id, pack, file) {
+  async addStickerFavorito(agente_id, pack, file, url_media = null) {
     const res = await fetch(`${API_URL}/agente/stickers/favorito`, {
       method:  'POST',
       headers: _authHeaders(),
-      body:    JSON.stringify({ agente_id, pack, file }),
+      body:    JSON.stringify({ agente_id, pack, file, url_media }),
     });
     return _parseJson(res);
   },
 
-  async removeStickerFavorito(agente_id, pack, file) {
+  async removeStickerFavorito(agente_id, pack, file, url_media = null) {
     const res = await fetch(`${API_URL}/agente/stickers/favorito`, {
       method:  'DELETE',
       headers: _authHeaders(),
-      body:    JSON.stringify({ agente_id, pack, file }),
+      body:    JSON.stringify({ agente_id, pack, file, url_media }),
     });
     return _parseJson(res);
   },

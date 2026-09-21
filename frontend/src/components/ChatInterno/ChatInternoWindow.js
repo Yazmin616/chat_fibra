@@ -1485,6 +1485,23 @@ const ChatInternoWindow = ({
                                   loading="lazy"
                                   onLoad={handleMediaLoad}
                                 />
+                                <button
+                                  type="button"
+                                  className="wa-sticker-quick-fav-btn"
+                                  onClick={async (e) => {
+                                    e.stopPropagation();
+                                    try {
+                                      await apiService.addStickerFavorito(userActual?.id, null, null, msg.url_adjunto);
+                                      window.dispatchEvent(new CustomEvent('sticker:favoritos_actualizados'));
+                                      alert('Sticker guardado en tus favoritos');
+                                    } catch {
+                                      alert('No se pudo guardar el sticker');
+                                    }
+                                  }}
+                                  title="Añadir a favoritos"
+                                >
+                                  <Heart size={15} />
+                                </button>
                               </div>
                             )}
 
@@ -1655,16 +1672,12 @@ const ChatInternoWindow = ({
                                     className="wa-dropdown-item"
                                     onClick={async () => {
                                       setMenuDropdownMsgId(null);
-                                      const match = msg.url_adjunto?.match(/st:\/\/([^/]+)\/(.+)$/) || msg.url_adjunto?.match(/\/uploads\/stickers\/([^/]+)\/(.+)$/);
-                                      if (match) {
-                                        try {
-                                          await apiService.addStickerFavorito(userActual?.id, match[1], match[2]);
-                                          alert('¡Sticker guardado en tus favoritos!');
-                                        } catch {
-                                          alert('No se pudo guardar el sticker.');
-                                        }
-                                      } else {
-                                        alert('Sticker no disponible para guardar.');
+                                      try {
+                                        await apiService.addStickerFavorito(userActual?.id, null, null, msg.url_adjunto);
+                                        window.dispatchEvent(new CustomEvent('sticker:favoritos_actualizados'));
+                                        alert('Sticker guardado en tus favoritos');
+                                      } catch {
+                                        alert('No se pudo guardar el sticker.');
                                       }
                                     }}
                                   >

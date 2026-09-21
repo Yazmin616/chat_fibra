@@ -17,13 +17,14 @@ const ChatInternoStickerPicker = ({
   const [activeTab, setActiveTab] = useState('stickers'); // 'emojis' | 'stickers'
   const [packs, setPacks] = useState([]);
   const [favorites, setFavorites] = useState(new Set());
+  const [favList, setFavList] = useState([]);
   const [activePack, setActivePack] = useState(FAVS_KEY);
   const [loading, setLoading] = useState(false);
   const panelRef = useRef(null);
 
   const myPack = agenteId ? `${MINE_PREFIX}${agenteId}` : null;
-  const isMyPack = (pack) => pack === myPack;
-  const isOtherPack = (pack) => pack.startsWith(MINE_PREFIX) && !isMyPack(pack);
+  const isMyPack = useCallback((pack) => pack === myPack, [myPack]);
+  const isOtherPack = useCallback((pack) => pack.startsWith(MINE_PREFIX) && pack !== myPack, [myPack]);
 
   // Cerrar al hacer clic fuera
   useEffect(() => {
@@ -46,14 +47,19 @@ const ChatInternoStickerPicker = ({
       .then(([packsData, favsData]) => {
         const visible = (packsData || []).filter(p => !isOtherPack(p.pack));
         setPacks(visible);
-        const favSet = new Set((favsData || []).map(f => `${f.pack}/${f.file}`));
+        const validFavs = (favsData || []).filter(f => f && f.pack && f.file);
+        setFavList(validFavs);
+        const favSet = new Set(validFavs.map(f => `${f.pack}/${f.file}`));
         setFavorites(favSet);
       })
       .finally(() => setLoading(false));
-  }, [agenteId]);
+  }, [agenteId, isOtherPack]);
 
   useEffect(() => {
     cargarStickers();
+    const handleActualizados = () => cargarStickers();
+    window.addEventListener('sticker:favoritos_actualizados', handleActualizados);
+    return () => window.removeEventListener('sticker:favoritos_actualizados', handleActualizados);
   }, [cargarStickers]);
 
   // Toggle favorito
@@ -67,6 +73,14 @@ const ChatInternoStickerPicker = ({
       if (isFav) next.delete(key); else next.add(key);
       return next;
     });
+    setFavList(prev => {
+      if (isFav) {
+        return prev.filter(item => !(item.pack === pack && item.file === file));
+      } else {
+        return [{ pack, file }, ...prev];
+      }
+    });
+
     const call = isFav
       ? apiService.removeStickerFavorito(agenteId, pack, file)
       : apiService.addStickerFavorito(agenteId, pack, file);
@@ -75,6 +89,13 @@ const ChatInternoStickerPicker = ({
         const next = new Set(prev);
         if (isFav) next.add(key); else next.delete(key);
         return next;
+      });
+      setFavList(prev => {
+        if (isFav) {
+          return [{ pack, file }, ...prev];
+        } else {
+          return prev.filter(item => !(item.pack === pack && item.file === file));
+        }
       });
     });
   }, [agenteId, favorites]);
@@ -95,12 +116,11 @@ const ChatInternoStickerPicker = ({
         next.delete(`${myPack}/${file}`);
         return next;
       });
+      setFavList(prev => prev.filter(item => !(item.pack === myPack && item.file === file)));
     } catch {}
-  }, [agenteId, myPack]);
+  }, [agenteId, myPack, isMyPack]);
 
-  const favItems = packs.flatMap(p =>
-    p.files.filter(f => favorites.has(`${p.pack}/${f}`)).map(f => ({ pack: p.pack, file: f }))
-  );
+  const favItems = favList;
 
   const activeItems = activePack === FAVS_KEY
     ? favItems
