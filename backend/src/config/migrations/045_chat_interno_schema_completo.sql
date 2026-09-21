@@ -1,0 +1,94 @@
+-- =============================================================================
+-- 045 - Garantizar esquema completo de Chat Interno en produccion
+-- =============================================================================
+
+-- 1. Columnas completas en chat_interno_canales
+ALTER TABLE chat_interno_canales
+ADD COLUMN IF NOT EXISTS solo_lectura BOOLEAN NOT NULL DEFAULT FALSE,
+ADD COLUMN IF NOT EXISTS mensajes_temporales VARCHAR(20) DEFAULT NULL,
+ADD COLUMN IF NOT EXISTS permisos JSONB DEFAULT '{"solo_admin_envia": false, "solo_admin_info": false}'::jsonb,
+ADD COLUMN IF NOT EXISTS foto VARCHAR(255),
+ADD COLUMN IF NOT EXISTS eliminado BOOLEAN DEFAULT FALSE,
+ADD COLUMN IF NOT EXISTS eliminado_en TIMESTAMPTZ,
+ADD COLUMN IF NOT EXISTS eliminado_por_id INT REFERENCES agentes(id) ON DELETE SET NULL;
+
+-- 2. Columnas completas en chat_interno_miembros
+ALTER TABLE chat_interno_miembros
+ADD COLUMN IF NOT EXISTS rol VARCHAR(20) NOT NULL DEFAULT 'miembro',
+ADD COLUMN IF NOT EXISTS unido_en TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+ADD COLUMN IF NOT EXISTS activo BOOLEAN NOT NULL DEFAULT TRUE,
+ADD COLUMN IF NOT EXISTS salido_en TIMESTAMPTZ,
+ADD COLUMN IF NOT EXISTS removido_por_id INT REFERENCES agentes(id) ON DELETE SET NULL,
+ADD COLUMN IF NOT EXISTS oculto BOOLEAN NOT NULL DEFAULT FALSE,
+ADD COLUMN IF NOT EXISTS fijado BOOLEAN NOT NULL DEFAULT FALSE,
+ADD COLUMN IF NOT EXISTS fijado_en TIMESTAMPTZ;
+
+-- 3. Columnas completas en chat_interno_mensajes
+ALTER TABLE chat_interno_mensajes
+ADD COLUMN IF NOT EXISTS editado_en TIMESTAMPTZ,
+ADD COLUMN IF NOT EXISTS fijado BOOLEAN DEFAULT FALSE,
+ADD COLUMN IF NOT EXISTS fijado_por INT REFERENCES agentes(id) ON DELETE SET NULL,
+ADD COLUMN IF NOT EXISTS fijado_en TIMESTAMPTZ,
+ADD COLUMN IF NOT EXISTS eliminado BOOLEAN DEFAULT FALSE,
+ADD COLUMN IF NOT EXISTS fijado_hasta TIMESTAMPTZ;
+
+-- 4. Tablas auxiliares
+CREATE TABLE IF NOT EXISTS chat_interno_reacciones (
+  id SERIAL PRIMARY KEY,
+  mensaje_id INT NOT NULL REFERENCES chat_interno_mensajes(id) ON DELETE CASCADE,
+  agente_id INT NOT NULL REFERENCES agentes(id) ON DELETE CASCADE,
+  emoji VARCHAR(20) NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE(mensaje_id, agente_id)
+);
+
+CREATE TABLE IF NOT EXISTS chat_interno_leidos (
+  canal_id INT NOT NULL REFERENCES chat_interno_canales(id) ON DELETE CASCADE,
+  agente_id INT NOT NULL REFERENCES agentes(id) ON DELETE CASCADE,
+  ultimo_mensaje_leido_id INT NOT NULL DEFAULT 0,
+  actualizado_en TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (canal_id, agente_id)
+);
+
+CREATE TABLE IF NOT EXISTS chat_interno_destacados (
+  agente_id INT NOT NULL REFERENCES agentes(id) ON DELETE CASCADE,
+  mensaje_id INT NOT NULL REFERENCES chat_interno_mensajes(id) ON DELETE CASCADE,
+  canal_id INT NOT NULL REFERENCES chat_interno_canales(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (agente_id, mensaje_id)
+);
+
+CREATE TABLE IF NOT EXISTS chat_interno_periodos_membresia (
+  id SERIAL PRIMARY KEY,
+  canal_id INT NOT NULL REFERENCES chat_interno_canales(id) ON DELETE CASCADE,
+  agente_id INT NOT NULL REFERENCES agentes(id) ON DELETE CASCADE,
+  unido_en TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  salido_en TIMESTAMPTZ
+);
+
+-- 5. Canales base por defecto (general, anuncios, soporte-interno)
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM chat_interno_canales WHERE nombre = 'general' AND tipo = 'canal') THEN
+    INSERT INTO chat_interno_canales(nombre, descripcion, tipo, es_privado)
+    VALUES ('general', 'Canal corporativo para todos los colaboradores', 'canal', FALSE);
+  END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM chat_interno_canales WHERE nombre = 'anuncios' AND tipo = 'canal') THEN
+    INSERT INTO chat_interno_canales(nombre, descripcion, tipo, es_privado, solo_lectura)
+    VALUES ('anuncios', 'Avisos y comunicados oficiales de la empresa', 'canal', FALSE, TRUE);
+  END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM chat_interno_canales WHERE nombre = 'soporte-interno' AND tipo = 'canal') THEN
+    INSERT INTO chat_interno_canales(nombre, descripcion, tipo, es_privado)
+    VALUES ('soporte-interno', 'Canal para dudas y soporte interno', 'canal', FALSE);
+  END IF;
+END $$;
+
+-- 6. Asegurar que todos los agentes existentes sean miembros de los canales publicos
+INSERT INTO chat_interno_miembros(canal_id, agente_id, rol, activo)
+SELECT c.id, a.id, 'miembro', TRUE
+FROM chat_interno_canales c
+CROSS JOIN agentes a
+WHERE c.tipo = 'canal' AND c.es_privado = FALSE
+ON CONFLICT (canal_id, agente_id) DO UPDATE SET activo = TRUE;
