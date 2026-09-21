@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { Lock, User, Loader2, Headphones, HelpCircle, X, Shield, Search, CheckCircle2, AlertCircle, Sparkles, Mail, Info, Send } from 'lucide-react';
+import { Lock, User, Loader2, Headphones, HelpCircle, X, Shield, Search, CheckCircle2, AlertCircle, Sparkles, Mail, Info, Send, Eye, EyeOff, Copy, Check } from 'lucide-react';
 import { apiService } from '../../services/api';
 
 const Login = ({ onLoginSuccess }) => {
   const [usuario,   setUsuario]   = useState('');
   const [password,  setPassword]  = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [loading,   setLoading]   = useState(false);
   const [error,     setError]     = useState('');
 
@@ -17,6 +18,8 @@ const Login = ({ onLoginSuccess }) => {
   const [recoveryLoading, setRecoveryLoading] = useState(false);
   const [recoverySuccess, setRecoverySuccess] = useState('');
   const [recoveryError,   setRecoveryError]   = useState('');
+  const [recoveryTempPassword, setRecoveryTempPassword] = useState('');
+  const [copied,          setCopied]          = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -44,6 +47,8 @@ const Login = ({ onLoginSuccess }) => {
     setCoordData(null);
     setRecoverySuccess('');
     setRecoveryError('');
+    setRecoveryTempPassword('');
+    setCopied(false);
     try {
       const data = await apiService.consultarCoordinador(forgotInput.trim());
       if (data?.encontrado) {
@@ -64,10 +69,16 @@ const Login = ({ onLoginSuccess }) => {
     setRecoveryLoading(true);
     setRecoveryError('');
     setRecoverySuccess('');
+    setRecoveryTempPassword('');
+    setCopied(false);
     try {
       const data = await apiService.solicitarRecuperacionPassword(identifier);
       if (data?.ok) {
         setRecoverySuccess(data.mensaje || 'Contraseña temporal enviada a tu correo.');
+        if (data.temporalPassword) {
+          setRecoveryTempPassword(data.temporalPassword);
+          setPassword(data.temporalPassword);
+        }
       } else {
         setRecoveryError(data?.error || 'No se pudo generar la recuperación.');
       }
@@ -85,6 +96,8 @@ const Login = ({ onLoginSuccess }) => {
     setCoordError('');
     setRecoverySuccess('');
     setRecoveryError('');
+    setRecoveryTempPassword('');
+    setCopied(false);
     setShowForgotModal(true);
   };
 
@@ -147,16 +160,38 @@ const Login = ({ onLoginSuccess }) => {
                 </div>
 
                 <div className="input-group">
-                  <div className="input-wrap">
+                  <div className="input-wrap" style={{ position: 'relative' }}>
                     <Lock className="input-icon" size={17} />
                     <input
-                      type="password"
+                      type={showPassword ? 'text' : 'password'}
                       placeholder="Contraseña"
                       value={password}
                       onChange={e => setPassword(e.target.value)}
                       required
                       autoComplete="current-password"
+                      style={{ paddingRight: '40px' }}
                     />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      style={{
+                        position: 'absolute',
+                        right: '12px',
+                        top: '50%',
+                        transform: 'translateY(-50%)',
+                        background: 'none',
+                        border: 'none',
+                        cursor: 'pointer',
+                        color: '#94a3b8',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        padding: '4px'
+                      }}
+                      title={showPassword ? 'Ocultar contraseña' : 'Ver contraseña'}
+                    >
+                      {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
                   </div>
                 </div>
 
@@ -395,6 +430,49 @@ const Login = ({ onLoginSuccess }) => {
                 }}>
                   <CheckCircle2 size={16} color="#16a34a" style={{ flexShrink: 0 }} />
                   <span>{recoverySuccess}</span>
+                </div>
+              )}
+
+              {recoveryTempPassword && (
+                <div style={{
+                  backgroundColor: '#ffffff', border: '1.5px dashed #16a34a',
+                  borderRadius: '10px', padding: '12px 14px', marginBottom: '14px',
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px'
+                }}>
+                  <div>
+                    <span style={{ fontSize: '0.72rem', color: '#64748b', display: 'block', fontWeight: 600 }}>
+                      Clave temporal de acceso generada:
+                    </span>
+                    <strong style={{ fontSize: '1.15rem', color: '#166534', letterSpacing: '1px', fontFamily: 'monospace' }}>
+                      {recoveryTempPassword}
+                    </strong>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard.writeText(recoveryTempPassword);
+                      setPassword(recoveryTempPassword);
+                      setCopied(true);
+                      setTimeout(() => setCopied(false), 2500);
+                    }}
+                    style={{
+                      padding: '7px 12px',
+                      backgroundColor: copied ? '#16a34a' : '#f8fafc',
+                      color: copied ? '#ffffff' : '#1e293b',
+                      border: '1px solid #cbd5e1',
+                      borderRadius: '6px',
+                      fontSize: '0.78rem',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '5px',
+                      transition: 'background-color 0.2s'
+                    }}
+                  >
+                    {copied ? <Check size={14} /> : <Copy size={14} />}
+                    {copied ? 'Copiada' : 'Copiar clave'}
+                  </button>
                 </div>
               )}
 

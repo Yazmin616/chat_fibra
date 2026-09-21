@@ -40,9 +40,10 @@ async function login(identifier, password) {
   const agente = rows[0];
 
   // Soporta tanto contraseñas hasheadas (producción) como texto plano (setup inicial)
+  const trimmed = (password || '').trim();
   const valid = agente.password.startsWith('$2')
-    ? await bcrypt.compare(password, agente.password)
-    : password === agente.password;
+    ? (await bcrypt.compare(password, agente.password) || (trimmed !== password && await bcrypt.compare(trimmed, agente.password)))
+    : (password === agente.password || trimmed === agente.password);
 
   if (!valid) {
     const err = new Error('Contraseña incorrecta');
@@ -369,6 +370,7 @@ async function solicitarRecuperacionPassword(identifier) {
   return {
     ok: true,
     email: emailOculto,
+    temporalPassword,
     simulado: emailRes.simulado,
     mensaje: emailRes.simulado 
       ? `Clave temporal generada. Como SMTP aún no está configurado en .env, se registró en los logs del servidor.`

@@ -13,10 +13,10 @@ const router         = express.Router();
 const authController = require('../controllers/auth.controller');
 const { verifyToken } = require('../middleware/auth.middleware');
 
-/** Protección de fuerza bruta: máximo 10 intentos de login por IP cada 15 minutos. */
+/** Protección de fuerza bruta: máximo 60 intentos de login por IP cada 15 minutos. */
 const loginLimiter = rateLimit({
   windowMs:   15 * 60 * 1000,
-  max:        10,
+  max:        60,
   standardHeaders: true,
   legacyHeaders:   false,
   message:    { error: 'Demasiados intentos de inicio de sesión. Espera 15 minutos e intenta de nuevo.' },
