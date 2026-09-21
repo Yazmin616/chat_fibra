@@ -7,6 +7,8 @@ services:
     restart: always
     ports:
       - "127.0.0.1:3009:3009"   # Solo accesible localmente por Nginx (o cambiar a "3009:3009")
+    volumes:
+      - ./uploads:/app/uploads
     env_file:
       - ./backend/.env
     extra_hosts:

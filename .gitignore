@@ -19,6 +19,7 @@ node_modules/
 
 # ── Archivos subidos por usuarios (avatares, media, audio) ────────────────────
 backend/uploads/
+uploads/
 
 # ── Logs ─────────────────────────────────────────────────────────────────────
 *.log

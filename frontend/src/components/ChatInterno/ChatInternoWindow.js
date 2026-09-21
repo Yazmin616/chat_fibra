@@ -5,7 +5,7 @@ import {
   Smile, Check, CheckCheck, CornerUpLeft, Search, ChevronDown,
   Mic, Plus, Copy, Edit3, Trash2, Heart, Sparkles, Star
 } from 'lucide-react';
-import { API_URL, resolveAvatar, resolveMedia, apiService } from '../../services/api';
+import { resolveAvatar, resolveMedia, apiService } from '../../services/api';
 import ChatInternoAudioPlayer from './ChatInternoAudioPlayer';
 import ChatInternoStickerPicker from './ChatInternoStickerPicker';
 import ChatInternoStickerMakerModal from './ChatInternoStickerMakerModal';
@@ -1408,7 +1408,7 @@ const ChatInternoWindow = ({
                             {/* Nota de voz / Audio estilo WhatsApp */}
                             {(msg.tipo === 'audio' || msg.tipo === 'voice') && msg.url_adjunto && (
                               <ChatInternoAudioPlayer
-                                src={msg.url_adjunto.startsWith('http') ? msg.url_adjunto : `${API_URL}${msg.url_adjunto}`}
+                                src={resolveMedia(msg.url_adjunto)}
                                 msgId={msg.id}
                                 isOwn={isOwn}
                                 formatTime={timeStr}
@@ -1463,10 +1463,10 @@ const ChatInternoWindow = ({
                             {/* Adjunto tipo imagen */}
                             {msg.tipo === 'imagen' && msg.url_adjunto && (
                               <img
-                                src={`${API_URL}${msg.url_adjunto}`}
+                                src={resolveMedia(msg.url_adjunto)}
                                 alt="Adjunto"
                                 className="ci-msg-img wa-msg-img"
-                                onClick={() => window.open(`${API_URL}${msg.url_adjunto}`, '_blank')}
+                                onClick={() => window.open(resolveMedia(msg.url_adjunto), '_blank')}
                                 onLoad={handleMediaLoad}
                               />
                             )}
@@ -1474,7 +1474,7 @@ const ChatInternoWindow = ({
                             {/* Adjunto tipo archivo */}
                             {msg.tipo === 'archivo' && msg.url_adjunto && (
                               <a
-                                href={`${API_URL}${msg.url_adjunto}`}
+                                href={resolveMedia(msg.url_adjunto)}
                                 target="_blank"
                                 rel="noreferrer"
                                 className="ci-msg-file-card wa-msg-file-card"

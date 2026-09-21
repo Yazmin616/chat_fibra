@@ -30,6 +30,9 @@ export const API_URL = process.env.NODE_ENV === 'production'
  */
 export const resolveMedia = (url) => {
   if (!url) return null;
+  if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:')) {
+    return url;
+  }
   if (url.startsWith('tg://')) {
     return `${API_URL}/agente/media/${url.slice(5)}`;
   }
@@ -48,13 +51,17 @@ export const resolveMedia = (url) => {
   if (url.startsWith('uploads/')) {
     return `${API_URL}/${url}`;
   }
-  return url;
+  return `${API_URL}/${url}`;
 };
 
 /** Convierte la ruta relativa del avatar almacenada en BD al src completo. */
 export const resolveAvatar = (url) => {
   if (!url) return null;
-  return `${API_URL}${url}`;
+  if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:')) {
+    return url;
+  }
+  const cleanPath = url.startsWith('/') ? url : `/${url}`;
+  return `${API_URL}${cleanPath}`;
 };
 
 /** Lee el token JWT del almacenamiento local y construye los headers comunes. */
